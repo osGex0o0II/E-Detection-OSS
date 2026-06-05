@@ -1,0 +1,18 @@
+{
+    "V_MIN_THRESHOLD": 353.0,
+    "V_MAX_THRESHOLD": 430.0,
+    "I_MAX_THRESHOLD": 1000.0,
+    "I_UNBALANCE_MAX_THRESHOLD": 0.15,
+    "P_ACTIVE_MIN_THRESHOLD": 0.0,
+    "PF_MIN_THRESHOLD": 0.9,
+    "T_MIN_THRESHOLD": 0.0,
+    "T_MAX_THRESHOLD": 70.0,
+    "I_MIN_ACTIVE_THRESHOLD": 1.0,
+    "FREEZE_COUNT_THRESHOLD": 3,
+    "FREEZE_STD_THRESHOLD": 0.01,
+    "V_IMBALANCE_THRESHOLD": 0.02,
+    "detail_output": false,
+    "power_factor": false,
+    "current_unbalance": false,
+    "current_overload": true
+}

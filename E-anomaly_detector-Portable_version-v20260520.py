@@ -14,8 +14,6 @@ from datetime import datetime
 from typing import Tuple, List, Dict, Any
 import glob
 from tkinter import filedialog, messagebox, TclError
-import types
-import gc
 
 try:
     import customtkinter as ctk
@@ -28,7 +26,8 @@ try:
     from core.rule_base import DetectionContext
     from core.rules import (
         VoltageRule, CurrentOverloadRule, CurrentUnbalanceRule,
-        FreezeRule, PowerActiveRule, PowerFactorRule, TemperatureRule
+        FreezeRule, PowerActiveRule, PowerFactorRule, TemperatureRule,
+        SuddenChangeRule, CrossParamRule,
     )
 except ModuleNotFoundError as _import_err:
     raise
@@ -113,33 +112,48 @@ def _format_log_message(
         file_name: str,
         anomalies_count: int = 0,
         error_msg: str | None = None,
-        anomaly_types: str | None = None
+        anomaly_types: str | None = None,
+        pure_freeze: bool = False,
+        freeze_filtered_count: int = 0,
+        sensor_missing: list | None = None,
 ) -> Tuple[str, str]:
     """根据检测结果生成统一格式的日志内容与标签。
 
     将跳过/失败文件与正常/异常文件分流为不同的 tag，便于 UI 的 log 方法
     按颜色渲染。异常日志附加 anomaly_types 帮助快速浏览问题种类。
+    纯冻结文件（仅含采集层面问题）静默跳过，减少日志噪音。
 
     Args:
         file_name: 检测文件名。
-        anomalies_count: 异常条数，默认 0。
+        anomalies_count: 异常条数（滤除冻结行后），默认 0。
         error_msg: 错误/跳过原因，None 表示无错误。
         anomaly_types: 异常类型描述（分号分隔），仅 anomalies_count > 0 时使用。
+        pure_freeze: 该文件是否仅含冻结/恒定/传感器缺失（全被滤除）。
+        freeze_filtered_count: 被滤除的冻结行数。
+        sensor_missing: 全零的传感器列名列表。
 
     Returns:
-        Tuple[str, str]: (格式化后的日志消息, 标签字符串)，标签为 error/skip/alert/info。
+        Tuple[str, str]: (格式化后的日志消息, 标签字符串)，标签为 error/skip/alert/info/pure_freeze。
     """
     error_message_content = error_msg if error_msg is not None else ""
+
+    # 传感器缺失后缀（追加到正常/异常日志尾部）
+    missing_suffix = ""
+    if sensor_missing and len(sensor_missing) > 0:
+        missing_suffix = f" [未配置: {', '.join(sensor_missing)}]"
 
     if error_message_content and "跳过" not in error_message_content and "读取失败" not in error_message_content:
         return f"失败 {file_name}: {error_message_content}", "error"
     elif "跳过" in error_message_content or "读取失败" in error_message_content:
-        return error_message_content, "skip"
+        return error_message_content.replace("跳过高压", "跳过"), "skip"
+    elif pure_freeze:
+        return f"正常 {file_name}{missing_suffix}", "info"
     elif anomalies_count > 0:
         types_str = anomaly_types if anomaly_types is not None else ""
-        return f"异常 {file_name} → {anomalies_count} 条 [{types_str}]", "alert"
+        tail = f" [+{freeze_filtered_count}采集]" if freeze_filtered_count > 0 else ""
+        return f"异常 {file_name} → {anomalies_count} 条{tail}{missing_suffix} [{types_str}]", "alert"
     else:
-        return f"正常 {file_name}", "info"
+        return f"正常 {file_name}{missing_suffix}", "info"
 
 def _merge_duplicate_named_columns(df: Any) -> Any:
     """合并重命名后同名的多列：按行取非空均值，避免只保留首列导致数据丢失。"""
@@ -217,27 +231,54 @@ def clean_and_rename_columns(df) -> Tuple[Any, List[str]]:
     keep_cols = [c for c in new_cols.values() if c in final_df.columns]
     return final_df[keep_cols], unmapped
 
-def _load_and_clean_data(file_path: str) -> Tuple[Any, str]:
+def _load_and_clean_data(file_path: str) -> Tuple[Any, str, Dict[str, Dict[str, int]]]:
     """Load raw CSV data and clean it into a normalized electrical data frame.
 
     Args:
         file_path: The path to the CSV file.
 
     Returns:
-        A tuple containing the cleaned DataFrame and an error message string.
+        A tuple containing the cleaned DataFrame, an error message string,
+        and a dict of invalid value counts per column (e.g. {"Ia": {"-1.0": 100}}).
 
     Notes:
         This function performs encoding sniffing, time column detection, trailing statistics row removal, column renaming, and numeric normalization.
     """
     import pandas as pd
     import numpy as np
+    from collections import defaultdict
 
     file_name = os.path.basename(file_path)
     
-    # --- 1. 编码自动嗅探 ---
-    encodings = ['gbk', 'utf-8-sig', 'gb18030', 'utf-8']
+    # --- 1. 编码嗅探（读前4KB检测，避免多次完整读文件）---
+    encodings_base = ['gbk', 'utf-8-sig', 'gb18030', 'utf-8']
     df = None
     last_read_error: Exception | None = None
+
+    detected_enc = 'gb18030'
+    try:
+        with open(file_path, 'rb') as f:
+            raw_head = f.read(4096)
+        if raw_head[:3] == b'\xef\xbb\xbf':
+            detected_enc = 'utf-8-sig'
+        else:
+            try:
+                import chardet
+                result = chardet.detect(raw_head)
+                if result and result.get('encoding'):
+                    enc = result['encoding'].lower()
+                    if enc in ('ascii', 'iso-8859-1', 'windows-1252'):
+                        detected_enc = 'utf-8'
+                    elif enc in ('gb2312', 'gbk'):
+                        detected_enc = 'gb18030'
+                    elif enc:
+                        detected_enc = enc
+            except ImportError:
+                pass
+    except OSError:
+        pass
+
+    encodings = [detected_enc] + [e for e in encodings_base if e != detected_enc]
     for enc in encodings:
         try:
             df = pd.read_csv(file_path, encoding=enc, low_memory=False)
@@ -248,7 +289,7 @@ def _load_and_clean_data(file_path: str) -> Tuple[Any, str]:
     
     if df is None or df.empty:
         detail = f" ({type(last_read_error).__name__}: {last_read_error})" if last_read_error else ""
-        return pd.DataFrame(), f"跳过空文件或读取失败: {file_name}{detail}"
+        return pd.DataFrame(), f"跳过空文件或读取失败: {file_name}{detail}", {}
 
     # 清理原始列名空格
     df.columns = df.columns.astype(str).str.strip()
@@ -270,7 +311,7 @@ def _load_and_clean_data(file_path: str) -> Tuple[Any, str]:
         df = df.iloc[:bad_indices[0]].copy()
     
     if df.empty:
-        return pd.DataFrame(), f"跳过：截断后数据为空: {file_name}"
+        return pd.DataFrame(), f"跳过：截断后数据为空: {file_name}", {}
 
     # --- 4. 列重命名与清洗 ---
     df, unmapped_cols = clean_and_rename_columns(df)
@@ -280,9 +321,10 @@ def _load_and_clean_data(file_path: str) -> Tuple[Any, str]:
     # 检查是否有必要列
     has_params = any(c in df.columns for c in ['Uab', 'Ubc', 'Uca', 'Ia', 'Ib', 'Ic'])
     if not has_params:
-        return pd.DataFrame(), f"跳过：未匹配到关键参数。当前列：{list(df.columns[:5])}..."
+        return pd.DataFrame(), f"跳过：未匹配到关键参数。当前列：{list(df.columns[:5])}...", {}
 
     # --- 5. 数据转换：确保传入的是 Series ---
+    invalid_stats: Dict[str, Dict[str, int]] = {}
     for col in df.columns:
         if col == time_col:
             continue
@@ -296,11 +338,21 @@ def _load_and_clean_data(file_path: str) -> Tuple[Any, str]:
         # 执行转换
         df[col] = pd.to_numeric(target_series, errors='coerce')
         
+        # 无效值统计（在置空前收集）
+        col_stats: Dict[str, int] = {}
+        for inv_val in INVALID_VALUES:
+            inv_key = str(inv_val)
+            count = int((df[col] == inv_val).sum())
+            if count > 0:
+                col_stats[inv_key] = count
+        if col_stats:
+            invalid_stats[col] = col_stats
+
         # 无效值置空
         df.loc[df[col].isin(INVALID_VALUES), col] = np.nan
         df[col] = df[col].astype('float32')
 
-    return df, ""
+    return df, "", invalid_stats
 
 def _detect_core_logic(df: Any, thresholds: Dict[str, float], enabled_rules: Dict[str, bool]) -> Tuple[Any, Any]:
     """Detect electrical anomalies from cleaned data using rule plugins.
@@ -329,7 +381,9 @@ def _detect_core_logic(df: Any, thresholds: Dict[str, float], enabled_rules: Dic
         FreezeRule(),
         PowerActiveRule(),
         PowerFactorRule(),
-        TemperatureRule()
+        TemperatureRule(),
+        SuddenChangeRule(),
+        CrossParamRule(),
     ]
 
     # 执行所有启用的规则
@@ -341,11 +395,37 @@ def _detect_core_logic(df: Any, thresholds: Dict[str, float], enabled_rules: Dic
 
     return anomaly_types, anomalies_flags
 
+def _is_only_freeze_types(types_str: str) -> bool:
+    """判断异常类型字符串是否仅由冻结/恒定/传感器缺失等低优先级标签组成。
+
+    这些标签代表采集系统自身的问题（而非电网参数异常），
+    单独出现时不作为有效告警。
+
+    Args:
+        types_str: 以分号分隔的异常类型字符串（已去重排序）。
+
+    Returns:
+        bool: True 表示该行异常标签全部属于采集层面问题。
+    """
+    if not types_str or not types_str.strip():
+        return False
+    types_set = set(t.strip() for t in types_str.split(';') if t.strip())
+    if not types_set:
+        return False
+    # 采集层面关键词：数据冻结、传感器缺失、数据恒定
+    freeze_keywords = ['数据冻结', '传感器缺失', '数据恒定', '恒定', '缺失']
+    for t in types_set:
+        if not any(kw in t for kw in freeze_keywords):
+            return False
+    return True
+
+
 def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, file_name: str) -> Tuple[Any, str | dict]:
     """将检测结果格式化为最终异常报告 DataFrame 和日志摘要。
 
     去重并排序异常类型字符串，按 TARGET_SHORT_NAMES_REPORT 固定列序输出，
-    同时生成用于汇总统计的 log_msg_data 字典。
+    同时过滤仅含冻结/恒定/传感器缺失的行（不写入 CSV），
+    并生成用于汇总统计的 log_msg_data 字典。
 
     Args:
         df: 清洗后的原始 DataFrame。
@@ -355,27 +435,62 @@ def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, fi
 
     Returns:
         Tuple[Any, str | dict]: (排序好的异常 DataFrame, 日志摘要 dict)。
-        日志 dict 包含 count/types/filename 三个 key。
+        日志 dict 包含 count/types/filename/pure_freeze/freeze_filtered_count 五个 key。
     """
     import pandas as pd
 
     anomalies = df[anomalies_flags].copy()
     if anomalies.empty:
-        return anomalies, f"正常 {file_name}"
+        log_msg_data = {
+            'count': 0,
+            'types': '',
+            'filename': file_name,
+            'pure_freeze': False,
+            'freeze_filtered_count': 0,
+        }
+        return anomalies, log_msg_data
 
     def clean_anomaly_types(x: str) -> str:
-        """去重、排序异常类型字符串，消除同一时段叠加的多类型标记冗余。
+        """提取异常分类名（去掉括号内的具体数值），去重排序。
 
-        Args:
-            x: 以分号分隔的异常类型字符串（如 "电压过高;电流过大;电压过高"）。
-
-        Returns:
-            str: 去重并排序后的异常类型字符串（如 "电压过高; 电流过大"）。
+        如 "A相电压过低(265.8V); CT极性异常" → "A相电压过低; CT极性异常"
         """
-        types = set(t.strip() for t in x.split(';') if t.strip())
-        return "; ".join(sorted(types))
+        parts = [t.strip() for t in x.split(';') if t.strip()]
+        cleaned = []
+        for p in parts:
+            # 去掉括号及内部内容（数值/百分比/偏差等详情）
+            import re as _re
+            base = _re.sub(r'\([^)]*\)', '', p).strip()
+            # 去掉冒号后的详情值（如 "电压不平衡:266.1:偏差0.349" → "电压不平衡"）
+            if ':' in base:
+                base = base.split(':')[0]
+            if base and base not in cleaned:
+                cleaned.append(base)
+        return "; ".join(sorted(cleaned))
 
     anomalies['异常类型'] = anomaly_types[anomalies_flags].apply(clean_anomaly_types)
+
+    # 异常详情列：保留原始 detail 信息，供报告查阅
+    anomalies['异常详情'] = anomaly_types[anomalies_flags].apply(
+        lambda x: "; ".join(t.strip() for t in x.split(';') if t.strip()) if isinstance(x, str) else ""
+    )
+
+    # --- 过滤仅冻结行：仅含数据冻结/传感器缺失/数据恒定的行不写入 CSV ---
+    total_anomaly_count = len(anomalies)
+    freeze_only_mask = anomalies['异常类型'].apply(_is_only_freeze_types)
+    freeze_filtered_count = int(freeze_only_mask.sum())
+    anomalies = anomalies[~freeze_only_mask].copy()
+    pure_freeze = (total_anomaly_count > 0 and len(anomalies) == 0)
+
+    if anomalies.empty:
+        log_msg_data = {
+            'count': 0,
+            'types': '',
+            'filename': file_name,
+            'pure_freeze': pure_freeze,
+            'freeze_filtered_count': freeze_filtered_count,
+        }
+        return anomalies, log_msg_data
 
     time_col = df.columns[0]
     file_date = extract_date_from_filename(file_name)
@@ -384,7 +499,7 @@ def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, fi
     anomalies.insert(0, '来源文件', file_name)
 
     # 使用模块级 TARGET_SHORT_NAMES_REPORT 常量
-    fixed_cols = ['来源文件', '日期', '异常类型', '时间']
+    fixed_cols = ['来源文件', '日期', '异常类型', '异常详情', '时间']
     data_cols = [c for c in anomalies.columns if c not in fixed_cols]
     rel_cols = [c for c in data_cols if anomalies[c].notna().any()]
     ordered_data_cols = [col for col in TARGET_SHORT_NAMES_REPORT if col in rel_cols]
@@ -394,12 +509,14 @@ def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, fi
     log_msg_data = {
         'count': len(anomalies),
         'types': types,
-        'filename': file_name
+        'filename': file_name,
+        'pure_freeze': False,
+        'freeze_filtered_count': freeze_filtered_count,
     }
 
     return anomalies[order], log_msg_data
 
-def check_anomaly_in_file(file_path: str, thresholds: Dict[str, float], enabled_rules: Dict[str, bool]) -> Tuple[Any, str, Any]:
+def check_anomaly_in_file(file_path: str, thresholds: Dict[str, float], enabled_rules: Dict[str, bool]) -> Tuple[Any, str, Any, Dict]:
     """Evaluate a single CSV file for electrical anomalies.
 
     Args:
@@ -408,8 +525,9 @@ def check_anomaly_in_file(file_path: str, thresholds: Dict[str, float], enabled_
         enabled_rules: Rule switches for optional detection logic and detail output.
 
     Returns:
-        A tuple of (anomaly DataFrame, status message, cleaned DataFrame or None).
+        A tuple of (anomaly DataFrame, status message, cleaned DataFrame or None, extra_info dict).
         The cleaned DataFrame is returned for post-processing (e.g., frozen acquisition detection).
+        extra_info contains 'is_offline' (bool) and 'sensor_faults' (list of column names).
     """
     import pandas as pd
     
@@ -417,27 +535,102 @@ def check_anomaly_in_file(file_path: str, thresholds: Dict[str, float], enabled_
 
     # 快速过滤逻辑：通过文件名关键词避免高压数据导致的阈值冲突。
     if "高压" in file_name:
-        # 直接返回空结果，不进行读取和分析
-        return pd.DataFrame(), f"跳过高压设备: {file_name}", None
+        return pd.DataFrame(), f"跳过高压设备: {file_name}", None, {}
     # ---------------------------------------
     
     # 1. 尝试加载
-    df, error_msg = _load_and_clean_data(file_path)
+    df, error_msg, invalid_stats = _load_and_clean_data(file_path)
     if error_msg:
-        return pd.DataFrame(), error_msg, None
+        return pd.DataFrame(), error_msg, None, {}
 
     # 2. 检查列（只要有电压或电流其一即可）
     has_v = any(c in df.columns for c in ['Uab', 'Ubc', 'Uca'])
     has_i = any(c in df.columns for c in ['Ia', 'Ib', 'Ic'])
     
     if not (has_v or has_i):
-        # 关键：这里会告诉你程序到底看到了什么列名
-        return pd.DataFrame(), f"跳过：未识别到有效参数列。当前列名：{list(df.columns)}", None
+        return pd.DataFrame(), f"跳过：未识别到有效参数列。当前列名：{list(df.columns)}", None, {}
 
-    # 3. 执行检测
+    # 3. 设备离线检测：基于 invalid_stats 判断（-1.0 占比 >50%）
+    total_rows = len(df)
+    is_offline = False
+    if invalid_stats and total_rows > 0:
+        key_cols = [c for c in ['Uab', 'Ubc', 'Uca', 'Ia', 'Ib', 'Ic'] if c in df.columns]
+        if key_cols:
+            offline_ratio = 0
+            for col in key_cols:
+                col_offline_count = 0
+                if col in invalid_stats and '-1.0' in invalid_stats[col]:
+                    col_offline_count = invalid_stats[col]['-1.0']
+                offline_ratio += col_offline_count / (total_rows * len(key_cols))
+            is_offline = offline_ratio > 0.5
+
+    # 4. 传感器故障检测（温度 2867.2°C）
+    sensor_faults: List[str] = []
+    if invalid_stats:
+        for col in ['A相温度', 'B相温度', 'C相温度']:
+            if col in invalid_stats and '2867.2' in invalid_stats[col]:
+                sensor_faults.append(col)
+
+    # 4.5 传感器缺失检测：全零列（仅辅助列和温度列，核心电气列零值可能是备用状态）
+    sensor_missing: List[str] = []
+    for col in ['无功功率', '功率因数', 'A相温度', 'B相温度', 'C相温度']:
+        if col in df.columns:
+            s = df[col]
+            if (s.fillna(0) == 0).all():
+                sensor_missing.append(col)
+
+    # 5. 执行正常检测
     anomaly_types, anomalies_flags = _detect_core_logic(df, thresholds, enabled_rules)
     anomalies, log_data = _format_anomaly_report(df, anomalies_flags, anomaly_types, file_name)
-    return anomalies, log_data, df
+
+    # 6. 生成设备离线/传感器故障异常记录
+    extra_anomaly_rows = []
+    file_date = extract_date_from_filename(file_name)
+
+    if is_offline:
+        offline_cols = [c for c in ['Uab', 'Ubc', 'Uca', 'Ia', 'Ib', 'Ic']
+                        if c in invalid_stats and '-1.0' in invalid_stats.get(c, {})]
+        detail_off = ','.join(offline_cols) if offline_cols else '所有电气参数'
+        row = {'来源文件': file_name, '日期': file_date, '异常类型': f'设备离线({detail_off})',
+               '时间': file_date, 'Uab': None, 'Ubc': None, 'Uca': None,
+               'Ia': None, 'Ib': None, 'Ic': None}
+        extra_anomaly_rows.append(row)
+
+    for sensor_col in sensor_faults:
+        count = invalid_stats.get(sensor_col, {}).get('2867.2', 0)
+        row = {'来源文件': file_name, '日期': file_date,
+               '异常类型': f'传感器故障({sensor_col}:2867.2°C,共{count}点)',
+               '时间': file_date, 'A相温度': None, 'B相温度': None, 'C相温度': None}
+        extra_anomaly_rows.append(row)
+
+    # 若检测到设备离线，用离线记录替代常规异常报告（避免大量电压过低噪声）
+    if is_offline:
+        anomalies = pd.DataFrame(extra_anomaly_rows)
+        log_data = {'count': len(anomalies), 'types': '设备离线', 'filename': file_name,
+                    'pure_freeze': False, 'freeze_filtered_count': 0}
+    elif extra_anomaly_rows:
+        extra_df = pd.DataFrame(extra_anomaly_rows)
+        for col in extra_df.columns:
+            if col not in anomalies.columns:
+                anomalies[col] = None
+        for col in anomalies.columns:
+            if col not in extra_df.columns:
+                extra_df[col] = None
+        anomalies = pd.concat([anomalies, extra_df[anomalies.columns]], ignore_index=True, sort=False)
+        if isinstance(log_data, dict):
+            existing_types = log_data.get('types', '')
+            sensor_types = '; '.join([f'传感器故障({c})' for c in sensor_faults])
+            combined_types = (existing_types + '; ' + sensor_types).strip('; ')
+            log_data['types'] = combined_types
+            log_data['count'] = log_data.get('count', 0) + len(extra_anomaly_rows)
+
+    extra_info = {
+        'is_offline': is_offline,
+        'sensor_faults': sensor_faults,
+        'sensor_missing': sensor_missing,
+    }
+
+    return anomalies, log_data, df, extra_info
 
 
 def _extract_building_and_transformer(fp: str, folder_path: str) -> Tuple[str, str]:
@@ -497,65 +690,113 @@ def _check_frozen_acquisition(df) -> bool:
     return bool((subset.std(skipna=True).fillna(0) <= 0).all())
 
 
-def _extract_transformer_issues(anomalies_df, df) -> Dict[str, Any]:
-    """从异常 DataFrame 中提取每个变压器的重点问题摘要。
+def _extract_transformer_issues(anomalies_df, df) -> Dict[str, Dict[str, Any]]:
+    """从异常 DataFrame 中提取每个变压器的重点问题摘要（含数量和时间范围）。
 
     Args:
         anomalies_df: _format_anomaly_report 返回的异常 DataFrame。
         df: 清洗后的原始 DataFrame。
 
     Returns:
-        字典，key 为异常类别，value 为详细信息列表。
-        例如: {"电压异常": "Ubc: 358V~362V; Uca: 361V~365V", ...}
+        字典，key 为异常类别，value 为 {'count': N, 'detail': str, 'time_range': str}。
     """
     import pandas as pd
+    import numpy as np
 
-    issues: Dict[str, Any] = {}
+    issues: Dict[str, Dict[str, Any]] = {}
 
     if anomalies_df is None or anomalies_df.empty or '异常类型' not in anomalies_df.columns:
         return issues
 
-    # --- 电压异常汇总 ---
-    voltage_mask = anomalies_df['异常类型'].str.contains('电压', na=False)
-    if voltage_mask.any():
-        v_details = []
+    time_col = '时间' if '时间' in anomalies_df.columns else None
+
+    def _time_range(mask):
+        if time_col and mask.any():
+            idx = anomalies_df.loc[mask].index
+            first = str(anomalies_df.loc[idx[0], time_col])
+            if len(idx) >= 2:
+                last = str(anomalies_df.loc[idx[-1], time_col])
+                return first if first == last else f"{first}~{last}"
+            return first
+        return ""
+
+    def _add_issue(key, mask, detail):
+        if mask.any():
+            issues[key] = {'count': int(mask.sum()), 'detail': detail, 'time_range': _time_range(mask)}
+
+    # --- 电压异常（排除电压不平衡类） ---
+    v_mask = anomalies_df['异常类型'].str.contains('电压', na=False) & \
+             ~anomalies_df['异常类型'].str.contains('相电压不平衡|电压不平衡', na=False)
+    if v_mask.any():
+        v_parts = []
         for col in ['Uab', 'Ubc', 'Uca']:
             if col in df.columns:
-                col_min = df[col].min()
-                col_max = df[col].max()
-                if not pd.isna(col_min):
-                    v_details.append(f"{col}: {col_min:.0f}V~{col_max:.0f}V")
-        issues['电压异常'] = '; '.join(v_details) if v_details else "见报告明细"
+                cmin, cmax = df[col].min(), df[col].max()
+                if not pd.isna(cmin):
+                    v_parts.append(f"{col}{cmin:.0f}~{cmax:.0f}V")
+        _add_issue('电压异常', v_mask, ', '.join(v_parts) if v_parts else '')
 
-    # --- 有功功率负值 ---
-    power_mask = anomalies_df['异常类型'].str.contains('有功功率异常', na=False)
-    if power_mask.any():
-        if '有功功率' in df.columns:
-            p_min = df['有功功率'].min()
-            issues['有功功率异常（负值）'] = f"最低 {p_min:.1f}kW"
+    # --- 相电压不平衡 ---
+    imb_mask = anomalies_df['异常类型'].str.contains('电压不平衡', na=False)
+    _add_issue('相电压不平衡', imb_mask, '')
 
     # --- 电流过载 ---
-    overload_mask = anomalies_df['异常类型'].str.contains('电流过大', na=False)
-    if overload_mask.any():
-        i_details = []
+    ov_mask = anomalies_df['异常类型'].str.contains('电流过大|电流过载', na=False)
+    i_detail = ''
+    if ov_mask.any():
+        i_parts = []
         for col in ['Ia', 'Ib', 'Ic']:
             if col in df.columns:
-                col_max = df[col].max()
-                if not pd.isna(col_max):
-                    i_details.append(f"{col}: {col_max:.0f}A")
-        issues['电流过载'] = '; '.join(i_details) if i_details else "见报告明细"
+                cmax = df[col].max()
+                if not pd.isna(cmax):
+                    i_parts.append(f"{col}:{cmax:.0f}A")
+        i_detail = ', '.join(i_parts)
+    _add_issue('电流过载', ov_mask, i_detail)
 
-    # --- 温度异常 ---
-    temp_mask = anomalies_df['异常类型'].str.contains('温度', na=False)
-    if temp_mask.any():
-        t_details = []
+    # --- 电流不平衡 ---
+    ub_mask = anomalies_df['异常类型'].str.contains('电流不平衡', na=False)
+    _add_issue('电流不平衡', ub_mask, '')
+
+    # --- 温度异常（排除传感器故障） ---
+    t_mask = anomalies_df['异常类型'].str.contains('温度', na=False) & \
+             ~anomalies_df['异常类型'].str.contains('传感器故障', na=False)
+    t_detail = ''
+    if t_mask.any():
+        t_parts = []
         for col in ['A相温度', 'B相温度', 'C相温度']:
             if col in df.columns:
-                col_min = df[col].min()
-                col_max = df[col].max()
-                if not pd.isna(col_min):
-                    t_details.append(f"{col}: {col_min:.0f}°C~{col_max:.0f}°C")
-        issues['温度异常'] = '; '.join(t_details) if t_details else "见报告明细"
+                cmin = df[col].replace(0, np.nan).min(skipna=True)
+                cmax = df[col].max()
+                if not pd.isna(cmin):
+                    t_parts.append(f"{col}{cmin:.0f}~{cmax:.0f}°C")
+        t_detail = ', '.join(t_parts)
+    _add_issue('温度异常', t_mask, t_detail)
+
+    # --- 有功功率异常 ---
+    p_mask = anomalies_df['异常类型'].str.contains('有功功率异常', na=False)
+    p_detail = ''
+    if p_mask.any() and '有功功率' in df.columns:
+        p_detail = f"最低{df['有功功率'].min():.1f}kW"
+    _add_issue('有功功率异常', p_mask, p_detail)
+
+    # --- 功率因数过低 ---
+    pf_mask = anomalies_df['异常类型'].str.contains('功率因数过低', na=False)
+    pf_detail = ''
+    if pf_mask.any() and '功率因数' in df.columns:
+        pf_detail = f"最低{df['功率因数'].min():.2f}"
+    _add_issue('功率因数过低', pf_mask, pf_detail)
+
+    # --- 数据突变 ---
+    sc_mask = anomalies_df['异常类型'].str.contains('突变', na=False)
+    _add_issue('数据突变', sc_mask, '')
+
+    # --- 关联异常 ---
+    cp_mask = anomalies_df['异常类型'].str.contains('关联异常|同步升高|异常偏离', na=False)
+    _add_issue('关联异常', cp_mask, '')
+
+    # --- 数据冻结 ---
+    fz_mask = anomalies_df['异常类型'].str.contains('数据冻结', na=False)
+    _add_issue('数据冻结', fz_mask, '')
 
     return issues
 
@@ -598,8 +839,8 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         self._stop_detection = threading.Event()
         self.report_path_is_custom: bool = False
 
-        self.V_MIN_THRESHOLD = 372.0
-        self.V_MAX_THRESHOLD = 428.0
+        self.V_MIN_THRESHOLD = 353.0
+        self.V_MAX_THRESHOLD = 407.0
         self.I_MAX_THRESHOLD = 1000.0
         self.I_UNBALANCE_MAX_THRESHOLD = 0.15
         self.P_ACTIVE_MIN_THRESHOLD = 0.0
@@ -609,6 +850,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         self.I_MIN_ACTIVE_THRESHOLD = 1.0
         self.FREEZE_COUNT_THRESHOLD = 3
         self.FREEZE_STD_THRESHOLD = 0.01
+        self.V_IMBALANCE_THRESHOLD = 0.02
 
         self.enabled_rules = {
             'current_overload': True,
@@ -618,13 +860,14 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         }
 
         self.DEFAULT_THRESHOLDS = {
-            'V_MIN_THRESHOLD': 372.0, 'V_MAX_THRESHOLD': 428.0,
+            'V_MIN_THRESHOLD': 353.0, 'V_MAX_THRESHOLD': 407.0,
             'I_MAX_THRESHOLD': 1000.0, 'I_UNBALANCE_MAX_THRESHOLD': 0.15,
             'P_ACTIVE_MIN_THRESHOLD': 0.0, 'PF_MIN_THRESHOLD': 0.90,
             'T_MIN_THRESHOLD': 0.0, 'T_MAX_THRESHOLD': 70.0,
             'I_MIN_ACTIVE_THRESHOLD': 1.0,
             'FREEZE_COUNT_THRESHOLD': 3,
             'FREEZE_STD_THRESHOLD': 0.01,
+            'V_IMBALANCE_THRESHOLD': 0.02,
             'current_overload': True, 'current_unbalance': False,
             'power_factor': False, 'detail_output': False
         }
@@ -666,7 +909,8 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
 
     def _format_value(self, key: str, value: float) -> str:
         """格式化阈值为显示字符串，功率因数/不平衡度/冻结波动保留两位小数，其余取整。"""
-        if key in ['PF_MIN_THRESHOLD', 'I_UNBALANCE_MAX_THRESHOLD', 'FREEZE_STD_THRESHOLD']:
+        if key in ['PF_MIN_THRESHOLD', 'I_UNBALANCE_MAX_THRESHOLD', 'FREEZE_STD_THRESHOLD',
+                   'V_IMBALANCE_THRESHOLD']:
             return f"{value:.2f}"
         else:
             return f"{value:.0f}"
@@ -692,6 +936,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'I_MIN_ACTIVE_THRESHOLD': self.I_MIN_ACTIVE_THRESHOLD,
             'FREEZE_COUNT_THRESHOLD': self.FREEZE_COUNT_THRESHOLD,
             'FREEZE_STD_THRESHOLD': self.FREEZE_STD_THRESHOLD,
+            'V_IMBALANCE_THRESHOLD': self.V_IMBALANCE_THRESHOLD,
         }
 
     def _format_duration_text(self, duration: float, total_files: int) -> str:
@@ -724,9 +969,21 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
 
     def setup_ui(self) -> None:
         """构建并布局 GUI 的所有子控件（标题栏、目录卡片、规则面板、日志区、进度条等）。"""
-        main = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        main.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
-        main.grid_columnconfigure(0, weight=1)
+        # --- 容器：主页面与报告页面 ---
+        self.main_page = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.main_page.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
+        self.main_page.grid_columnconfigure(0, weight=1)
+
+        self.report_page = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.report_page.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
+        self.report_page.grid_columnconfigure(0, weight=1)
+
+        self._build_main_page()
+        self._build_report_page()
+        self.main_page.tkraise()
+
+    def _build_main_page(self) -> None:
+        main = self.main_page
 
         row_idx = 0
 
@@ -854,6 +1111,251 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+    def _build_report_page(self) -> None:
+        """构建检测报告页面：显示检测汇总，包含"新的检测"按钮返回主页面。"""
+        rp = self.report_page
+        rp.grid_rowconfigure(0, weight=0)
+        rp.grid_rowconfigure(1, weight=1)
+        rp.grid_columnconfigure(0, weight=1)
+
+        # 标题栏
+        report_title = ctk.CTkFrame(rp, height=80, fg_color="#107c10", corner_radius=12)
+        report_title.grid(row=0, column=0, sticky="ew", pady=(0, 20))
+        report_title.grid_propagate(False)
+
+        ctk.CTkLabel(
+            report_title, text=TEXTS['header_main'],
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=24, weight="bold"),
+            text_color="white"
+        ).pack(side="left", padx=28, pady=22)
+        ctk.CTkLabel(
+            report_title, text="检测报告 · E-Detection v20260520",
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=11),
+            text_color="#d4edda"
+        ).pack(side="right", padx=28, pady=22)
+
+        # 汇总卡片
+        self.report_summary_frame = ctk.CTkFrame(rp, fg_color="white", corner_radius=10, border_width=1,
+                                                  border_color="#e1e1e1")
+        self.report_summary_frame.grid(row=1, column=0, sticky="nsew")
+        self.report_summary_frame.grid_columnconfigure(0, weight=1)
+        self.report_summary_frame.grid_rowconfigure(0, weight=1)
+
+        self.report_text = ctk.CTkTextbox(
+            self.report_summary_frame,
+            font=ctk.CTkFont(family="Consolas", size=11),
+            wrap="word", corner_radius=8
+        )
+        self.report_text.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self._configure_report_tags()
+
+        # 底部按钮栏
+        btn_frame = ctk.CTkFrame(rp, fg_color="transparent")
+        btn_frame.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+        btn_frame.grid_columnconfigure(0, weight=0)
+        btn_frame.grid_columnconfigure(1, weight=1)
+        btn_frame.grid_columnconfigure(2, weight=0)
+        btn_frame.grid_columnconfigure(3, weight=0)
+
+        self.report_export_btn = ctk.CTkButton(
+            btn_frame, text="导出报告", height=40,
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=13),
+            fg_color="#0078d4", hover_color="#106ebe", corner_radius=8,
+            command=self._export_report_from_page
+        )
+        self.report_export_btn.grid(row=0, column=0, sticky="w")
+
+        self.report_open_folder_btn = ctk.CTkButton(
+            btn_frame, text="打开报告目录", height=40,
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=13),
+            fg_color="transparent", text_color="#0078d4",
+            border_width=1, border_color="#0078d4",
+            hover_color="#e8f3ff", corner_radius=8,
+            command=self._open_report_folder
+        )
+        self.report_open_folder_btn.grid(row=0, column=2, sticky="e", padx=(0, 12))
+
+        self.report_new_btn = ctk.CTkButton(
+            btn_frame, text="新的检测", height=40,
+            font=ctk.CTkFont(family="Microsoft YaHei UI", size=14, weight="bold"),
+            fg_color="#107c10", hover_color="#0e6a0e", corner_radius=8,
+            command=self._show_main_page
+        )
+        self.report_new_btn.grid(row=0, column=3, sticky="e")
+
+    def _configure_report_tags(self) -> None:
+        """为报告文本框配置颜色标签。"""
+        self.report_text.tag_config("title", foreground="#107c10")
+        self.report_text.tag_config("heading", foreground="#0078d4")
+        self.report_text.tag_config("section", foreground="#333333")
+        self.report_text.tag_config("alert", foreground="#d83b01")
+        self.report_text.tag_config("ok", foreground="#107c10")
+        self.report_text.tag_config("skip", foreground="#888888")
+        self.report_text.tag_config("info", foreground="#333333")
+        self.report_text.tag_config("detail", foreground="#555555")
+        self.report_text.tag_config("separator", foreground="#0078d4")
+
+    def _populate_report(self) -> None:
+        """将检测结果写入报告页面文本框。"""
+        self.report_text.delete("1.0", "end")
+
+        status = "已取消" if hasattr(self, '_cancelled_flag') and self._cancelled_flag else "完成"
+        duration = getattr(self, '_last_duration_text', '')
+        total = getattr(self, '_last_total', 0)
+        normal_count = getattr(self, '_last_normal', 0)
+        written = getattr(self, '_last_written', 0)
+        involved = getattr(self, '_last_involved', 0)
+        skip_count = getattr(self, '_last_skip', 0)
+        out_file = getattr(self, 'last_report_file', '')
+
+        self.report_text.insert("end", f"E-Detection 检测报告\n", "title")
+        self.report_text.insert("end", f"{'─' * 50}\n", "separator")
+        self.report_text.insert("end", f"状态: {status}  耗时: {duration}\n", "info")
+        self.report_text.insert("end", f"文件: {total} 个    异常文件: {involved} 个    异常记录: {written} 条\n", "info")
+        if normal_count > 0:
+            self.report_text.insert("end", f"正常: {normal_count} 个    跳过: {skip_count} 个\n", "info")
+        if out_file:
+            short = os.path.basename(out_file)
+            self.report_text.insert("end", f"CSV 报告: {short}\n", "info")
+        self.report_text.insert("end", f"\n{'─' * 50}\n\n", "separator")
+
+        # 汇总详情
+        transformer_issues = getattr(self, '_last_transformer_issues', {})
+        frozen = getattr(self, '_last_frozen', [])
+        offline = getattr(self, '_last_offline', [])
+        sensor_faults = getattr(self, '_last_sensor_faults', [])
+        skipped = getattr(self, '_last_skipped', [])
+        sensor_missing_rates = getattr(self, '_last_sensor_missing_rates', {})
+
+        if not any([transformer_issues, frozen, offline, sensor_faults, skipped]) and normal_count > 0:
+            self.report_text.insert("end", "  未发现任何电气参数异常。\n", "ok")
+            self.report_text.insert("end", "\n")
+            return
+
+        from collections import defaultdict
+
+        # 按建筑分组
+        if transformer_issues:
+            self.report_text.insert("end", "▎检测汇总（按建筑 / 变压器）\n", "heading")
+            building_data = defaultdict(list)
+            for (bld, trans), issues in transformer_issues.items():
+                building_data[bld].append((trans, issues))
+
+            for bld in sorted(building_data.keys()):
+                self.report_text.insert("end", f"\n  {bld}\n", "section")
+                for trans, issues in sorted(building_data[bld], key=lambda x: x[0]):
+                    self.report_text.insert("end", f"    {trans}\n", "heading")
+                    sorted_issues = sorted(issues.items(), key=lambda x: x[1]['count'], reverse=True)
+                    for issue_type, info in sorted_issues:
+                        cnt = info['count']
+                        detail = info.get('detail', '')
+                        tr = info.get('time_range', '')
+                        line = f"      • {issue_type}  {cnt} 次"
+                        if detail:
+                            line += f"  ({detail})"
+                        if tr:
+                            line += f"    时段: {tr}"
+                        self.report_text.insert("end", f"{line}\n", "alert")
+            self.report_text.insert("end", "\n")
+
+        # 特殊项
+        if frozen:
+            self.report_text.insert("end", "▎采集故障（数据冻结）\n", "heading")
+            by_b = defaultdict(list)
+            for bld, trans in frozen:
+                by_b[bld].append(trans)
+            for bld in sorted(by_b.keys()):
+                t_str = ' · '.join(sorted(set(by_b[bld])))
+                self.report_text.insert("end", f"  {bld}: {t_str}\n", "alert")
+            self.report_text.insert("end", "\n")
+
+        if offline:
+            self.report_text.insert("end", "▎设备离线\n", "heading")
+            by_b = defaultdict(list)
+            for bld, trans in offline:
+                by_b[bld].append(trans)
+            for bld in sorted(by_b.keys()):
+                t_str = ' · '.join(sorted(set(by_b[bld])))
+                self.report_text.insert("end", f"  {bld}: {t_str}\n", "alert")
+            self.report_text.insert("end", "\n")
+
+        if sensor_faults:
+            self.report_text.insert("end", "▎传感器故障（2867.2°C）\n", "heading")
+            by_b = defaultdict(list)
+            for bld, trans, col in sensor_faults:
+                by_b[bld].append(f"{trans}/{col}")
+            for bld in sorted(by_b.keys()):
+                t_str = ' · '.join(sorted(set(by_b[bld])))
+                self.report_text.insert("end", f"  {bld}: {t_str}\n", "alert")
+            self.report_text.insert("end", "\n")
+
+        if sensor_missing_rates:
+            self.report_text.insert("end", "▎传感器未配置（全零列）\n", "heading")
+            bad = []
+            for col in TARGET_SHORT_NAMES_REPORT:
+                rates = sensor_missing_rates.get(col, [])
+                if not rates:
+                    continue
+                avg = sum(rates) / len(rates)
+                if avg > 0.1:
+                    bad.append(f"{col}({avg:.0%} 文件缺失)")
+            if bad:
+                self.report_text.insert("end", f"  {' · '.join(bad)}\n", "skip")
+            self.report_text.insert("end", "\n")
+
+        if skipped:
+            self.report_text.insert("end", "▎跳过的文件\n", "heading")
+            reason_counts = defaultdict(int)
+            for _, reason in skipped:
+                if "高压" in reason:
+                    reason_counts["高压设备"] += 1
+                elif "未识别" in reason:
+                    reason_counts["未识别字段"] += 1
+                elif "读取失败" in reason:
+                    reason_counts["读取失败"] += 1
+                else:
+                    reason_counts["其它"] += 1
+            parts = [f"{r}: {c} 个" for r, c in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)]
+            self.report_text.insert("end", f"  {',  '.join(parts)}\n", "skip")
+
+        self.report_text.insert("end", f"\n{'─' * 50}\n", "separator")
+        self.report_text.insert("end", f"报告结束\n", "info")
+
+    def _show_report_page(self) -> None:
+        """切换到报告页面。"""
+        self._populate_report()
+        self.report_page.tkraise()
+
+    def _show_main_page(self) -> None:
+        """切换回主页面（新的检测）。"""
+        self.main_page.tkraise()
+
+    def _export_report_from_page(self) -> None:
+        """导出报告页面内容为文本文件。"""
+        content = self.report_text.get("1.0", "end-1c")
+        if not content.strip():
+            return
+        initial = f"检测报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".txt", filetypes=[("Text files", "*.txt")],
+            initialfile=initial, title="导出报告"
+        )
+        if save_path:
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            self.log(f"报告已导出：{os.path.basename(save_path)}", "success")
+
+    def _open_report_folder(self) -> None:
+        """在资源管理器中打开报告目录。"""
+        path = self.report_path if hasattr(self, 'report_path') and self.report_path else ""
+        if path and os.path.isdir(path):
+            os.startfile(path)
+        elif self.last_report_file:
+            d = os.path.dirname(self.last_report_file)
+            if os.path.isdir(d):
+                os.startfile(d)
+
     def _sync_rule_vars_from_config(self) -> None:
         """将 enabled_rules 同步到界面复选框。"""
         for key, var in self.rule_vars.items():
@@ -884,6 +1386,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'I_UNBALANCE_MAX_THRESHOLD': (0.0, 1.0), 'PF_MIN_THRESHOLD': (0.0, 1.0),
             'I_MIN_ACTIVE_THRESHOLD': (0.0, float('inf')),
             'T_MIN_THRESHOLD': (-50.0, 200.0), 'T_MAX_THRESHOLD': (-50.0, 200.0),
+            'V_IMBALANCE_THRESHOLD': (0.0, 1.0),
             'FREEZE_STD_THRESHOLD': (0.0, 1.0),
             'FREEZE_COUNT_THRESHOLD': (1, 1000),
             'P_ACTIVE_MIN_THRESHOLD': (float('-inf'), float('inf')),
@@ -898,6 +1401,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'P_ACTIVE_MIN_THRESHOLD': '有功功率下限 (P_MIN)',
             'PF_MIN_THRESHOLD': '功率因数下限 (PF_MIN)',
             'I_MIN_ACTIVE_THRESHOLD': '电流激活下限 (I_ACTIVE)',
+            'V_IMBALANCE_THRESHOLD': '相电压不平衡度 (V_IMBALANCE)',
             'FREEZE_COUNT_THRESHOLD': '冻结持续时间 (FREEZE_COUNT)',
             'FREEZE_STD_THRESHOLD': '冻结波动阈值 (FREEZE_STD)',
         }
@@ -1108,6 +1612,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             ('P_ACTIVE_MIN_THRESHOLD', '有功功率 (P_MIN): (下限)', right_frame, 'core'),
             ('PF_MIN_THRESHOLD', '功率因数 (PF_MIN): (下限)', right_frame, 'optional_link_pf'),
             ('I_MIN_ACTIVE_THRESHOLD', '电流激活 (I_ACTIVE): (下限)', right_frame, 'optional_link_current_unbalance'),
+            ('V_IMBALANCE_THRESHOLD', '相电压不平衡 (V_IMBAL): (偏差比)', right_frame, 'core'),
             ('FREEZE_COUNT_THRESHOLD', '冻结持续时间 (FREEZE_COUNT): (点数)', right_frame, 'core'),
             ('FREEZE_STD_THRESHOLD', '冻结波动阈值 (FREEZE_STD): (标准差)', right_frame, 'core'),
         ]
@@ -1425,6 +1930,8 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
 
         在后台线程中运行。支持暂停/恢复/取消。
         """
+        import pandas as pd
+
         self.after(0, lambda: self._toggle_rules_panel(False))
 
         files = list(glob.iglob(os.path.join(self.folder_path, '**', '*.csv'), recursive=True))
@@ -1453,12 +1960,11 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         # --- 汇总跟踪变量 ---
         normal_count = 0
         skipped_files_with_reason: List[Tuple[str, str]] = []
-        # 异常类型计数: Dict[rule_name, count]
-        anomaly_type_counts: Dict[str, int] = {}
-        # 采集系统疑似故障: List[(building, transformer)]
         frozen_acquisition: List[Tuple[str, str]] = []
-        # 每个变压器的重点问题: Dict[(building, transformer), Dict[issue_type, detail]]
         transformer_issues: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        offline_devices: List[Tuple[str, str]] = []
+        sensor_fault_list: List[Tuple[str, str, str]] = []
+        sensor_missing_rates: Dict[str, List[float]] = {}
 
         update_counter = 0
         cancelled = False
@@ -1474,18 +1980,22 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
                 self.after(0, lambda p=processed, t=total, name=file_name:
                            self._update_progress_status(p, t, name))
 
-            anomalies, log_data, cleaned_df = check_anomaly_in_file(fp, current_thresholds, current_rules)
+            anomalies, log_data, cleaned_df, extra_info = check_anomaly_in_file(fp, current_thresholds, current_rules)
 
             if isinstance(log_data, dict):
                 msg, tag = _format_log_message(
                     file_name=log_data['filename'],
                     anomalies_count=log_data['count'],
-                    anomaly_types=log_data['types']
+                    anomaly_types=log_data['types'],
+                    pure_freeze=log_data.get('pure_freeze', False),
+                    freeze_filtered_count=log_data.get('freeze_filtered_count', 0),
+                    sensor_missing=extra_info.get('sensor_missing', []),
                 )
             elif "跳过" in log_data or "读取失败" in log_data:
                 msg, tag = _format_log_message(
                     file_name=file_name,
-                    error_msg=log_data
+                    error_msg=log_data,
+                    sensor_missing=extra_info.get('sensor_missing', []),
                 )
             else:
                 msg = log_data
@@ -1496,37 +2006,41 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             # --- 更新汇总变量 ---
             bld, trans = _extract_building_and_transformer(fp, self.folder_path)
 
+            if extra_info.get('is_offline'):
+                offline_devices.append((bld, trans))
+            for sensor_col in extra_info.get('sensor_faults', []):
+                sensor_fault_list.append((bld, trans, sensor_col))
+
             if isinstance(log_data, dict) and anomalies is not None and not anomalies.empty:
                 anomaly_batches.append(anomalies)
                 written_records += len(anomalies)
                 involved_files += 1
                 self.last_report_file = out_file
 
-                # 异常类型包含分号分隔的多值（如 "电压过高;电流过大"），
-                # 需拆分后独立统计每种类型。使用 explode 替代双重 for 循环。
-                if '异常类型' in anomalies.columns:
-                    exploded = (
-                        anomalies['异常类型']
-                        .astype(str)
-                        .str.split(';')
-                        .explode()
-                        .str.strip()
-                    )
-                    exploded = exploded[exploded != '']
-                    for atype, cnt in exploded.value_counts().items():
-                        anomaly_type_counts[atype] = anomaly_type_counts.get(atype, 0) + cnt
+                # 离线设备只写 CSV，不进入明细 / 不触发采集故障/传感器统计
+                if not extra_info.get('is_offline'):
+                    is_frozen = _check_frozen_acquisition(cleaned_df) if cleaned_df is not None else False
+                    if is_frozen:
+                        frozen_acquisition.append((bld, trans))
 
-                # 采集系统疑似故障检测
-                if cleaned_df is not None and _check_frozen_acquisition(cleaned_df):
-                    frozen_acquisition.append((bld, trans))
+                    if not is_frozen:
+                        if cleaned_df is not None:
+                            for col in TARGET_SHORT_NAMES_REPORT:
+                                if col in cleaned_df.columns:
+                                    n_total = len(cleaned_df)
+                                    n_missing = int(cleaned_df[col].isna().sum())
+                                    if n_total > 0:
+                                        rate = n_missing / n_total
+                                        if col not in sensor_missing_rates:
+                                            sensor_missing_rates[col] = []
+                                        sensor_missing_rates[col].append(rate)
 
-                # 提取每个变压器的重点问题
-                issues = _extract_transformer_issues(anomalies, cleaned_df)
-                if issues:
-                    key = (bld, trans)
-                    if key not in transformer_issues:
-                        transformer_issues[key] = {}
-                    transformer_issues[key].update(issues)
+                        issues = _extract_transformer_issues(anomalies, cleaned_df)
+                        if issues:
+                            key = (bld, trans)
+                            if key not in transformer_issues:
+                                transformer_issues[key] = {}
+                            transformer_issues[key].update(issues)
 
             elif "跳过" in log_data or "读取失败" in log_data:
                 skipped_files_with_reason.append((file_name, log_data))
@@ -1536,9 +2050,6 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             if len(anomaly_batches) >= 50:
                 write_header = self._flush_anomaly_batches(out_file, anomaly_batches, write_header)
 
-            if processed % 500 == 0:
-                gc.collect()
-
         if anomaly_batches:
             write_header = self._flush_anomaly_batches(out_file, anomaly_batches, write_header)
 
@@ -1547,19 +2058,18 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         duration_text = self._format_duration_text(duration, processed if cancelled else total)
 
         # --- 输出汇总 ---
-        self.log("=" * 60, "info")
         self._output_detection_summary(
             total=processed if cancelled else total,
             normal_count=normal_count,
-            involved_files=involved_files,
             written_records=written_records,
-            anomaly_type_counts=anomaly_type_counts,
-            frozen_acquisition=frozen_acquisition,
             transformer_issues=transformer_issues,
+            frozen_acquisition=frozen_acquisition,
+            offline_devices=offline_devices,
+            sensor_faults=sensor_fault_list,
             skipped_files_with_reason=skipped_files_with_reason,
+            sensor_missing_rates=sensor_missing_rates,
             cancelled=cancelled,
             duration_text=duration_text,
-            current_rules=current_rules,
         )
 
         if cancelled:
@@ -1595,114 +2105,132 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             self.after(0, lambda: self.progress.set(1))
         self.after(0, lambda: self._update_ui_state("finish"))
 
+        # 保存结果用于报告页
+        self._last_total = total
+        self._last_normal = normal_count
+        self._last_written = written_records
+        self._last_involved = involved_files
+        self._last_skip = len(skipped_files_with_reason)
+        self._last_duration_text = duration_text
+        self._last_transformer_issues = transformer_issues
+        self._last_frozen = frozen_acquisition
+        self._last_offline = offline_devices
+        self._last_sensor_faults = sensor_fault_list
+        self._last_skipped = skipped_files_with_reason
+        self._last_sensor_missing_rates = sensor_missing_rates
+        self._cancelled_flag = cancelled
+
+        # 检测完成后自动切换到报告页
+        if not cancelled:
+            self.after(500, self._show_report_page)
+
     def _output_detection_summary(
         self,
         total: int,
         normal_count: int,
-        involved_files: int,
         written_records: int,
-        anomaly_type_counts: Dict[str, int],
+        transformer_issues: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]],
         frozen_acquisition: List[Tuple[str, str]],
-        transformer_issues: Dict[Tuple[str, str], Dict[str, Any]],
+        offline_devices: List[Tuple[str, str]],
+        sensor_faults: List[Tuple[str, str, str]],
         skipped_files_with_reason: List[Tuple[str, str]],
+        sensor_missing_rates: Dict[str, List[float]],
         cancelled: bool,
         duration_text: str,
-        current_rules: Dict[str, bool],
     ) -> None:
-        """输出检测汇总报告（统计表 + 重点问题概述）。"""
+        """输出紧凑型检测汇总报告：建筑 → 变压器 → 故障类型（含次数、参数范围、时间范围）。"""
         from collections import defaultdict
 
-        # ==================== 层次一：统计表 ====================
-        anomaly_count = involved_files
         skipped_count = len(skipped_files_with_reason)
+        anomaly_files = len(transformer_issues)
+        status = "已取消" if cancelled else "完成"
+        short_duration = duration_text.split('(')[0].strip().replace('总耗时: ', '')
+
         self.log("", "info")
         self.log("=" * 60, "info")
-        self.log("  检测汇总报告", "info")
+        self.log(f"  E-Detection 检测汇总                      {status} · {short_duration}", "info")
         self.log("=" * 60, "info")
+        self.log(f"  {total}文件 → 正常{normal_count} · 异常{anomaly_files}({written_records}条) · 跳过{skipped_count}", "info")
 
-        status = "已取消" if cancelled else "完成"
-        self.log(f"状态: {status} | 总文件: {total} | 正常: {normal_count} | 异常: {anomaly_count} (共{written_records}条) | 跳过: {skipped_count}", "info")
-        self.log(f"耗时: {duration_text}", "info")
+        if not transformer_issues and not frozen_acquisition and not offline_devices and not sensor_faults:
+            if normal_count == total - skipped_count:
+                self.log("", "info")
+                self.log("  ✓ 未发现任何异常", "success")
+            self.log("=" * 60, "info")
+            self.log("", "info")
+            return
 
-        # 规则启用状态
-        rule_strs = []
-        for name, enabled in current_rules.items():
-            mark = "✓" if enabled else "✗"
-            rule_strs.append(f"{mark}{name}")
-        self.log(f"规则: {' | '.join(rule_strs)}", "info")
+        # --- 按建筑物分组 ---
+        building_data: Dict[str, List[Tuple[str, Dict[str, Dict[str, Any]]]]] = defaultdict(list)
+        for (bld, trans), issues in transformer_issues.items():
+            building_data[bld].append((trans, issues))
 
-        # 异常类型分布
-        if anomaly_type_counts:
-            self.log("-" * 40, "info")
-            self.log("异常类型分布:", "info")
-            sorted_types = sorted(anomaly_type_counts.items(), key=lambda x: x[1], reverse=True)
-            for atype, cnt in sorted_types:
-                self.log(f"  {atype}: {cnt} 条", "info")
+        for bld in sorted(building_data.keys()):
+            self.log("", "info")
+            self.log(f"  {bld}", "info")
+            for trans, issues in sorted(building_data[bld], key=lambda x: x[0]):
+                self.log(f"    {trans}", "info")
+                sorted_issues = sorted(issues.items(), key=lambda x: x[1]['count'], reverse=True)
+                for issue_type, info in sorted_issues:
+                    cnt = info['count']
+                    detail = info.get('detail', '')
+                    tr = info.get('time_range', '')
+                    detail_str = f", {detail}" if detail else ""
+                    line = f"      {issue_type}({cnt}次{detail_str})"
+                    if tr:
+                        pad = max(0, 52 - len(line))
+                        line += " " * pad + tr
+                    self.log(line, "alert")
 
-        # ==================== 层次二：重点问题概述 ====================
-        has_issues = False
+        # --- 特殊项 ---
+        self.log("", "info")
 
-        # 1. 采集系统疑似故障
         if frozen_acquisition:
-            has_issues = True
-            # 按建筑物分组
-            by_building: Dict[str, List[str]] = defaultdict(list)
+            by_b: Dict[str, List[str]] = defaultdict(list)
             for bld, trans in frozen_acquisition:
-                by_building[bld].append(trans)
+                by_b[bld].append(trans)
+            parts = [f"{b}({' · '.join(sorted(set(t_list)))})" for b, t_list in sorted(by_b.items())]
+            self.log(f"  ⚠ 采集故障: {'  '.join(parts)}", "alert")
 
-            self.log("", "info")
-            self.log("-" * 40, "info")
-            self.log("⚠ 采集系统疑似故障（电压+电流全程不变）:", "alert")
-            total_frozen = len(frozen_acquisition)
-            parts = []
-            for bld, trans_list in sorted(by_building.items()):
-                parts.append(f"{bld}（{'、'.join(trans_list)}）")
-            self.log(f"  共 {total_frozen} 台变压器在检测时段内所有读数完全相同，疑似采集系统故障。", "alert")
-            for part in parts:
-                self.log(f"  {part}", "alert")
+        if offline_devices:
+            by_b: Dict[str, List[str]] = defaultdict(list)
+            for bld, trans in offline_devices:
+                by_b[bld].append(trans)
+            parts = [f"{b}({' · '.join(sorted(set(t_list)))})" for b, t_list in sorted(by_b.items())]
+            self.log(f"  ⚠ 设备离线: {'  '.join(parts)}", "alert")
 
-        # 2. 各变压器重点问题（按建筑物分组）
-        if transformer_issues:
-            has_issues = True
-            # 按建筑物分组
-            by_building_issues: Dict[str, List[Tuple[str, Dict[str, Any]]]] = defaultdict(list)
-            for (bld, trans), issues in transformer_issues.items():
-                by_building_issues[bld].append((trans, issues))
+        if sensor_faults:
+            by_b: Dict[str, List[str]] = defaultdict(list)
+            for bld, trans, col in sensor_faults:
+                by_b[bld].append(f"{trans}{col}")
+            parts = [f"{b}({' · '.join(sorted(set(d_list)))})" for b, d_list in sorted(by_b.items())]
+            self.log(f"  ⚠ 传感器故障: {'  '.join(parts)}", "alert")
 
-            self.log("", "info")
-            self.log("-" * 40, "info")
-            self.log("⚠ 各变压器重点问题:", "alert")
+        if sensor_missing_rates:
+            bad_cols = []
+            for col in TARGET_SHORT_NAMES_REPORT:
+                rates = sensor_missing_rates.get(col, [])
+                if not rates:
+                    continue
+                avg = sum(rates) / len(rates)
+                if avg > 0.1:
+                    bad_cols.append(f"{col}({avg:.0%})")
+            if bad_cols:
+                self.log(f"  ⚠ 传感器缺失: {'  '.join(bad_cols)}", "skip")
 
-            for bld in sorted(by_building_issues.keys()):
-                trans_list = sorted(by_building_issues[bld], key=lambda x: x[0])
-                for trans, issues in trans_list:
-                    for issue_type, detail in issues.items():
-                        self.log(f"  {bld} {trans} — {issue_type}：{detail}", "alert")
-
-        # 3. 跳过的文件原因汇总
         if skipped_files_with_reason:
-            # 统计跳过原因
             reason_counts: Dict[str, int] = defaultdict(int)
             for _, reason in skipped_files_with_reason:
-                # 提取核心原因（去掉文件名前缀等细节）
                 if "高压" in reason:
-                    reason_counts["高压设备(已过滤)"] += 1
-                elif "未识别到有效参数列" in reason:
-                    reason_counts["未识别到有效参数列"] += 1
+                    reason_counts["高压设备"] += 1
+                elif "未识别" in reason:
+                    reason_counts["未识别字段"] += 1
                 elif "读取失败" in reason:
-                    reason_counts["文件读取失败"] += 1
+                    reason_counts["读取失败"] += 1
                 else:
-                    reason_counts[reason] += 1
-
-            self.log("", "info")
-            self.log("-" * 40, "info")
-            self.log(f"跳过的 {len(skipped_files_with_reason)} 个文件原因分布:", "skip")
-            for reason, cnt in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True):
-                self.log(f"  {reason}: {cnt} 个", "skip")
-
-        if not has_issues and normal_count == total - skipped_count:
-            self.log("", "info")
-            self.log("✓ 未发现重点问题，所有检测文件均正常。", "success")
+                    reason_counts["其它"] += 1
+            parts = [f"{r}{c}个" for r, c in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)]
+            self.log(f"  ⏭ 跳过{skipped_count}: {' · '.join(parts)}", "skip")
 
         self.log("=" * 60, "info")
         self.log("", "info")
