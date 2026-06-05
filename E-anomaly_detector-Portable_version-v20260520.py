@@ -420,6 +420,156 @@ def _is_only_freeze_types(types_str: str) -> bool:
     return True
 
 
+def _summarize_types(types_str: str) -> str:
+    """归纳异常类型，将同根类型合并，用于逐行日志精简显示。
+
+    规则:
+      - A/B/C 相同类异常（如A相电压过低 + B相电压过低 + C相电压过低）→ "电压过低(A/B/C相)"
+      - PT接线异常 / CT极性异常等独特类型 → 保留原名
+      - 最多归纳为 3 类，超出显示 "+N类"
+    """
+    if not types_str or not types_str.strip():
+        return ""
+
+    parts = [t.strip() for t in types_str.split(';') if t.strip()]
+    if not parts:
+        return ""
+
+    # 按根类型分组（去掉 A/B/C相 前缀和括号内容）
+    import re as _re
+    groups: dict[str, list[str]] = {}
+    for p in parts:
+        base = _re.sub(r'\([^)]*\)', '', p).strip()
+        if ':' in base:
+            base = base.split(':')[0]
+        # 提取根类型：去掉 A相/B相/C相 前缀
+        root = _re.sub(r'[ABC]相', '', base).strip()
+        if root not in groups:
+            groups[root] = []
+        groups[root].append(p)
+
+    result: list[str] = []
+    for root, items in sorted(groups.items(), key=lambda x: -len(x[1])):
+        if len(items) == 1:
+            # 单个类型：使用摘取根类型后的简化名
+            single = items[0]
+            single_clean = _re.sub(r'\([^)]*\)', '', single).strip()
+            if ':' in single_clean:
+                single_clean = single_clean.split(':')[0]
+            result.append(single_clean)
+        else:
+            # 多个同根类型：提取相别
+            phases = []
+            phase_map = {'A': 'A', 'B': 'B', 'C': 'C'}
+            for item in items:
+                m = _re.match(r'[ABC]相', item)
+                if m:
+                    phases.append(m.group()[0])
+            phase_str = '/'.join(sorted(set(phases))) + '相' if phases else ''
+            result.append(f"{root}({phase_str})" if phase_str else root)
+
+    if len(result) > 3:
+        result = result[:3] + [f"+{len(result) - 3}类"]
+    return "; ".join(result)
+
+
+def _compact_type(types_str: str) -> str:
+    """精简异常类型用于CSV报告的类型列：保留第一个代表性数值，每行最多3类。
+
+    例: "A相电压过低(265.8V); A相电压过低(267.2V); B相电压过低(266.1V)" → "电压过低(A/B/C相)"
+    """
+    return _summarize_types(types_str)
+
+
+def _extract_anomaly_value(types_str: str, df_row) -> str:
+    """从异常详情列提取核心异常值，生成简短的 '参数=数值' 摘要。
+
+    优先从 df_row 的电气参数列提取实际值；兜底从 types_str 中提取括号内数值。
+    """
+    import re as _re
+    pairs: list[str] = []
+
+    # 从 DataFrame 行中提取非空的电气参数
+    for col in TARGET_SHORT_NAMES_REPORT:
+        if col in df_row.index:
+            v = df_row[col]
+            try:
+                fv = float(v)
+                if not (fv == fv):  # NaN check
+                    continue
+                # 判断是否有对应的异常类型
+                col_phase = PHASE_MAP.get(col, col)
+                if col_phase in types_str or col in types_str:
+                    pairs.append(f"{col}={fv:.1f}")
+            except (ValueError, TypeError):
+                continue
+
+    # 如果从行数据中提取不到，从类型字符串中提取括号数值
+    if not pairs:
+        matches = _re.findall(r'\(([^)]+)\)', types_str)
+        if matches:
+            return ', '.join(matches[:6])
+
+    return ', '.join(pairs[:8]) if pairs else ''
+
+
+def _format_detail_structured(types_str: str) -> str:
+    """将原始异常详情字符串结构化：按类型分组，用 | 分隔不同类型。
+
+    例: "A相电压过低(265.8V); B相电压过低(267.2V); CT极性异常"
+      → "电压过低: A相265.8V, B相267.2V | CT极性异常"
+    """
+    if not types_str or not types_str.strip():
+        return ""
+
+    parts = [t.strip() for t in types_str.split(';') if t.strip()]
+    if not parts:
+        return ""
+
+    import re as _re
+
+    # 按根类型分组
+    groups: dict[str, list[str]] = {}
+    for p in parts:
+        base = _re.sub(r'\([^)]*\)', '', p).strip()
+        if ':' in base:
+            base = base.split(':')[0]
+        root = _re.sub(r'[ABC]相', '', base).strip()
+        if root not in groups:
+            groups[root] = []
+        groups[root].append(p)
+
+    result: list[str] = []
+    for root, items in groups.items():
+        # 提取每个 item 的相别和数值
+        sub: list[str] = []
+        for item in items:
+            # 提取相别
+            m = _re.match(r'([ABC]相)', item)
+            phase = m.group(1) if m else ''
+            # 提取括号内数值
+            val_m = _re.search(r'\(([^)]+)\)', item)
+            val = val_m.group(1) if val_m else ''
+            if phase and val:
+                sub.append(f"{phase}{val}")
+            elif val:
+                sub.append(val)
+            else:
+                # 无括号数值：保留原类型名（去除坐标前缀）
+                clean = _re.sub(r'\([^)]*\)', '', item).strip()
+                if ':' in clean:
+                    clean = clean.split(':')[0]
+                sub.append(clean)
+
+        if len(sub) == 1 and not _re.search(r'[ABC]相', sub[0]):
+            # 单个无相别类型（如CT极性异常）
+            result.append(sub[0])
+        else:
+            result.append(f"{root}: {', '.join(sub)}")
+
+    return ' | '.join(result)
+
+
 def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, file_name: str) -> Tuple[Any, str | dict]:
     """将检测结果格式化为最终异常报告 DataFrame 和日志摘要。
 
@@ -468,11 +618,16 @@ def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, fi
                 cleaned.append(base)
         return "; ".join(sorted(cleaned))
 
-    anomalies['异常类型'] = anomaly_types[anomalies_flags].apply(clean_anomaly_types)
+    anomalies['异常类型'] = anomaly_types[anomalies_flags].apply(_compact_type)
 
-    # 异常详情列：保留原始 detail 信息，供报告查阅
+    # 异常详情列：结构化格式（按类型分组，| 分隔）
     anomalies['异常详情'] = anomaly_types[anomalies_flags].apply(
-        lambda x: "; ".join(t.strip() for t in x.split(';') if t.strip()) if isinstance(x, str) else ""
+        lambda x: _format_detail_structured(x) if isinstance(x, str) else ""
+    )
+
+    # 异常值列：从行数据和详情中提取关键数值
+    anomalies['异常值'] = anomalies.apply(
+        lambda row: _extract_anomaly_value(row.get('异常详情', ''), row), axis=1
     )
 
     # --- 过滤仅冻结行：仅含数据冻结/传感器缺失/数据恒定的行不写入 CSV ---
@@ -499,13 +654,13 @@ def _format_anomaly_report(df: Any, anomalies_flags: Any, anomaly_types: Any, fi
     anomalies.insert(0, '来源文件', file_name)
 
     # 使用模块级 TARGET_SHORT_NAMES_REPORT 常量
-    fixed_cols = ['来源文件', '日期', '异常类型', '异常详情', '时间']
+    fixed_cols = ['来源文件', '日期', '异常类型', '异常详情', '异常值', '时间']
     data_cols = [c for c in anomalies.columns if c not in fixed_cols]
     rel_cols = [c for c in data_cols if anomalies[c].notna().any()]
     ordered_data_cols = [col for col in TARGET_SHORT_NAMES_REPORT if col in rel_cols]
     order = fixed_cols + ordered_data_cols
 
-    types = clean_anomaly_types(';'.join(anomalies['异常类型'].tolist()))
+    types = _summarize_types(';'.join(anomalies['异常详情'].tolist()))
     log_msg_data = {
         'count': len(anomalies),
         'types': types,
@@ -693,22 +848,22 @@ def _check_frozen_acquisition(df) -> bool:
 def _extract_transformer_issues(anomalies_df, df) -> Dict[str, Dict[str, Any]]:
     """从异常 DataFrame 中提取每个变压器的重点问题摘要（含数量和时间范围）。
 
-    Args:
-        anomalies_df: _format_anomaly_report 返回的异常 DataFrame。
-        df: 清洗后的原始 DataFrame。
-
-    Returns:
-        字典，key 为异常类别，value 为 {'count': N, 'detail': str, 'time_range': str}。
+    优先从 异常详情 列提取 detail 信息；若不存在则回退到 异常类型 列 + df 提取。
     """
     import pandas as pd
     import numpy as np
 
     issues: Dict[str, Dict[str, Any]] = {}
 
-    if anomalies_df is None or anomalies_df.empty or '异常类型' not in anomalies_df.columns:
+    if anomalies_df is None or anomalies_df.empty:
         return issues
 
     time_col = '时间' if '时间' in anomalies_df.columns else None
+    detail_col = '异常详情' if '异常详情' in anomalies_df.columns else None
+    type_col = '异常类型' if '异常类型' in anomalies_df.columns else None
+
+    if type_col is None:
+        return issues
 
     def _time_range(mask):
         if time_col and mask.any():
@@ -724,70 +879,95 @@ def _extract_transformer_issues(anomalies_df, df) -> Dict[str, Dict[str, Any]]:
         if mask.any():
             issues[key] = {'count': int(mask.sum()), 'detail': detail, 'time_range': _time_range(mask)}
 
-    # --- 电压异常（排除电压不平衡类） ---
-    v_mask = anomalies_df['异常类型'].str.contains('电压', na=False) & \
-             ~anomalies_df['异常类型'].str.contains('相电压不平衡|电压不平衡', na=False)
+    # 搜索列：优先用 异常详情，其次 异常类型
+    search_col = detail_col if detail_col in anomalies_df.columns else type_col
+
+    # --- 电压越限 ---
+    v_mask = anomalies_df[search_col].str.contains('电压', na=False) & \
+             ~anomalies_df[search_col].str.contains('不平衡|PT接线', na=False)
     if v_mask.any():
         v_parts = []
         for col in ['Uab', 'Ubc', 'Uca']:
             if col in df.columns:
-                cmin, cmax = df[col].min(), df[col].max()
-                if not pd.isna(cmin):
-                    v_parts.append(f"{col}{cmin:.0f}~{cmax:.0f}V")
-        _add_issue('电压异常', v_mask, ', '.join(v_parts) if v_parts else '')
+                vals = df.loc[v_mask[v_mask].index.intersection(df.index), col] if not v_mask.empty else pd.Series(dtype=float)
+                if len(vals) > 0:
+                    cmin, cmax = vals.min(), vals.max()
+                    if not pd.isna(cmin):
+                        v_parts.append(f"{cmin:.0f}~{cmax:.0f}V")
+        _add_issue('电压越限', v_mask, ', '.join(v_parts) if v_parts else '')
 
-    # --- 相电压不平衡 ---
-    imb_mask = anomalies_df['异常类型'].str.contains('电压不平衡', na=False)
-    _add_issue('相电压不平衡', imb_mask, '')
+    # --- PT接线异常 ---
+    pt_mask = anomalies_df[search_col].str.contains('PT接线异常', na=False)
+    _add_issue('疑似PT接线异常', pt_mask, '')
+
+    # --- CT极性异常 ---
+    ct_mask = anomalies_df[search_col].str.contains('CT极性异常', na=False)
+    _add_issue('CT极性异常', ct_mask, '')
+
+    # --- 电压不平衡 ---
+    imb_mask = anomalies_df[search_col].str.contains('电压不平衡', na=False) & ~pt_mask
+    _add_issue('电压不平衡', imb_mask, '')
 
     # --- 电流过载 ---
-    ov_mask = anomalies_df['异常类型'].str.contains('电流过大|电流过载', na=False)
+    ov_mask = anomalies_df[search_col].str.contains('电流过大|电流过载', na=False)
     i_detail = ''
     if ov_mask.any():
         i_parts = []
         for col in ['Ia', 'Ib', 'Ic']:
             if col in df.columns:
-                cmax = df[col].max()
-                if not pd.isna(cmax):
-                    i_parts.append(f"{col}:{cmax:.0f}A")
+                idx_inter = ov_mask[ov_mask].index.intersection(df.index)
+                vals = df.loc[idx_inter, col] if len(idx_inter) > 0 else pd.Series(dtype=float)
+                if len(vals) > 0:
+                    cmax = vals.max()
+                    if not pd.isna(cmax):
+                        i_parts.append(f"{cmax:.0f}A")
         i_detail = ', '.join(i_parts)
     _add_issue('电流过载', ov_mask, i_detail)
 
     # --- 电流不平衡 ---
-    ub_mask = anomalies_df['异常类型'].str.contains('电流不平衡', na=False)
+    ub_mask = anomalies_df[search_col].str.contains('电流不平衡', na=False)
     _add_issue('电流不平衡', ub_mask, '')
 
-    # --- 温度异常（排除传感器故障） ---
-    t_mask = anomalies_df['异常类型'].str.contains('温度', na=False) & \
-             ~anomalies_df['异常类型'].str.contains('传感器故障', na=False)
+    # --- 温度异常 ---
+    t_mask = anomalies_df[search_col].str.contains('温度', na=False) & \
+             ~anomalies_df[search_col].str.contains('传感器故障|传感器缺失', na=False)
     t_detail = ''
     if t_mask.any():
         t_parts = []
         for col in ['A相温度', 'B相温度', 'C相温度']:
             if col in df.columns:
-                cmin = df[col].replace(0, np.nan).min(skipna=True)
-                cmax = df[col].max()
-                if not pd.isna(cmin):
-                    t_parts.append(f"{col}{cmin:.0f}~{cmax:.0f}°C")
+                idx_inter = t_mask[t_mask].index.intersection(df.index)
+                vals = df.loc[idx_inter, col] if len(idx_inter) > 0 else pd.Series(dtype=float)
+                if len(vals) > 0:
+                    cmin = vals.replace(0, np.nan).min(skipna=True)
+                    cmax = vals.max()
+                    if not pd.isna(cmin):
+                        t_parts.append(f"{cmin:.0f}~{cmax:.0f}°C")
         t_detail = ', '.join(t_parts)
     _add_issue('温度异常', t_mask, t_detail)
 
     # --- 有功功率异常 ---
-    p_mask = anomalies_df['异常类型'].str.contains('有功功率异常', na=False)
+    p_mask = anomalies_df[search_col].str.contains('有功功率异常', na=False)
     p_detail = ''
     if p_mask.any() and '有功功率' in df.columns:
-        p_detail = f"最低{df['有功功率'].min():.1f}kW"
+        idx_inter = p_mask[p_mask].index.intersection(df.index)
+        if len(idx_inter) > 0:
+            pmin = df.loc[idx_inter, '有功功率'].min()
+            p_detail = f"最低{pmin:.1f}kW" if not pd.isna(pmin) else ''
     _add_issue('有功功率异常', p_mask, p_detail)
 
     # --- 功率因数过低 ---
-    pf_mask = anomalies_df['异常类型'].str.contains('功率因数过低', na=False)
+    pf_mask = anomalies_df[search_col].str.contains('功率因数过低', na=False)
     pf_detail = ''
     if pf_mask.any() and '功率因数' in df.columns:
-        pf_detail = f"最低{df['功率因数'].min():.2f}"
+        idx_inter = pf_mask[pf_mask].index.intersection(df.index)
+        if len(idx_inter) > 0:
+            pfmin = df.loc[idx_inter, '功率因数'].min()
+            pf_detail = f"最低{pfmin:.2f}" if not pd.isna(pfmin) else ''
     _add_issue('功率因数过低', pf_mask, pf_detail)
 
     # --- 数据突变 ---
-    sc_mask = anomalies_df['异常类型'].str.contains('突变', na=False)
+    sc_mask = anomalies_df[search_col].str.contains('突变', na=False)
     _add_issue('数据突变', sc_mask, '')
 
     # --- 关联异常 ---
@@ -1887,7 +2067,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             self.log("", "info")
             return
 
-        # --- 按建筑物分组 ---
+        # --- 按建筑物分组（紧凑格式：变压器一行汇总） ---
         building_data: Dict[str, List[Tuple[str, Dict[str, Dict[str, Any]]]]] = defaultdict(list)
         for (bld, trans), issues in transformer_issues.items():
             building_data[bld].append((trans, issues))
@@ -1896,21 +2076,26 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             self.log("", "info")
             self.log(f"  {bld}", "info")
             for trans, issues in sorted(building_data[bld], key=lambda x: x[0]):
-                self.log(f"    {trans}", "info")
                 sorted_issues = sorted(issues.items(), key=lambda x: x[1]['count'], reverse=True)
-                for issue_type, info in sorted_issues:
-                    cnt = info['count']
-                    detail = info.get('detail', '')
-                    tr = info.get('time_range', '')
-                    detail_str = f", {detail}" if detail else ""
-                    line = f"      {issue_type}({cnt}次{detail_str})"
-                    if tr:
-                        pad = max(0, 52 - len(line))
-                        line += " " * pad + tr
-                    self.log(line, "alert")
+                issue_parts = [f"{tp}({inf['count']}次)" for tp, inf in sorted_issues]
+                self.log(f"    {trans}  {'  '.join(issue_parts)}", "alert")
 
         # --- 特殊项 ---
         self.log("", "info")
+
+        # 传感器未配置一览（改进5：结构化的传感器缺失表）
+        if sensor_missing_rates:
+            self.log("  ▎传感器未配置一览", "heading")
+            missing_items = []
+            for col in TARGET_SHORT_NAMES_REPORT:
+                rates = sensor_missing_rates.get(col, [])
+                if not rates:
+                    continue
+                n_files = len(rates)
+                missing_items.append(f"{col}: {n_files}个文件")
+            if missing_items:
+                self.log(f"    {' · '.join(missing_items)}", "skip")
+            self.log("", "info")
 
         if frozen_acquisition:
             by_b: Dict[str, List[str]] = defaultdict(list)
@@ -1929,21 +2114,9 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         if sensor_faults:
             by_b: Dict[str, List[str]] = defaultdict(list)
             for bld, trans, col in sensor_faults:
-                by_b[bld].append(f"{trans}{col}")
+                by_b[bld].append(f"{trans}/{col}")
             parts = [f"{b}({' · '.join(sorted(set(d_list)))})" for b, d_list in sorted(by_b.items())]
             self.log(f"  ⚠ 传感器故障: {'  '.join(parts)}", "alert")
-
-        if sensor_missing_rates:
-            bad_cols = []
-            for col in TARGET_SHORT_NAMES_REPORT:
-                rates = sensor_missing_rates.get(col, [])
-                if not rates:
-                    continue
-                avg = sum(rates) / len(rates)
-                if avg > 0.1:
-                    bad_cols.append(f"{col}({avg:.0%})")
-            if bad_cols:
-                self.log(f"  ⚠ 传感器缺失: {'  '.join(bad_cols)}", "skip")
 
         if skipped_files_with_reason:
             reason_counts: Dict[str, int] = defaultdict(int)
