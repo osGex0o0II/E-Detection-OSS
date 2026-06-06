@@ -22,11 +22,11 @@ PHASE_MAP = {
 
 
 def _current_active_mask(context: DetectionContext, thresholds: Dict[str, float]) -> pd.Series:
-    """任一相电流超过激活阈值则视为有负载。"""
+    """任一相电流超过激活阈值则视为有负载。无电流列时返回全 False，避免误报。"""
     i_min = thresholds.get("I_MIN_ACTIVE_THRESHOLD", 1.0)
     cols = context.available(["Ia", "Ib", "Ic"])
     if not cols:
-        return pd.Series([True] * len(context.df), index=context.df.index)
+        return pd.Series([False] * len(context.df), index=context.df.index)
     active = pd.Series([False] * len(context.df), index=context.df.index)
     for col in cols:
         active |= context.series(col).fillna(0) >= i_min
@@ -75,7 +75,7 @@ class VoltageRule(BaseRule):
                     other_cols = [c for c in v_cols if c != col]
                     deviation = (v_frame[col] - v_median).abs() / v_median.replace(0, np.nan)
                     other_dev = ((v_frame[other_cols] - v_median.values.reshape(-1, 1)).abs()
-                                 / v_median.replace(0, np.nan).values.reshape(-1, 1)).min(axis=1)
+                                 / v_median.replace(0, np.nan).values.reshape(-1, 1)).max(axis=1)
                     pt_anomaly = (active_mask.fillna(False) & (deviation > 0.30).fillna(False)
                                   & (other_dev < 0.15).fillna(False) & (~all_off))
                     if pt_anomaly.any():
@@ -160,7 +160,7 @@ class SuddenChangeRule(BaseRule):
 
         # 电流列突变检测
         for col in context.available(["Ia", "Ib", "Ic"]):
-            s = context.series(col).fillna(method="ffill").fillna(0)
+            s = context.series(col).ffill().fillna(0)
             diff_abs = s.diff().abs()
             # 避免除以零：使用前一时刻值 + 小常数
             denom = s.shift(1).abs() + 1e-6
@@ -178,7 +178,7 @@ class SuddenChangeRule(BaseRule):
 
         # 电压列突变检测
         for col in context.available(["Uab", "Ubc", "Uca"]):
-            s = context.series(col).fillna(method="ffill").fillna(0)
+            s = context.series(col).ffill().fillna(0)
             diff_abs = s.diff().abs()
             denom = s.shift(1).abs() + 1e-6
             ratio = (diff_abs / denom).fillna(0)
@@ -246,7 +246,7 @@ class CrossParamRule(BaseRule):
 
         # ---- 规则 2：三相电压同时升高（系统过电压前兆）----
         if len(v_cols) >= 3:
-            v_frame = df[v_cols].fillna(method="ffill").fillna(0)
+            v_frame = df[v_cols].ffill().fillna(0)
             # 三相同步升高：三相比较前 3 个点的均值，均上升且超过阈值比例
             v_now = v_frame.iloc[:, :3].mean(axis=1)
             v_prev = v_frame.iloc[:, :3].shift(3).mean(axis=1)

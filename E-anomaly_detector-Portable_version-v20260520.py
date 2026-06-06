@@ -54,6 +54,8 @@ TEXTS = {
     'rule_current_unbalance': "电流不平衡检测",
     'rule_power_factor': "功率因数过低检测",
     'rule_detail_output': "输出详细异常",
+    'rule_sudden_change': "数据突变检测",
+    'rule_cross_param': "跨参数关联分析",
     'btn_start': "开始检测并生成异常报告",
     'btn_stop': "停止检测",
     'btn_apply': "应用修改",
@@ -69,9 +71,10 @@ TEXTS = {
 
 INVALID_VALUES = [-1.0, 2867.2]
 
-RULE_CONFIG_KEYS = frozenset({
-    'current_overload', 'current_unbalance', 'power_factor', 'detail_output'
-})
+RULE_CONFIG_KEYS = (
+    'current_overload', 'current_unbalance', 'power_factor', 'detail_output',
+    'sudden_change', 'cross_param',
+)
 
 PHASE_MAP = {
     'Uab': 'A相电压',
@@ -1020,7 +1023,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
         self.report_path_is_custom: bool = False
 
         self.V_MIN_THRESHOLD = 353.0
-        self.V_MAX_THRESHOLD = 407.0
+        self.V_MAX_THRESHOLD = 430.0
         self.I_MAX_THRESHOLD = 1000.0
         self.I_UNBALANCE_MAX_THRESHOLD = 0.15
         self.P_ACTIVE_MIN_THRESHOLD = 0.0
@@ -1036,11 +1039,13 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'current_overload': True,
             'current_unbalance': False,
             'power_factor': False,
-            'detail_output': False
+            'detail_output': False,
+            'sudden_change': False,
+            'cross_param': False,
         }
 
         self.DEFAULT_THRESHOLDS = {
-            'V_MIN_THRESHOLD': 353.0, 'V_MAX_THRESHOLD': 407.0,
+            'V_MIN_THRESHOLD': 353.0, 'V_MAX_THRESHOLD': 430.0,
             'I_MAX_THRESHOLD': 1000.0, 'I_UNBALANCE_MAX_THRESHOLD': 0.15,
             'P_ACTIVE_MIN_THRESHOLD': 0.0, 'PF_MIN_THRESHOLD': 0.90,
             'T_MIN_THRESHOLD': 0.0, 'T_MAX_THRESHOLD': 70.0,
@@ -1049,7 +1054,8 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'FREEZE_STD_THRESHOLD': 0.01,
             'V_IMBALANCE_THRESHOLD': 0.02,
             'current_overload': True, 'current_unbalance': False,
-            'power_factor': False, 'detail_output': False
+            'power_factor': False, 'detail_output': False,
+            'sudden_change': False, 'cross_param': False,
         }
 
         self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
@@ -1072,7 +1078,9 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'current_overload': ctk.BooleanVar(value=True),
             'current_unbalance': ctk.BooleanVar(value=False),
             'power_factor': ctk.BooleanVar(value=False),
-            'detail_output': ctk.BooleanVar(value=False)
+            'detail_output': ctk.BooleanVar(value=False),
+            'sudden_change': ctk.BooleanVar(value=False),
+            'cross_param': ctk.BooleanVar(value=False),
         }
         self.rule_checkboxes: Dict[str, ctk.CTkCheckBox] = {}
 
@@ -1196,7 +1204,9 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             (TEXTS['rule_current_overload'], "current_overload"),
             (TEXTS['rule_current_unbalance'], "current_unbalance"),
             (TEXTS['rule_power_factor'], "power_factor"),
-            (TEXTS['rule_detail_output'], "detail_output")
+            (TEXTS['rule_detail_output'], "detail_output"),
+            (TEXTS['rule_sudden_change'], "sudden_change"),
+            (TEXTS['rule_cross_param'], "cross_param"),
         ]
 
         for label, key in rules_list:

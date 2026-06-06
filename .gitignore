@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.claude/
+check_result.txt
+build/
+E-Detection_extracted/
+*.exe
+电力监控系统数据文件/
+*.output

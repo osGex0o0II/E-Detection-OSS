@@ -11,8 +11,10 @@
     "FREEZE_COUNT_THRESHOLD": 3,
     "FREEZE_STD_THRESHOLD": 0.01,
     "V_IMBALANCE_THRESHOLD": 0.02,
-    "detail_output": false,
-    "power_factor": false,
+    "current_overload": true,
     "current_unbalance": false,
-    "current_overload": true
+    "power_factor": false,
+    "detail_output": false,
+    "sudden_change": false,
+    "cross_param": false
 }
