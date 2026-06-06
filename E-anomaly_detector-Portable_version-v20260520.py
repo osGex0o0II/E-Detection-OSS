@@ -1040,8 +1040,8 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'current_unbalance': False,
             'power_factor': False,
             'detail_output': False,
-            'sudden_change': False,
-            'cross_param': False,
+            'sudden_change': True,
+            'cross_param': True,
         }
 
         self.DEFAULT_THRESHOLDS = {
@@ -1055,7 +1055,7 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'V_IMBALANCE_THRESHOLD': 0.02,
             'current_overload': True, 'current_unbalance': False,
             'power_factor': False, 'detail_output': False,
-            'sudden_change': False, 'cross_param': False,
+            'sudden_change': True, 'cross_param': True,
         }
 
         self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
@@ -1079,8 +1079,8 @@ class ElectricalAnomalyDetectorApp(ctk.CTk):
             'current_unbalance': ctk.BooleanVar(value=False),
             'power_factor': ctk.BooleanVar(value=False),
             'detail_output': ctk.BooleanVar(value=False),
-            'sudden_change': ctk.BooleanVar(value=False),
-            'cross_param': ctk.BooleanVar(value=False),
+            'sudden_change': ctk.BooleanVar(value=True),
+            'cross_param': ctk.BooleanVar(value=True),
         }
         self.rule_checkboxes: Dict[str, ctk.CTkCheckBox] = {}
 

@@ -15,6 +15,6 @@
     "current_unbalance": false,
     "power_factor": false,
     "detail_output": false,
-    "sudden_change": false,
-    "cross_param": false
+    "sudden_change": true,
+    "cross_param": true
 }
