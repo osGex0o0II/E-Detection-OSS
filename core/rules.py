@@ -46,7 +46,7 @@ class VoltageRule(BaseRule):
     ) -> Tuple[pd.Series, pd.Series]:
         df = context.df
         v_min = thresholds.get("V_MIN_THRESHOLD", 353.0)
-        v_max = thresholds.get("V_MAX_THRESHOLD", 407.0)
+        v_max = thresholds.get("V_MAX_THRESHOLD", 430.0)
         v_imbalance = thresholds.get("V_IMBALANCE_THRESHOLD", 0.02)
         detail = enabled_rules.get("detail_output", False)
         combined_mask = pd.Series([False] * len(df), index=df.index)
@@ -133,135 +133,6 @@ class VoltageRule(BaseRule):
                 msg.loc[~mask] = ""
             combined_mask |= mask
             combined_text = combined_text + msg.fillna("")
-
-        return combined_text, combined_mask
-
-
-class SuddenChangeRule(BaseRule):
-    """数据突变检测：检测相邻采样点间的剧烈跳变，判别短路/断路/传感器故障。"""
-
-    rule_key = "sudden_change"
-
-    def detect(
-        self,
-        context: DetectionContext,
-        thresholds: Dict[str, float],
-        enabled_rules: Dict[str, bool],
-    ) -> Tuple[pd.Series, pd.Series]:
-        df = context.df
-        # 电流突变阈值（比例）：相邻点变化超过此比例视为突变
-        i_skip = thresholds.get("IA_SKIP_THRESHOLD", 0.5)
-        # 电压突变阈值（比例）
-        v_skip = thresholds.get("V_SKIP_THRESHOLD", 0.2)
-        detail = enabled_rules.get("detail_output", False)
-
-        combined_text = pd.Series([""] * len(df), index=df.index, dtype=object)
-        combined_mask = pd.Series([False] * len(df), index=df.index)
-
-        # 电流列突变检测
-        for col in context.available(["Ia", "Ib", "Ic"]):
-            s = context.series(col).ffill().fillna(0)
-            diff_abs = s.diff().abs()
-            # 避免除以零：使用前一时刻值 + 小常数
-            denom = s.shift(1).abs() + 1e-6
-            ratio = (diff_abs / denom).fillna(0)
-            mask = ratio > i_skip
-            if mask.any():
-                phase = PHASE_MAP.get(col, col)
-                if detail:
-                    label = pd.Series([""] * len(df), index=df.index, dtype=object)
-                    label[mask] = f"{phase}突变; "
-                    combined_text = combined_text + label
-                else:
-                    combined_text.loc[mask] = combined_text.loc[mask] + "数据突变; "
-                combined_mask |= mask
-
-        # 电压列突变检测
-        for col in context.available(["Uab", "Ubc", "Uca"]):
-            s = context.series(col).ffill().fillna(0)
-            diff_abs = s.diff().abs()
-            denom = s.shift(1).abs() + 1e-6
-            ratio = (diff_abs / denom).fillna(0)
-            mask = ratio > v_skip
-            if mask.any():
-                phase = PHASE_MAP.get(col, col)
-                if detail:
-                    label = pd.Series([""] * len(df), index=df.index, dtype=object)
-                    label[mask] = f"{phase}突变; "
-                    combined_text = combined_text + label
-                else:
-                    combined_text.loc[mask] = combined_text.loc[mask] + "数据突变; "
-                combined_mask |= mask
-
-        return combined_text, combined_mask
-
-
-class CrossParamRule(BaseRule):
-    """跨参数关联分析：发现单独参数正常但组合模式异常的情况。"""
-
-    rule_key = "cross_param"
-
-    def detect(
-        self,
-        context: DetectionContext,
-        thresholds: Dict[str, float],
-        enabled_rules: Dict[str, bool],
-    ) -> Tuple[pd.Series, pd.Series]:
-        df = context.df
-        v_min = thresholds.get("V_MIN_THRESHOLD", 353.0)
-        v_max = thresholds.get("V_MAX_THRESHOLD", 407.0)
-        detail = enabled_rules.get("detail_output", False)
-
-        combined_text = pd.Series([""] * len(df), index=df.index, dtype=object)
-        combined_mask = pd.Series([False] * len(df), index=df.index)
-
-        # ---- 规则 1：电压正常但电流大幅偏离日均均值 ----
-        # 电压在正常范围内
-        v_cols = context.available(["Uab", "Ubc", "Uca"])
-        i_cols = context.available(["Ia", "Ib", "Ic"])
-        if v_cols and i_cols:
-            v_ok = pd.Series([True] * len(df), index=df.index)
-            for vcol in v_cols:
-                v_ok &= (context.series(vcol) >= v_min) & (context.series(vcol) <= v_max)
-            v_ok = v_ok.fillna(True)
-
-            for icol in i_cols:
-                s = context.series(icol).fillna(0)
-                mean_i = s.mean()
-                if mean_i == 0:
-                    continue
-                std_i = s.std()
-                # 偏离均值 2.5σ 且电压正常
-                i_abnormal = (s - mean_i).abs() > 2.5 * std_i
-                mask = v_ok & i_abnormal
-                if mask.any():
-                    phase = PHASE_MAP.get(icol, icol)
-                    if detail:
-                        label = pd.Series([""] * len(df), index=df.index, dtype=object)
-                        label[mask] = f"{phase}异常偏离（电压正常）; "
-                        combined_text = combined_text + label
-                    else:
-                        combined_text.loc[mask] = combined_text.loc[mask] + "关联异常; "
-                    combined_mask |= mask
-
-        # ---- 规则 2：三相电压同时升高（系统过电压前兆）----
-        if len(v_cols) >= 3:
-            v_frame = df[v_cols].ffill().fillna(0)
-            # 三相同步升高：三相比较前 3 个点的均值，均上升且超过阈值比例
-            v_now = v_frame.iloc[:, :3].mean(axis=1)
-            v_prev = v_frame.iloc[:, :3].shift(3).mean(axis=1)
-            swell_ratio = ((v_now - v_prev) / v_prev.replace(0, np.nan)).fillna(0)
-            # 三相电压同时上升超过 10% 且当前值接近上限
-            mask = (swell_ratio > 0.10) & (v_now > v_max * 0.95)
-            mask = mask.fillna(False)
-            if mask.any():
-                if detail:
-                    label = pd.Series([""] * len(df), index=df.index, dtype=object)
-                    label[mask] = "三相电压同步升高; "
-                    combined_text = combined_text + label
-                else:
-                    combined_text.loc[mask] = combined_text.loc[mask] + "关联异常; "
-                combined_mask |= mask
 
         return combined_text, combined_mask
 

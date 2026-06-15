@@ -14,7 +14,5 @@
     "current_overload": true,
     "current_unbalance": false,
     "power_factor": false,
-    "detail_output": false,
-    "sudden_change": false,
-    "cross_param": false
+    "detail_output": false
 }
