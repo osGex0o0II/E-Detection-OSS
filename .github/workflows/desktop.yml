@@ -1,0 +1,50 @@
+name: desktop
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "desktop/scripts/**"
+      - "NuGet.Config"
+      - ".github/workflows/desktop.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "desktop/**"
+      - "desktop/scripts/**"
+      - "NuGet.Config"
+      - ".github/workflows/desktop.yml"
+
+jobs:
+  winui-build:
+    name: build WinUI shell
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore desktop/EDetection.Desktop.slnx
+
+      - name: Build
+        run: dotnet build desktop/EDetection.Desktop.slnx -c Debug --no-restore
+
+      - name: Publish smoke
+        shell: pwsh
+        run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64 -NoZip
+
+      - name: Package health
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
+
+      - name: Install smoke
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish

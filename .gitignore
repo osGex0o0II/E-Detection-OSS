@@ -8,6 +8,10 @@ __pycache__/
 check_result.txt
 build/
 dist/
+artifacts/
+.tmp/
+bin/
+obj/
 E-Detection_extracted/
 *.exe
 *.spec

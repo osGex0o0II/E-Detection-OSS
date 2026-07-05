@@ -1,0 +1,2141 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using EDetection.Desktop.Models;
+using EDetection.Desktop.Services;
+using Microsoft.UI.Xaml;
+using Windows.ApplicationModel.DataTransfer;
+
+namespace EDetection.Desktop.ViewModels;
+
+public partial class MainViewModel : ObservableObject
+{
+    public const int MinWindowWidthDip = 1240;
+    public const int MinWindowHeightDip = 720;
+    public const int DefaultWindowWidthDip = MinWindowWidthDip;
+    public const int DefaultWindowHeightDip = MinWindowHeightDip;
+
+    private readonly PythonBackendService _backend;
+    private readonly SettingsService _settings;
+    private readonly DesktopDiagnosticsService _diagnostics;
+    private readonly RunEventService _runEvents;
+    private readonly ReportDetailPreviewService _detailPreview;
+    private readonly RunStateService _runState;
+    private readonly StartupService _startup;
+    private readonly Stopwatch _runStopwatch = new();
+    private CancellationTokenSource? _runCts;
+    private CancellationTokenSource? _cancelPromptCts;
+    private bool _settingsLoaded;
+    private bool _desktopNotificationSent;
+    private bool _syncingStartupPreference;
+    private bool _isShellShutdownRequested;
+    private ShellHotkeySnapshot _globalHotkeySnapshot = ShellHotkeySnapshot.Disabled;
+
+    public MainViewModel(
+        PythonBackendService backend,
+        SettingsService settings,
+        DesktopDiagnosticsService diagnostics,
+        ReportHistoryService reportHistory,
+        RuntimeLogService runtimeLogs,
+        RunTelemetryService runTelemetry,
+        RunEventService runEvents,
+        ReportDetailPreviewService detailPreview,
+        RunStateService runState,
+        StartupService startup,
+        DesktopHealthService? desktopHealth = null)
+    {
+        _backend = backend;
+        _settings = settings;
+        _diagnostics = diagnostics;
+        _runEvents = runEvents;
+        _detailPreview = detailPreview;
+        _runState = runState;
+        _startup = startup;
+        Diagnostics = new DiagnosticsViewModel();
+        RunTelemetry = new RunTelemetryViewModel(runTelemetry);
+        RuntimeLogs = new RuntimeLogViewModel(runtimeLogs);
+        ReportHistory = new ReportHistoryViewModel(reportHistory);
+        DesktopHealth = new DesktopHealthViewModel(
+            desktopHealth ?? new DesktopHealthService(),
+            _startup,
+            _settings,
+            () => PythonExecutable,
+            BuildHotkeySnapshot);
+        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
+        var configPath = Path.Combine(backendRoot, "config.json");
+        var saved = _settings.Load();
+        InputDirectory = saved.InputDirectory;
+        OutputDirectory = saved.OutputDirectory;
+        ConfigPath = string.IsNullOrWhiteSpace(saved.ConfigPath)
+            ? (File.Exists(configPath) ? configPath : "config.json")
+            : saved.ConfigPath;
+        PythonExecutable = string.IsNullOrWhiteSpace(saved.PythonExecutable)
+            ? "python"
+            : saved.PythonExecutable;
+        WriteReport = saved.WriteReport;
+        CloseToTrayOnClose = saved.CloseToTrayOnClose;
+        StartMinimizedToTray = saved.StartMinimizedToTray;
+        var startupStatus = _startup.GetStatus();
+        AutoStartOnSignIn = startupStatus.IsEnabled;
+        UpdateStartupIntegrationStatus(startupStatus);
+        EnableDesktopNotifications = saved.EnableDesktopNotifications;
+        EnableGlobalHotkeys = saved.EnableGlobalHotkeys;
+        SelectedQuickActionsShortcutIndex = Math.Clamp(saved.SelectedQuickActionsShortcutIndex, 0, 2);
+        EnableQuickActionsShortcut = saved.EnableQuickActionsShortcut && SelectedQuickActionsShortcutIndex != 2;
+        RuntimeLogs.SelectedRetentionIndex = Math.Clamp(saved.SelectedLogRetentionIndex, 0, 3);
+        SelectedThemeIndex = Math.Clamp(saved.SelectedThemeIndex, 0, 2);
+        SelectedBackdropIndex = Math.Clamp(saved.SelectedBackdropIndex, 0, 2);
+        WindowLeft = saved.WindowLeft;
+        WindowTop = saved.WindowTop;
+        WindowWidth = saved.WindowWidth;
+        WindowHeight = saved.WindowHeight;
+        IsWindowMaximized = saved.IsWindowMaximized;
+        ReportHistory.Load(saved.RecentReports, saved.SelectedRecentReportLimitIndex);
+        ReportHistory.PropertyChanged += ReportHistory_PropertyChanged;
+        Diagnostics.PropertyChanged += Diagnostics_PropertyChanged;
+        RunTelemetry.PropertyChanged += RunTelemetry_PropertyChanged;
+        RuntimeLogs.PropertyChanged += RuntimeLogs_PropertyChanged;
+        RefreshLocalDiagnostics();
+        RefreshDesktopHealth();
+
+        _settingsLoaded = true;
+    }
+
+    public ObservableCollection<DetectionLogItem> LogItems => RuntimeLogs.LogItems;
+
+    public ObservableCollection<DetectionLogItem> FilteredLogItems => RuntimeLogs.FilteredLogItems;
+
+    public ObservableCollection<string> LogKindFilters => RuntimeLogs.LogKindFilters;
+
+    public ObservableCollection<RecentReport> RecentReports => ReportHistory.RecentReports;
+
+    public ObservableCollection<RecentReport> FilteredRecentReports => ReportHistory.FilteredRecentReports;
+
+    public ObservableCollection<ReportDeviceSummary> HighRiskDevices { get; } = [];
+
+    public ObservableCollection<ReportIssueType> TopIssueTypes { get; } = [];
+
+    public ObservableCollection<ReportDetailPreview> DetailPreview { get; } = [];
+
+    public ObservableCollection<ReportDetailPreview> FilteredDetailPreview { get; } = [];
+
+    public ObservableCollection<string> DetailIssueTypeFilters { get; } = ["全部类型"];
+
+    public bool HasSelectedDetail => SelectedDetail is not null;
+
+    public bool IsIdle => !IsRunning;
+
+    public bool CanEditRunConfiguration => !IsRunning;
+
+    public Visibility RunTelemetryVisibility =>
+        SelectedReport is null
+        && (IsRunning
+            || TotalFiles > 0
+            || ProcessedFiles > 0
+            || !string.IsNullOrWhiteSpace(CurrentFileText))
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility CancelConfirmationVisibility => IsCancelConfirmationPending
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public string CancelButtonText => IsCancelConfirmationPending ? "确认取消" : "取消";
+
+    public string CancelConfirmationText =>
+        "再次按 Esc 或点击“确认取消”停止检测。当前 Python 检测进程会被终止。";
+
+    public Visibility CompletionActionsVisibility => ShouldShowCompletionActions
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public string CompletionActionTitleText => AnomalyRecords > 0
+        ? $"检测完成，发现 {AnomalyRecords} 条异常"
+        : "检测完成，未发现异常";
+
+    public string CompletionActionBodyText
+    {
+        get
+        {
+            var reportText = string.IsNullOrWhiteSpace(ReportPath)
+                ? "未生成 Excel 报告"
+                : $"报告已生成: {Path.GetFileName(ReportPath)}";
+            return $"{ProcessedSummary} 个文件 · 异常文件 {AnomalyFiles} · 跳过 {SkippedFiles} · {reportText}";
+        }
+    }
+
+    private bool ShouldShowCompletionActions =>
+        !IsRunning && SelectedReport is null && StatusText == "检测完成";
+
+    public string ProcessedSummary => TotalFiles > 0
+        ? $"{ProcessedFiles}/{TotalFiles}"
+        : ProcessedFiles.ToString();
+
+    public string ProgressText => $"{ProgressPercent:0}%";
+
+    public string SensorOverviewText =>
+        $"离线 {SensorOfflineDevices} · 传感器故障 {SensorFaultRows} · 未配置 {SensorMissingRows} · 跳过 {SensorSkippedRows}";
+
+    public string DetailPreviewStatusText => DetailPreviewTotalCount > 0
+        ? $"{FilteredDetailPreview.Count}/{DetailPreviewTotalCount} 条预览"
+        : "暂无异常明细";
+
+    public string DetailSortStatusText => SelectedDetailSortKey switch
+    {
+        "severity" => "按等级排序",
+        "device" => "按设备排序",
+        "time" => "按时间排序",
+        "issue" => "按异常排序",
+        "value" => "按异常值排序",
+        _ => "默认顺序",
+    };
+
+    public string LogStatusText => RuntimeLogs.StatusText;
+
+    public int LogRetentionLimit => RuntimeLogs.RetentionLimit;
+
+    public string LogRetentionText => RuntimeLogs.RetentionText;
+
+    public int RecentReportLimit => ReportHistory.RecentReportLimit;
+
+    public string RecentReportLimitText => ReportHistory.RecentReportLimitText;
+
+    public int WorkbenchReportDeviceCount => SelectedReport?.DeviceCount ?? ReportDeviceCount;
+
+    public IEnumerable<ReportDeviceSummary> WorkbenchHighRiskDevices =>
+        SelectedReport is { } report ? report.HighRiskDevices : HighRiskDevices;
+
+    public IEnumerable<ReportIssueType> WorkbenchTopIssueTypes =>
+        SelectedReport is { } report ? report.TopIssueTypes : TopIssueTypes;
+
+    public string WorkbenchSensorOverviewText => SelectedReport is { } report
+        ? SensorOverviewTextFrom(report.SensorOverview)
+        : SensorOverviewText;
+
+    public int WorkbenchDetailPreviewTotalCount =>
+        SelectedReport?.DetailPreviewCount ?? DetailPreviewTotalCount;
+
+    public IEnumerable<ReportDetailPreview> WorkbenchFilteredDetailPreview =>
+        SelectedReport is { } report
+            ? _detailPreview.Filter(
+                report.DetailPreview,
+                DetailIssueTypeFilters,
+                BuildDetailFilterState())
+            : FilteredDetailPreview;
+
+    public string WorkbenchDetailPreviewStatusText => WorkbenchDetailPreviewTotalCount > 0
+        ? $"{WorkbenchFilteredDetailPreview.Count()}/{WorkbenchDetailPreviewTotalCount} 条预览"
+        : "暂无异常明细";
+
+    public string ReportHistoryStatusText => ReportHistory.StatusText;
+
+    public bool IsShowingReportSnapshot => SelectedReport is not null;
+
+    public string WorkbenchModeText => IsShowingReportSnapshot ? "历史报告快照" : "当前检测状态";
+
+    public string WorkbenchStatusText => SelectedReport is { } report
+        ? report.FileName
+        : StatusText;
+
+    public string WorkbenchProgressText => SelectedReport is { TotalFiles: > 0 }
+        ? "历史"
+        : ProgressText;
+
+    public double WorkbenchProgressPercent => SelectedReport is { TotalFiles: > 0 }
+        ? 100
+        : ProgressPercent;
+
+    public string WorkbenchProcessedSummary => SelectedReport is { } report
+        ? (report.TotalFiles > 0 ? $"{report.ProcessedFiles}/{report.TotalFiles}" : "-")
+        : ProcessedSummary;
+
+    public int WorkbenchAnomalyFiles => SelectedReport?.AnomalyFiles ?? AnomalyFiles;
+
+    public int WorkbenchAnomalyRecords => SelectedReport?.AnomalyRecords ?? AnomalyRecords;
+
+    public int WorkbenchSkippedFiles => SelectedReport?.SkippedFiles ?? SkippedFiles;
+
+    public string WorkbenchReportPath => SelectedReport?.Path ?? ReportPath;
+
+    public string WorkbenchReportPathText => string.IsNullOrWhiteSpace(WorkbenchReportPath)
+        ? "尚未生成报告"
+        : WorkbenchReportPath;
+
+    public string WorkbenchReportButtonText => IsShowingReportSnapshot ? "打开选中报告" : "打开最新报告";
+
+    public string WorkbenchReportFolderButtonText => IsShowingReportSnapshot ? "选中报告目录" : "打开所在目录";
+
+    public string WorkbenchContextText => SelectedReport is { } report
+        ? $"{report.SourceText} · {report.RunMetaText}"
+        : IsRunning && !string.IsNullOrWhiteSpace(ActiveRunSummaryText)
+            ? ActiveRunSummaryText
+            : !string.IsNullOrWhiteSpace(ReportPath)
+                ? $"最新运行结果 · {Path.GetFileName(ReportPath)}"
+                : "实时读取 Python JSONL 事件";
+
+    public ShellStatusSnapshot ShellStatus => new(
+        StatusText,
+        IsRunning,
+        TaskbarProgressKind,
+        TaskbarProgressPercent);
+
+    public Visibility ActiveRunSummaryVisibility => string.IsNullOrWhiteSpace(ActiveRunSummaryText)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public Visibility FailureActionsVisibility => HasActionableFailure
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public string FailureActionTitleText => StatusText == "无法开始检测"
+        ? "运行前检查未通过"
+        : "检测失败";
+
+    public string FailureActionBodyText => LastFailureText == "暂无失败"
+        ? DiagnosticActionText
+        : LastFailureText;
+
+    public Visibility SnapshotActionsVisibility => IsShowingReportSnapshot
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    private bool HasActionableFailure =>
+        !IsRunning && (StatusText == "检测失败" || StatusText == "无法开始检测");
+
+    public Visibility FirstRunGuideVisibility =>
+        ShouldShowFirstRunGuide ? Visibility.Visible : Visibility.Collapsed;
+
+    public string FirstRunGuideTitleText => StatusText == "无法开始检测"
+        ? "运行前检查未通过"
+        : IsLocalInputReady()
+            ? "准备开始检测"
+            : "选择检测数据";
+
+    public string FirstRunGuideSubtitleText
+    {
+        get
+        {
+            if (StatusText == "无法开始检测")
+            {
+                return DiagnosticActionText;
+            }
+
+            if (!IsLocalInputReady())
+            {
+                return "左侧选择 CSV 根目录后即可进行就绪检查。";
+            }
+
+            if (!IsConfigReady())
+            {
+                return "确认配置文件后运行诊断。";
+            }
+
+            if (BackendDiagnosticText.Contains("可导入", StringComparison.Ordinal))
+            {
+                return "运行环境就绪，可以开始检测。";
+            }
+
+            return DiagnosticActionText;
+        }
+    }
+
+    public string FirstRunInputStepText => IsLocalInputReady()
+        ? InputDiagnosticText
+        : "未选择可用的 CSV 根目录";
+
+    public string FirstRunConfigStepText => ConfigDiagnosticText;
+
+    public string FirstRunPythonStepText => BackendDiagnosticText.Contains("可导入", StringComparison.Ordinal)
+        ? BackendDiagnosticText
+        : PythonDiagnosticText;
+
+    public string FirstRunOutputStepText => OutputDiagnosticText;
+
+    private bool ShouldShowFirstRunGuide =>
+        !IsRunning
+        && SelectedReport is null
+        && TotalFiles == 0
+        && string.IsNullOrWhiteSpace(ReportPath);
+
+    public string ThemeMode => SelectedThemeIndex switch
+    {
+        1 => "Light",
+        2 => "Dark",
+        _ => "Default",
+    };
+
+    public string BackdropMode => SelectedBackdropIndex switch
+    {
+        1 => "Acrylic",
+        2 => "None",
+        _ => "Mica",
+    };
+
+    public event EventHandler? AppearanceChanged;
+
+    public event EventHandler<DesktopNotificationRequest>? DesktopNotificationRequested;
+
+    public string SettingsStoreStatusText => _settings.StoreStatusText;
+
+    public DesktopHealthViewModel DesktopHealth { get; }
+
+    public DiagnosticsViewModel Diagnostics { get; }
+
+    public RunTelemetryViewModel RunTelemetry { get; }
+
+    public RuntimeLogViewModel RuntimeLogs { get; }
+
+    public ReportHistoryViewModel ReportHistory { get; }
+
+    [ObservableProperty]
+    public partial bool EnableGlobalHotkeys { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool EnableQuickActionsShortcut { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(QuickActionsShortcutText))]
+    public partial int SelectedQuickActionsShortcutIndex { get; set; } = 2;
+
+    [ObservableProperty]
+    public partial string GlobalHotkeyStatusText { get; set; } = ShellHotkeySnapshot.Disabled.StatusText;
+
+    public void PrepareForShellShutdown()
+    {
+        _isShellShutdownRequested = true;
+        _cancelPromptCts?.Cancel();
+        _runCts?.Cancel();
+
+        if (_runStopwatch.IsRunning)
+        {
+            StopRunTelemetry();
+        }
+
+        if (IsRunning)
+        {
+            StatusText = "正在退出...";
+            SetTaskbarProgress(TaskbarProgressKind.Paused, ProgressPercent);
+        }
+
+        SaveSettings();
+    }
+
+    public int WindowLeft { get; private set; } = -1;
+
+    public int WindowTop { get; private set; } = -1;
+
+    public int WindowWidth { get; private set; }
+
+    public int WindowHeight { get; private set; }
+
+    public bool IsWindowMaximized { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShellStatus))]
+    public partial TaskbarProgressKind TaskbarProgressKind { get; set; } = TaskbarProgressKind.None;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShellStatus))]
+    public partial double TaskbarProgressPercent { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    public partial string InputDirectory { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    public partial string OutputDirectory { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    public partial string ConfigPath { get; set; } = "config.json";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    public partial string PythonExecutable { get; set; } = "python";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    public partial bool WriteReport { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool CloseToTrayOnClose { get; set; }
+
+    [ObservableProperty]
+    public partial bool StartMinimizedToTray { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoStartOnSignIn { get; set; }
+
+    [ObservableProperty]
+    public partial string StartupIntegrationStatusText { get; set; } = "登录后自动启动未启用";
+
+    [ObservableProperty]
+    public partial bool EnableDesktopNotifications { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShellStatus))]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(CanEditRunConfiguration))]
+    [NotifyPropertyChangedFor(nameof(RunTelemetryVisibility))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
+    [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UseSelectedReportDirectoriesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyCompletionSummaryCommand))]
+    public partial bool IsRunning { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShellStatus))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusText))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideTitleText))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideSubtitleText))]
+    [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(FailureActionTitleText))]
+    [NotifyPropertyChangedFor(nameof(FailureActionBodyText))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionTitleText))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    [NotifyCanExecuteChangedFor(nameof(CopyCompletionSummaryCommand))]
+    public partial string StatusText { get; set; } = "就绪";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProcessedSummary))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProcessedSummary))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProgressText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProgressPercent))]
+    [NotifyPropertyChangedFor(nameof(RunTelemetryVisibility))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
+    public partial int TotalFiles { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProcessedSummary))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProcessedSummary))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    [NotifyPropertyChangedFor(nameof(RunTelemetryVisibility))]
+    public partial int ProcessedFiles { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchAnomalyFiles))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionTitleText))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    public partial int AnomalyFiles { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchAnomalyRecords))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionTitleText))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    public partial int AnomalyRecords { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSkippedFiles))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    public partial int SkippedFiles { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProgressText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProgressPercent))]
+    public partial double ProgressPercent { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportPath))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportPathText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
+    [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyCurrentReportPathCommand))]
+    public partial string ReportPath { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedDetail))]
+    [NotifyCanExecuteChangedFor(nameof(CopySelectedDetailCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenSelectedDetailSourceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopySelectedDetailSourcePathCommand))]
+    public partial ReportDetailPreview? SelectedDetail { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsShowingReportSnapshot))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchModeText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProgressText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProgressPercent))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchProcessedSummary))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchAnomalyFiles))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchAnomalyRecords))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSkippedFiles))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportPath))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportPathText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportButtonText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportFolderButtonText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportDeviceCount))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchHighRiskDevices))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchTopIssueTypes))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSensorOverviewText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewTotalCount))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchFilteredDetailPreview))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
+    [NotifyPropertyChangedFor(nameof(SnapshotActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(RunTelemetryVisibility))]
+    [NotifyPropertyChangedFor(nameof(CompletionActionsVisibility))]
+    [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyCurrentReportPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ShowCurrentRunCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyCompletionSummaryCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenFirstAnomalySourceCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenSelectedReportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenSelectedReportFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(UseSelectedReportDirectoriesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveSelectedReportCommand))]
+    public partial RecentReport? SelectedReport { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchReportDeviceCount))]
+    public partial int ReportDeviceCount { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SensorOverviewText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSensorOverviewText))]
+    public partial int SensorOfflineDevices { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SensorOverviewText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSensorOverviewText))]
+    public partial int SensorFaultRows { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SensorOverviewText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSensorOverviewText))]
+    public partial int SensorMissingRows { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SensorOverviewText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchSensorOverviewText))]
+    public partial int SensorSkippedRows { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchFilteredDetailPreview))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
+    public partial string DetailSearchText { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchFilteredDetailPreview))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
+    public partial int SelectedSeverityFilterIndex { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkbenchFilteredDetailPreview))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
+    public partial int SelectedIssueTypeFilterIndex { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailSortStatusText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchFilteredDetailPreview))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
+    public partial string SelectedDetailSortKey { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailPreviewStatusText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewTotalCount))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
+    public partial int DetailPreviewTotalCount { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThemeMode))]
+    public partial int SelectedThemeIndex { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BackdropMode))]
+    public partial int SelectedBackdropIndex { get; set; }
+
+    public string DiagnosticSummaryText => Diagnostics.SummaryText;
+
+    public string PythonDiagnosticText => Diagnostics.PythonText;
+
+    public string BackendDiagnosticText => Diagnostics.BackendText;
+
+    public string ConfigDiagnosticText => Diagnostics.ConfigText;
+
+    public string InputDiagnosticText => Diagnostics.InputText;
+
+    public string OutputDiagnosticText => Diagnostics.OutputText;
+
+    public string DiagnosticCheckedAtText => Diagnostics.CheckedAtText;
+
+    public string DiagnosticActionText => Diagnostics.ActionText;
+
+    public string QuickActionsShortcutText => SelectedQuickActionsShortcutIndex switch
+    {
+        1 => "快速操作 · Ctrl+Shift+P",
+        2 => "快速操作快捷键已关闭",
+        _ => "快速操作 · Ctrl+K",
+    };
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveRunSummaryVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    public partial string ActiveRunSummaryText { get; set; } = "";
+
+    public string CurrentFileText => RunTelemetry.CurrentFileText;
+
+    public string RunElapsedText => RunTelemetry.ElapsedText;
+
+    public string RunSpeedText => RunTelemetry.SpeedText;
+
+    public string RunRemainingText => RunTelemetry.RemainingText;
+
+    public string RunProgressDetailText => RunTelemetry.ProgressDetailText;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CancelConfirmationVisibility))]
+    [NotifyPropertyChangedFor(nameof(CancelButtonText))]
+    public partial bool IsCancelConfirmationPending { get; set; }
+
+    public string PythonSetupCommandText => Diagnostics.PythonSetupCommandText;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FailureActionBodyText))]
+    [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
+    public partial string LastFailureText { get; set; } = "暂无失败";
+
+    public int SelectedLogRetentionIndex => RuntimeLogs.SelectedRetentionIndex;
+
+    public string LogSearchText => RuntimeLogs.SearchText;
+
+    public int SelectedLogKindFilterIndex => RuntimeLogs.SelectedKindFilterIndex;
+
+    partial void OnSelectedThemeIndexChanged(int value) => SaveAppearanceSettings();
+
+    partial void OnSelectedBackdropIndexChanged(int value) => SaveAppearanceSettings();
+
+    partial void OnCloseToTrayOnCloseChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnStartMinimizedToTrayChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnAutoStartOnSignInChanged(bool value)
+    {
+        if (!_settingsLoaded || _syncingStartupPreference)
+        {
+            UpdateStartupIntegrationStatus(_startup.GetStatus());
+            return;
+        }
+
+        try
+        {
+            _startup.SetEnabled(value);
+            UpdateStartupIntegrationStatus(_startup.GetStatus());
+            RefreshDesktopHealth();
+            SavePreferenceSettings();
+        }
+        catch (Exception ex)
+        {
+            StartupIntegrationStatusText = value
+                ? $"启用登录自启动失败: {ex.Message}"
+                : $"关闭登录自启动失败: {ex.Message}";
+            _syncingStartupPreference = true;
+            var startupStatus = _startup.GetStatus();
+            AutoStartOnSignIn = startupStatus.IsEnabled;
+            _syncingStartupPreference = false;
+            RefreshDesktopHealth();
+            SavePreferenceSettings();
+        }
+    }
+
+    partial void OnEnableDesktopNotificationsChanged(bool value)
+    {
+        RefreshDesktopHealth();
+        SavePreferenceSettings();
+    }
+
+    partial void OnEnableGlobalHotkeysChanged(bool value)
+    {
+        _globalHotkeySnapshot = value
+            ? _globalHotkeySnapshot with { IsEnabled = true }
+            : ShellHotkeySnapshot.Disabled;
+        ApplyGlobalHotkeySnapshot(_globalHotkeySnapshot);
+        SavePreferenceSettings();
+    }
+
+    partial void OnEnableQuickActionsShortcutChanged(bool value)
+    {
+        if (!value && SelectedQuickActionsShortcutIndex != 2)
+        {
+            SelectedQuickActionsShortcutIndex = 2;
+        }
+        else if (value && SelectedQuickActionsShortcutIndex == 2)
+        {
+            SelectedQuickActionsShortcutIndex = 0;
+        }
+
+        SavePreferenceSettings();
+    }
+
+    partial void OnSelectedQuickActionsShortcutIndexChanged(int value)
+    {
+        var normalized = Math.Clamp(value, 0, 2);
+        if (normalized != value)
+        {
+            SelectedQuickActionsShortcutIndex = normalized;
+            return;
+        }
+
+        var enabled = normalized != 2;
+        if (EnableQuickActionsShortcut != enabled)
+        {
+            EnableQuickActionsShortcut = enabled;
+        }
+
+        SavePreferenceSettings();
+    }
+
+    partial void OnWriteReportChanged(bool value)
+    {
+        RefreshLocalDiagnostics();
+        SavePreferenceSettings();
+    }
+
+    partial void OnInputDirectoryChanged(string value)
+    {
+        RefreshLocalDiagnostics();
+        RefreshFirstRunGuide();
+        SavePreferenceSettings();
+    }
+
+    partial void OnOutputDirectoryChanged(string value)
+    {
+        RefreshLocalDiagnostics();
+        RefreshFirstRunGuide();
+        SavePreferenceSettings();
+    }
+
+    partial void OnConfigPathChanged(string value)
+    {
+        RefreshLocalDiagnostics();
+        RefreshFirstRunGuide();
+        SavePreferenceSettings();
+    }
+
+    partial void OnPythonExecutableChanged(string value)
+    {
+        RefreshLocalDiagnostics();
+        RefreshDesktopHealth();
+        RefreshFirstRunGuide();
+        SavePreferenceSettings();
+    }
+
+    partial void OnSelectedReportChanged(RecentReport? value)
+    {
+        if (!ReferenceEquals(ReportHistory.SelectedReport, value))
+        {
+            ReportHistory.SelectedReport = value;
+        }
+
+        SelectedDetail = null;
+        RefreshDetailPreview();
+    }
+
+    partial void OnDetailSearchTextChanged(string value) => RefreshDetailPreview();
+
+    partial void OnSelectedSeverityFilterIndexChanged(int value) => RefreshDetailPreview();
+
+    partial void OnSelectedIssueTypeFilterIndexChanged(int value) => RefreshDetailPreview();
+
+    partial void OnSelectedDetailSortKeyChanged(string value) => RefreshDetailPreview();
+
+    private void ReportHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ReportHistoryViewModel.SelectedReport)
+            && !ReferenceEquals(SelectedReport, ReportHistory.SelectedReport))
+        {
+            SelectedReport = ReportHistory.SelectedReport;
+        }
+
+        if (e.PropertyName is nameof(ReportHistoryViewModel.StatusText))
+        {
+            OnPropertyChanged(nameof(ReportHistoryStatusText));
+        }
+
+        if (e.PropertyName is nameof(ReportHistoryViewModel.RecentReportLimit)
+            or nameof(ReportHistoryViewModel.RecentReportLimitText))
+        {
+            OnPropertyChanged(nameof(RecentReportLimit));
+            OnPropertyChanged(nameof(RecentReportLimitText));
+            ClearRecentReportsCommand.NotifyCanExecuteChanged();
+            SavePreferenceSettings();
+        }
+    }
+
+    private void Diagnostics_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(DiagnosticsViewModel.SummaryText):
+                OnPropertyChanged(nameof(DiagnosticSummaryText));
+                OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
+                break;
+            case nameof(DiagnosticsViewModel.PythonText):
+                OnPropertyChanged(nameof(PythonDiagnosticText));
+                OnPropertyChanged(nameof(FirstRunPythonStepText));
+                break;
+            case nameof(DiagnosticsViewModel.BackendText):
+                OnPropertyChanged(nameof(BackendDiagnosticText));
+                OnPropertyChanged(nameof(FirstRunPythonStepText));
+                OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
+                break;
+            case nameof(DiagnosticsViewModel.ConfigText):
+                OnPropertyChanged(nameof(ConfigDiagnosticText));
+                OnPropertyChanged(nameof(FirstRunConfigStepText));
+                break;
+            case nameof(DiagnosticsViewModel.InputText):
+                OnPropertyChanged(nameof(InputDiagnosticText));
+                OnPropertyChanged(nameof(FirstRunInputStepText));
+                break;
+            case nameof(DiagnosticsViewModel.OutputText):
+                OnPropertyChanged(nameof(OutputDiagnosticText));
+                OnPropertyChanged(nameof(FirstRunOutputStepText));
+                break;
+            case nameof(DiagnosticsViewModel.CheckedAtText):
+                OnPropertyChanged(nameof(DiagnosticCheckedAtText));
+                break;
+            case nameof(DiagnosticsViewModel.ActionText):
+                OnPropertyChanged(nameof(DiagnosticActionText));
+                OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
+                break;
+            case nameof(DiagnosticsViewModel.PythonSetupCommandText):
+                OnPropertyChanged(nameof(PythonSetupCommandText));
+                CopyPythonSetupCommand.NotifyCanExecuteChanged();
+                break;
+        }
+    }
+
+    private void RunTelemetry_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(RunTelemetryViewModel.CurrentFileText):
+                OnPropertyChanged(nameof(CurrentFileText));
+                OnPropertyChanged(nameof(RunTelemetryVisibility));
+                break;
+            case nameof(RunTelemetryViewModel.ElapsedText):
+                OnPropertyChanged(nameof(RunElapsedText));
+                break;
+            case nameof(RunTelemetryViewModel.SpeedText):
+                OnPropertyChanged(nameof(RunSpeedText));
+                break;
+            case nameof(RunTelemetryViewModel.RemainingText):
+                OnPropertyChanged(nameof(RunRemainingText));
+                break;
+            case nameof(RunTelemetryViewModel.ProgressDetailText):
+                OnPropertyChanged(nameof(RunProgressDetailText));
+                break;
+        }
+    }
+
+    private void RuntimeLogs_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(RuntimeLogViewModel.StatusText):
+                OnPropertyChanged(nameof(LogStatusText));
+                ClearRuntimeLogsCommand.NotifyCanExecuteChanged();
+                CopyFilteredLogsCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(RuntimeLogViewModel.RetentionLimit):
+            case nameof(RuntimeLogViewModel.RetentionText):
+                OnPropertyChanged(nameof(LogRetentionLimit));
+                OnPropertyChanged(nameof(LogRetentionText));
+                SavePreferenceSettings();
+                break;
+            case nameof(RuntimeLogViewModel.SelectedRetentionIndex):
+                OnPropertyChanged(nameof(SelectedLogRetentionIndex));
+                break;
+            case nameof(RuntimeLogViewModel.SearchText):
+                OnPropertyChanged(nameof(LogSearchText));
+                break;
+            case nameof(RuntimeLogViewModel.SelectedKindFilterIndex):
+                OnPropertyChanged(nameof(SelectedLogKindFilterIndex));
+                break;
+        }
+    }
+
+    private bool CanStart() => !IsRunning;
+
+    [RelayCommand(CanExecute = nameof(CanStart))]
+    private async Task StartAsync()
+    {
+        if (!await EnsureReadyToStartAsync())
+        {
+            return;
+        }
+
+        ResetRunState();
+        var request = new DetectionRequest
+        {
+            InputDirectory = InputDirectory,
+            OutputDirectory = string.IsNullOrWhiteSpace(OutputDirectory) ? null : OutputDirectory,
+            ConfigPath = string.IsNullOrWhiteSpace(ConfigPath) ? null : ConfigPath,
+            PythonExecutable = string.IsNullOrWhiteSpace(PythonExecutable) ? "python" : PythonExecutable,
+            WriteReport = WriteReport,
+            WorkingDirectory = PythonBackendService.ResolveBackendWorkingDirectory(),
+        };
+        ActiveRunSummaryText = BuildActiveRunSummaryText(request);
+        StartRunTelemetry();
+        IsRunning = true;
+        _desktopNotificationSent = false;
+        StatusText = "正在启动 Python 检测核心...";
+        SetTaskbarProgress(TaskbarProgressKind.Indeterminate, 0);
+        _runCts = new CancellationTokenSource();
+        SaveSettings();
+
+        var progress = new Progress<DetectionBackendEvent>(HandleBackendEvent);
+
+        try
+        {
+            var exitCode = await _backend.RunDetectionAsync(
+                request,
+                progress,
+                _runCts.Token);
+
+            if (exitCode != 0)
+            {
+                RunTelemetry.ApplyCurrentFile("检测失败");
+                StopRunTelemetry();
+                LastFailureText = $"Python 检测进程退出码: {exitCode}";
+                AddLog("错误", LastFailureText);
+                StatusText = "检测失败";
+                SetTaskbarProgress(TaskbarProgressKind.Error, Math.Max(ProgressPercent, 100));
+                RequestDesktopNotification(
+                    DesktopNotificationKind.Error,
+                    "检测失败",
+                    LastFailureText,
+                    ReportPath);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            ClearCancelConfirmation();
+            RunTelemetry.ApplyCurrentFile("检测已取消");
+            StopRunTelemetry();
+            AddLog("取消", "检测已取消。");
+            StatusText = "检测已取消";
+            SetTaskbarProgress(TaskbarProgressKind.Paused, ProgressPercent);
+            RequestDesktopNotification(
+                DesktopNotificationKind.Warning,
+                "检测已取消",
+                $"已处理 {ProcessedFiles}/{TotalFiles} 个文件。",
+                ReportPath);
+        }
+        catch (Exception ex)
+        {
+            ClearCancelConfirmation();
+            RunTelemetry.ApplyCurrentFile("检测失败");
+            StopRunTelemetry();
+            LastFailureText = ex.Message;
+            AddLog("错误", ex.Message);
+            StatusText = "检测失败";
+            SetTaskbarProgress(TaskbarProgressKind.Error, 100);
+            RequestDesktopNotification(
+                DesktopNotificationKind.Error,
+                "检测失败",
+                ex.Message,
+                ReportPath);
+        }
+        finally
+        {
+            if (_runStopwatch.IsRunning)
+            {
+                StopRunTelemetry();
+            }
+
+            IsRunning = false;
+            ClearCancelConfirmation();
+            _runCts?.Dispose();
+            _runCts = null;
+        }
+    }
+
+    private bool CanCancel() => IsRunning;
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
+    private void Cancel()
+    {
+        if (!IsCancelConfirmationPending)
+        {
+            ArmCancelConfirmation();
+            return;
+        }
+
+        ClearCancelConfirmation(restoreRunningTaskbar: false);
+        _runCts?.Cancel();
+        StatusText = "正在取消...";
+    }
+
+    private void HandleBackendEvent(DetectionBackendEvent evt)
+    {
+        var action = _runEvents.BuildAction(evt, BuildRunEventState());
+        ApplyRunEventAction(action, evt);
+    }
+
+    private void ApplyRunEventAction(
+        RunEventAction action,
+        DetectionBackendEvent evt)
+    {
+        if (action.ApplySummary)
+        {
+            ApplySummary(evt);
+        }
+
+        if (action.TotalFiles is { } totalFiles)
+        {
+            TotalFiles = totalFiles;
+        }
+
+        if (action.ProcessedFiles is { } processedFiles)
+        {
+            ProcessedFiles = processedFiles;
+        }
+
+        if (action.ProgressPercent is { } progressPercent)
+        {
+            ProgressPercent = progressPercent;
+        }
+
+        if (action.CurrentFileText is not null)
+        {
+            RunTelemetry.ApplyCurrentFile(action.CurrentFileText);
+        }
+
+        if (action.StatusText is not null)
+        {
+            StatusText = action.StatusText;
+        }
+
+        if (action.LastFailureText is not null)
+        {
+            LastFailureText = action.LastFailureText;
+        }
+
+        if (evt.EventName == "report_written")
+        {
+            ReportPath = evt.ReportPath ?? "";
+        }
+
+        if (action.ApplyReportSummary)
+        {
+            ApplyReportSummary(evt);
+            AddLog("摘要", _runEvents.BuildReportSummaryLogMessage(BuildRunEventState()));
+        }
+
+        if (action.AddRecentReport)
+        {
+            AddRecentReport(ReportPath, evt);
+        }
+
+        if (action.StopTelemetry)
+        {
+            StopRunTelemetry();
+        }
+        else if (ShouldUpdateTelemetry(evt.EventName))
+        {
+            UpdateRunTelemetry();
+        }
+
+        if (action.TaskbarKind is { } taskbarKind)
+        {
+            SetTaskbarProgress(taskbarKind, action.TaskbarPercent ?? ProgressPercent);
+        }
+
+        if (action.LogKind is not null)
+        {
+            AddLog(action.LogKind, action.LogMessage ?? "");
+        }
+
+        if (action.ApplySummary)
+        {
+            AddLog("完成", _runEvents.BuildRunCompletedLogMessage(BuildRunEventState()));
+            var notification = _runEvents.BuildRunCompletedNotification(BuildRunEventState(), ReportPath);
+            RequestDesktopNotification(
+                notification.Kind,
+                notification.Title,
+                notification.Message,
+                notification.ReportPath);
+        }
+
+        if (action.Notification is { } notificationRequest)
+        {
+            RequestDesktopNotification(
+                notificationRequest.Kind,
+                notificationRequest.Title,
+                notificationRequest.Message,
+                notificationRequest.ReportPath);
+        }
+    }
+
+    private static bool ShouldUpdateTelemetry(string eventName) =>
+        eventName is "run_started"
+            or "file_result"
+            or "file_progress"
+            or "report_written"
+            or "report_summary";
+
+    private RunEventState BuildRunEventState() =>
+        new(
+            TotalFiles,
+            ProcessedFiles,
+            AnomalyFiles,
+            AnomalyRecords,
+            SkippedFiles,
+            ProgressPercent,
+            HighRiskDevices.Count,
+            TopIssueTypes.Count);
+
+    private void ApplySummary(DetectionBackendEvent evt)
+    {
+        ApplyRunSummarySnapshot(_runState.BuildSummary(evt, BuildRunSummarySnapshot()));
+        if (!string.IsNullOrWhiteSpace(ReportPath))
+        {
+            AddRecentReport(ReportPath, evt);
+        }
+    }
+
+    private RunSummarySnapshot BuildRunSummarySnapshot() =>
+        new(
+            TotalFiles,
+            ProcessedFiles,
+            AnomalyFiles,
+            AnomalyRecords,
+            SkippedFiles,
+            ReportPath);
+
+    private void ApplyRunSummarySnapshot(RunSummarySnapshot snapshot)
+    {
+        TotalFiles = snapshot.TotalFiles;
+        ProcessedFiles = snapshot.ProcessedFiles;
+        AnomalyFiles = snapshot.AnomalyFiles;
+        AnomalyRecords = snapshot.AnomalyRecords;
+        SkippedFiles = snapshot.SkippedFiles;
+        ReportPath = snapshot.ReportPath;
+    }
+
+    private static string BuildActiveRunSummaryText(DetectionRequest request)
+    {
+        var input = FormatPathLeaf(request.InputDirectory, "未选择数据");
+        var output = string.IsNullOrWhiteSpace(request.OutputDirectory)
+            ? "输入目录"
+            : FormatPathLeaf(request.OutputDirectory, "报告目录");
+        var config = FormatPathLeaf(request.ConfigPath, "config.json");
+        var python = FormatPathLeaf(request.PythonExecutable, "python");
+        return $"本次运行 · 数据 {input} · 报告 {output} · 配置 {config} · Python {python}";
+    }
+
+    private static string FormatPathLeaf(string? path, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return fallback;
+        }
+
+        var trimmed = path.Trim().TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return fallback;
+        }
+
+        var fileName = Path.GetFileName(trimmed);
+        return string.IsNullOrWhiteSpace(fileName) ? trimmed : fileName;
+    }
+
+    private void StartRunTelemetry()
+    {
+        _runStopwatch.Restart();
+        RunTelemetry.Start();
+        OnPropertyChanged(nameof(RunTelemetryVisibility));
+    }
+
+    private void StopRunTelemetry()
+    {
+        UpdateRunTelemetry();
+        _runStopwatch.Stop();
+    }
+
+    private void UpdateRunTelemetry()
+    {
+        RunTelemetry.Update(
+            _runStopwatch.Elapsed,
+            IsRunning,
+            ProcessedFiles,
+            TotalFiles,
+            ProgressPercent);
+    }
+
+    private void ArmCancelConfirmation()
+    {
+        if (!IsRunning)
+        {
+            return;
+        }
+
+        _cancelPromptCts?.Cancel();
+        var promptCts = new CancellationTokenSource();
+        _cancelPromptCts = promptCts;
+        IsCancelConfirmationPending = true;
+        StatusText = "再次确认取消";
+        SetTaskbarProgress(TaskbarProgressKind.Paused, ProgressPercent);
+        AddLog("取消确认", "再次按 Esc 或点击确认取消停止检测。");
+        _ = ClearCancelConfirmationAfterDelayAsync(promptCts);
+    }
+
+    private async Task ClearCancelConfirmationAfterDelayAsync(CancellationTokenSource promptCts)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), promptCts.Token);
+            if (ReferenceEquals(_cancelPromptCts, promptCts) && IsRunning)
+            {
+                IsCancelConfirmationPending = false;
+                _cancelPromptCts = null;
+                StatusText = string.IsNullOrWhiteSpace(CurrentFileText)
+                    ? "处理中..."
+                    : CurrentFileText;
+                SetTaskbarProgress(TaskbarProgressKind.Normal, ProgressPercent);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            promptCts.Dispose();
+        }
+    }
+
+    private void ClearCancelConfirmation(bool restoreRunningTaskbar = true)
+    {
+        _cancelPromptCts?.Cancel();
+        _cancelPromptCts = null;
+        IsCancelConfirmationPending = false;
+        if (restoreRunningTaskbar && IsRunning)
+        {
+            SetTaskbarProgress(TaskbarProgressKind.Normal, ProgressPercent);
+        }
+    }
+
+    private void ResetRunState()
+    {
+        ClearCancelConfirmation();
+        _runStopwatch.Reset();
+        SelectedReport = null;
+        ApplyRunSummarySnapshot(_runState.ResetSummary);
+        ProgressPercent = 0;
+        SetTaskbarProgress(TaskbarProgressKind.None, 0);
+        ApplyReportSummarySnapshot(_runState.ResetReportSummary);
+        DetailSearchText = "";
+        SelectedSeverityFilterIndex = 0;
+        SelectedIssueTypeFilterIndex = 0;
+        SelectedDetailSortKey = "";
+        DetailIssueTypeFilters.Clear();
+        DetailIssueTypeFilters.Add("全部类型");
+        ActiveRunSummaryText = "";
+        RunTelemetry.Reset();
+        FilteredDetailPreview.Clear();
+        RuntimeLogs.Clear();
+        OnPropertyChanged(nameof(DetailPreviewStatusText));
+        CopyFilteredDetailsCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ApplyReportSummary(DetectionBackendEvent evt)
+    {
+        ApplyReportSummarySnapshot(_runState.BuildReportSummary(evt));
+        RefreshDetailPreview();
+        SelectFirstVisibleDetailIfAvailable();
+    }
+
+    private void ApplyReportSummarySnapshot(ReportSummarySnapshot snapshot)
+    {
+        ReportDeviceCount = snapshot.DeviceCount;
+        HighRiskDevices.Clear();
+        foreach (var device in snapshot.HighRiskDevices)
+        {
+            HighRiskDevices.Add(device);
+        }
+
+        TopIssueTypes.Clear();
+        foreach (var issue in snapshot.TopIssueTypes)
+        {
+            TopIssueTypes.Add(issue);
+        }
+
+        SensorOfflineDevices = snapshot.SensorOverview.OfflineDevices;
+        SensorFaultRows = snapshot.SensorOverview.SensorFaultRows;
+        SensorMissingRows = snapshot.SensorOverview.SensorMissingRows;
+        SensorSkippedRows = snapshot.SensorOverview.SkippedRows;
+
+        DetailPreview.Clear();
+        foreach (var detail in snapshot.DetailPreview)
+        {
+            DetailPreview.Add(detail);
+        }
+
+        DetailPreviewTotalCount = snapshot.DetailPreviewCount;
+    }
+
+    private void RefreshDetailPreview()
+    {
+        IEnumerable<ReportDetailPreview> source = SelectedReport is { } report
+            ? report.DetailPreview
+            : DetailPreview;
+        var result = _detailPreview.Refresh(
+            source,
+            SelectedDetail,
+            DetailIssueTypeFilters,
+            BuildDetailFilterState());
+        DetailIssueTypeFilters.Clear();
+        foreach (var issueType in result.IssueTypeFilters)
+        {
+            DetailIssueTypeFilters.Add(issueType);
+        }
+
+        if (SelectedIssueTypeFilterIndex != result.SelectedIssueTypeFilterIndex)
+        {
+            SelectedIssueTypeFilterIndex = result.SelectedIssueTypeFilterIndex;
+        }
+
+        FilteredDetailPreview.Clear();
+        foreach (var detail in result.FilteredDetails)
+        {
+            FilteredDetailPreview.Add(detail);
+        }
+
+        if (!ReferenceEquals(SelectedDetail, result.SelectedDetail))
+        {
+            SelectedDetail = result.SelectedDetail;
+        }
+
+        NotifyDetailPreviewChanged();
+        CopyFilteredDetailsCommand.NotifyCanExecuteChanged();
+        OpenFirstAnomalySourceCommand.NotifyCanExecuteChanged();
+    }
+
+    private void NotifyDetailPreviewChanged()
+    {
+        OnPropertyChanged(nameof(DetailPreviewStatusText));
+        OnPropertyChanged(nameof(WorkbenchFilteredDetailPreview));
+        OnPropertyChanged(nameof(WorkbenchDetailPreviewStatusText));
+        OnPropertyChanged(nameof(DetailSortStatusText));
+    }
+
+    private void SelectFirstVisibleDetailIfAvailable()
+    {
+        if (SelectedDetail is null && FilteredDetailPreview.Count > 0)
+        {
+            SelectedDetail = FilteredDetailPreview[0];
+        }
+    }
+
+    private ReportDetailFilterState BuildDetailFilterState() =>
+        new(
+            DetailSearchText,
+            SelectedSeverityFilterIndex,
+            SelectedIssueTypeFilterIndex,
+            SelectedDetailSortKey);
+
+    private static string SensorOverviewTextFrom(ReportSensorOverview sensor) =>
+        $"离线 {sensor.OfflineDevices} · 传感器故障 {sensor.SensorFaultRows} · 未配置 {sensor.SensorMissingRows} · 跳过 {sensor.SkippedRows}";
+
+    private void RefreshReportHistory()
+    {
+        ReportHistory.SelectedReport = SelectedReport;
+        ReportHistory.Refresh();
+        OnPropertyChanged(nameof(ReportHistoryStatusText));
+    }
+
+    private void NotifyWorkbenchSnapshotChanged()
+    {
+        OnPropertyChanged(nameof(IsShowingReportSnapshot));
+        OnPropertyChanged(nameof(WorkbenchModeText));
+        OnPropertyChanged(nameof(WorkbenchStatusText));
+        OnPropertyChanged(nameof(WorkbenchProgressText));
+        OnPropertyChanged(nameof(WorkbenchProgressPercent));
+        OnPropertyChanged(nameof(WorkbenchProcessedSummary));
+        OnPropertyChanged(nameof(WorkbenchAnomalyFiles));
+        OnPropertyChanged(nameof(WorkbenchAnomalyRecords));
+        OnPropertyChanged(nameof(WorkbenchSkippedFiles));
+        OnPropertyChanged(nameof(WorkbenchReportPath));
+        OnPropertyChanged(nameof(WorkbenchReportPathText));
+        OnPropertyChanged(nameof(WorkbenchReportButtonText));
+        OnPropertyChanged(nameof(WorkbenchReportFolderButtonText));
+        OnPropertyChanged(nameof(WorkbenchContextText));
+        OnPropertyChanged(nameof(WorkbenchReportDeviceCount));
+        OnPropertyChanged(nameof(WorkbenchHighRiskDevices));
+        OnPropertyChanged(nameof(WorkbenchTopIssueTypes));
+        OnPropertyChanged(nameof(WorkbenchSensorOverviewText));
+        OnPropertyChanged(nameof(WorkbenchDetailPreviewTotalCount));
+        OnPropertyChanged(nameof(WorkbenchFilteredDetailPreview));
+        OnPropertyChanged(nameof(WorkbenchDetailPreviewStatusText));
+        RefreshFirstRunGuide();
+        OpenCurrentReportCommand.NotifyCanExecuteChanged();
+        OpenCurrentReportFolderCommand.NotifyCanExecuteChanged();
+        CopyCurrentReportPathCommand.NotifyCanExecuteChanged();
+        CopyFilteredDetailsCommand.NotifyCanExecuteChanged();
+        CopyCompletionSummaryCommand.NotifyCanExecuteChanged();
+        OpenFirstAnomalySourceCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanShowCurrentRun() => SelectedReport is not null;
+
+    [RelayCommand(CanExecute = nameof(CanShowCurrentRun))]
+    private void ShowCurrentRun()
+    {
+        SelectedReport = null;
+        AddLog("视图", "已返回当前检测状态。");
+    }
+
+    private bool CanCopyCompletionSummary() => ShouldShowCompletionActions;
+
+    [RelayCommand(CanExecute = nameof(CanCopyCompletionSummary))]
+    private void CopyCompletionSummary()
+    {
+        CopyTextToClipboard(BuildCompletionSummaryText());
+        AddLog("复制", "已复制检测完成摘要。");
+    }
+
+    private string BuildCompletionSummaryText()
+    {
+        var lines = new List<string>
+        {
+            "E-Detection 检测摘要",
+            $"状态: {StatusText}",
+            $"文件: {ProcessedSummary}",
+            $"异常文件: {AnomalyFiles}",
+            $"异常记录: {AnomalyRecords}",
+            $"跳过文件: {SkippedFiles}",
+            $"设备数: {ReportDeviceCount}",
+            $"传感器: {SensorOverviewText}",
+            $"耗时: {RunElapsedText}",
+            $"输入目录: {InputDirectory}",
+            $"报告: {(string.IsNullOrWhiteSpace(ReportPath) ? "未生成" : ReportPath)}",
+        };
+
+        var issueTypes = TopIssueTypes.Take(5).ToList();
+        if (issueTypes.Count > 0)
+        {
+            lines.Add("异常类型:");
+            lines.AddRange(issueTypes.Select(issue => $"- {issue.Name}: {issue.Count}"));
+        }
+
+        var devices = HighRiskDevices.Take(5).ToList();
+        if (devices.Count > 0)
+        {
+            lines.Add("高风险设备:");
+            lines.AddRange(devices.Select(device => $"- {device.Title}: {device.Subtitle}"));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private bool CanOpenFirstAnomalySource()
+    {
+        var detail = WorkbenchFilteredDetailPreview.FirstOrDefault();
+        return detail is not null && File.Exists(ResolveDetailSourcePath(detail));
+    }
+
+    [RelayCommand(CanExecute = nameof(CanOpenFirstAnomalySource))]
+    private void OpenFirstAnomalySource()
+    {
+        var detail = WorkbenchFilteredDetailPreview.FirstOrDefault();
+        if (detail is null)
+        {
+            return;
+        }
+
+        SelectedDetail = detail;
+        var path = ResolveDetailSourcePath(detail);
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        OpenContainingFolder(path);
+        AddLog("定位", "已打开首个异常的源文件位置。");
+    }
+
+    private void AddLog(string kind, string message)
+    {
+        RuntimeLogs.Add(kind, message);
+    }
+
+    public string BuildLogExportText()
+    {
+        return RuntimeLogs.BuildExportText();
+    }
+
+    private bool CanCopyFilteredLogs() => FilteredLogItems.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanCopyFilteredLogs))]
+    private void CopyFilteredLogs()
+    {
+        if (FilteredLogItems.Count == 0)
+        {
+            return;
+        }
+
+        CopyTextToClipboard(BuildLogExportText());
+    }
+
+    [RelayCommand]
+    private void ClearLogFilters()
+    {
+        RuntimeLogs.ClearFilters();
+    }
+
+    private bool CanClearRuntimeLogs() => LogItems.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanClearRuntimeLogs))]
+    private void ClearRuntimeLogs()
+    {
+        RuntimeLogs.Clear();
+        ClearRuntimeLogsCommand.NotifyCanExecuteChanged();
+        CopyFilteredLogsCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task<bool> EnsureReadyToStartAsync()
+    {
+        RefreshLocalDiagnostics();
+
+        var issues = _diagnostics.ValidateRunInputs(
+            BuildDiagnosticsRequest(),
+            prepareOutputDirectory: true);
+        if (issues.Count > 0)
+        {
+            BlockStart(issues);
+            return false;
+        }
+
+        RefreshLocalDiagnostics();
+        Diagnostics.MarkProbeInProgress("正在执行运行前就绪检查...");
+
+        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
+        var result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
+        ApplyPythonProbeResult(result);
+        if (!result.IsReady)
+        {
+            BlockStart(
+                "Python 或检测核心未就绪",
+                result.ActionMessage);
+            return false;
+        }
+
+        LastFailureText = "暂无失败";
+        return true;
+    }
+
+    [RelayCommand]
+    private async Task RefreshDiagnosticsAsync()
+    {
+        RefreshLocalDiagnostics();
+        Diagnostics.MarkProbeInProgress("正在验证 Python 与检测核心...");
+
+        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
+        var result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
+        ApplyPythonProbeResult(result);
+        AddLog(result.IsReady ? "诊断" : "诊断警告", $"{result.PythonMessage}；{result.BackendMessage}");
+    }
+
+    [RelayCommand]
+    private void RefreshDesktopHealth() => DesktopHealth.Refresh();
+
+    public void ApplyGlobalHotkeySnapshot(ShellHotkeySnapshot snapshot)
+    {
+        _globalHotkeySnapshot = snapshot;
+        GlobalHotkeyStatusText = snapshot.StatusText;
+        RefreshDesktopHealth();
+    }
+
+    private void RefreshLocalDiagnostics()
+    {
+        var snapshot = _diagnostics.BuildLocalSnapshot(BuildDiagnosticsRequest());
+        Diagnostics.ApplyLocalSnapshot(snapshot);
+        RefreshFirstRunGuide();
+    }
+
+    private DesktopDiagnosticsRequest BuildDiagnosticsRequest() =>
+        new(
+            InputDirectory,
+            OutputDirectory,
+            ConfigPath,
+            PythonExecutable,
+            WriteReport);
+
+    private void ApplyPythonProbeResult(PythonProbeResult result)
+    {
+        Diagnostics.ApplyPythonProbeResult(
+            result,
+            IsLocalInputReady(),
+            IsConfigReady(),
+            DateTime.Now);
+        RefreshFirstRunGuide();
+    }
+
+    private void RefreshFirstRunGuide()
+    {
+        OnPropertyChanged(nameof(FirstRunGuideVisibility));
+        OnPropertyChanged(nameof(FirstRunGuideTitleText));
+        OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
+        OnPropertyChanged(nameof(FirstRunInputStepText));
+        OnPropertyChanged(nameof(FirstRunConfigStepText));
+        OnPropertyChanged(nameof(FirstRunPythonStepText));
+        OnPropertyChanged(nameof(FirstRunOutputStepText));
+    }
+
+    private void BlockStart(IReadOnlyList<string> issues)
+    {
+        var message = string.Join("；", issues);
+        var action = DesktopDiagnosticsService.BuildBlockStartAction(issues);
+        BlockStart(message, action);
+    }
+
+    private void BlockStart(string message, string action)
+    {
+        StatusText = "无法开始检测";
+        LastFailureText = message;
+        Diagnostics.ApplyBlockStart(message, action);
+        SetTaskbarProgress(TaskbarProgressKind.None, 0);
+        AddLog("就绪检查", message);
+    }
+
+    private bool IsLocalInputReady() =>
+        DesktopDiagnosticsService.IsInputReady(InputDirectory);
+
+    private bool IsConfigReady()
+    {
+        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
+        return File.Exists(DesktopDiagnosticsService.ResolveAgainstBackend(ConfigPath, backendRoot));
+    }
+
+    private bool CanCopyPythonSetupCommand() =>
+        !string.IsNullOrWhiteSpace(PythonSetupCommandText);
+
+    [RelayCommand(CanExecute = nameof(CanCopyPythonSetupCommand))]
+    private void CopyPythonSetup()
+    {
+        CopyTextToClipboard(PythonSetupCommandText);
+        AddLog("修复", "已复制 Python 环境修复命令。");
+    }
+
+    [RelayCommand]
+    private void OpenBackendDirectory()
+    {
+        OpenFolder(PythonBackendService.ResolveBackendWorkingDirectory());
+    }
+
+    [RelayCommand]
+    private void CopyDiagnostics()
+    {
+        CopyTextToClipboard(Diagnostics.BuildClipboardText(
+            PythonExecutable,
+            PythonBackendService.ResolveBackendWorkingDirectory()));
+        AddLog("诊断", "已复制运行环境诊断详情。");
+    }
+
+    private bool CanCopySelectedDetail() => SelectedDetail is not null;
+
+    [RelayCommand(CanExecute = nameof(CanCopySelectedDetail))]
+    private void CopySelectedDetail()
+    {
+        if (SelectedDetail is null)
+        {
+            return;
+        }
+
+        CopyTextToClipboard(SelectedDetail.ToClipboardText());
+        AddLog("复制", "已复制选中的异常明细。");
+    }
+
+    private bool CanOpenSelectedDetailSource() =>
+        SelectedDetail is not null && File.Exists(ResolveSelectedDetailSourcePath());
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedDetailSource))]
+    private void OpenSelectedDetailSource()
+    {
+        var path = ResolveSelectedDetailSourcePath();
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        OpenContainingFolder(path);
+        AddLog("定位", "已打开选中异常的源文件位置。");
+    }
+
+    private bool CanCopySelectedDetailSourcePath() =>
+        SelectedDetail is not null && !string.IsNullOrWhiteSpace(ResolveSelectedDetailSourcePath());
+
+    [RelayCommand(CanExecute = nameof(CanCopySelectedDetailSourcePath))]
+    private void CopySelectedDetailSourcePath()
+    {
+        var path = ResolveSelectedDetailSourcePath();
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        CopyTextToClipboard(path);
+        AddLog("复制", "已复制源文件路径。");
+    }
+
+    private string ResolveSelectedDetailSourcePath()
+    {
+        if (SelectedDetail is not { } detail)
+        {
+            return "";
+        }
+
+        return ResolveDetailSourcePath(detail);
+    }
+
+    private string ResolveDetailSourcePath(ReportDetailPreview detail)
+    {
+        var rawPath = !string.IsNullOrWhiteSpace(detail.RelativePath)
+            ? detail.RelativePath
+            : detail.SourceFile;
+        if (string.IsNullOrWhiteSpace(rawPath))
+        {
+            return "";
+        }
+
+        if (Path.IsPathRooted(rawPath))
+        {
+            return rawPath;
+        }
+
+        var inputRoot = SelectedReport?.InputDirectory ?? InputDirectory;
+        return string.IsNullOrWhiteSpace(inputRoot)
+            ? rawPath
+            : Path.Combine(inputRoot, rawPath);
+    }
+
+    private bool CanCopyFilteredDetails() => WorkbenchFilteredDetailPreview.Any();
+
+    [RelayCommand(CanExecute = nameof(CanCopyFilteredDetails))]
+    private void CopyFilteredDetails()
+    {
+        var rows = WorkbenchFilteredDetailPreview.ToList();
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        CopyTextToClipboard(_detailPreview.BuildExportText(rows));
+        AddLog("复制", $"已复制 {rows.Count} 条异常明细。");
+    }
+
+    [RelayCommand]
+    private void ClearDetailFilters()
+    {
+        DetailSearchText = "";
+        SelectedSeverityFilterIndex = 0;
+        SelectedIssueTypeFilterIndex = 0;
+        SelectedDetailSortKey = "";
+    }
+
+    [RelayCommand]
+    private void SortDetails(string key)
+    {
+        SelectedDetailSortKey = string.Equals(SelectedDetailSortKey, key, StringComparison.Ordinal)
+            ? ""
+            : key;
+    }
+
+    private static void CopyTextToClipboard(string text)
+    {
+        var data = new DataPackage();
+        data.SetText(text);
+        Clipboard.SetContent(data);
+    }
+
+    private void SetTaskbarProgress(TaskbarProgressKind kind, double percent)
+    {
+        TaskbarProgressKind = kind;
+        TaskbarProgressPercent = Math.Clamp(percent, 0, 100);
+    }
+
+    private void RequestDesktopNotification(
+        DesktopNotificationKind kind,
+        string title,
+        string message,
+        string? reportPath = null)
+    {
+        if (_isShellShutdownRequested)
+        {
+            return;
+        }
+
+        if (_desktopNotificationSent)
+        {
+            return;
+        }
+
+        if (!EnableDesktopNotifications)
+        {
+            return;
+        }
+
+        _desktopNotificationSent = true;
+        DesktopNotificationRequested?.Invoke(
+            this,
+            new DesktopNotificationRequest(kind, title, message, reportPath));
+    }
+
+    private void SaveSettings()
+    {
+        _settings.Save(new AppSettings
+        {
+            InputDirectory = InputDirectory,
+            OutputDirectory = OutputDirectory,
+            ConfigPath = ConfigPath,
+            PythonExecutable = PythonExecutable,
+            WriteReport = WriteReport,
+            CloseToTrayOnClose = CloseToTrayOnClose,
+            StartMinimizedToTray = StartMinimizedToTray,
+            AutoStartOnSignIn = AutoStartOnSignIn,
+            EnableDesktopNotifications = EnableDesktopNotifications,
+            EnableGlobalHotkeys = EnableGlobalHotkeys,
+            EnableQuickActionsShortcut = EnableQuickActionsShortcut,
+            SelectedQuickActionsShortcutIndex = SelectedQuickActionsShortcutIndex,
+            SelectedLogRetentionIndex = SelectedLogRetentionIndex,
+            SelectedRecentReportLimitIndex = ReportHistory.SelectedRecentReportLimitIndex,
+            RecentReports = RecentReports.ToList(),
+            SelectedThemeIndex = SelectedThemeIndex,
+            SelectedBackdropIndex = SelectedBackdropIndex,
+            WindowLeft = WindowLeft,
+            WindowTop = WindowTop,
+            WindowWidth = WindowWidth,
+            WindowHeight = WindowHeight,
+            IsWindowMaximized = IsWindowMaximized,
+        });
+    }
+
+    public void SaveWindowPlacement(int left, int top, int width, int height, bool isMaximized)
+    {
+        WindowLeft = left;
+        WindowTop = top;
+        WindowWidth = width;
+        WindowHeight = height;
+        IsWindowMaximized = isMaximized;
+        SaveSettings();
+    }
+
+    private void SaveAppearanceSettings()
+    {
+        if (!_settingsLoaded)
+        {
+            return;
+        }
+
+        SaveSettings();
+        AppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SavePreferenceSettings()
+    {
+        if (!_settingsLoaded)
+        {
+            return;
+        }
+
+        SaveSettings();
+    }
+
+    private void UpdateStartupIntegrationStatus(StartupIntegrationSnapshot status)
+    {
+        StartupIntegrationStatusText = status.StatusText;
+    }
+
+    private ShellHotkeySnapshot BuildHotkeySnapshot()
+    {
+        return EnableGlobalHotkeys
+            ? _globalHotkeySnapshot
+            : ShellHotkeySnapshot.Disabled;
+    }
+
+    private void AddRecentReport(string path, DetectionBackendEvent? evt)
+    {
+        var added = ReportHistory.AddOrUpdate(
+            path,
+            evt,
+            BuildRecentReportUpdateContext());
+        if (!added)
+        {
+            return;
+        }
+
+        NotifyWorkbenchSnapshotChanged();
+        ClearRecentReportsCommand.NotifyCanExecuteChanged();
+        SaveSettings();
+    }
+
+    private RecentReportUpdateContext BuildRecentReportUpdateContext() =>
+        new(
+            InputDirectory,
+            OutputDirectory,
+            TotalFiles,
+            ProcessedFiles,
+            AnomalyRecords,
+            AnomalyFiles,
+            SkippedFiles,
+            ReportDeviceCount,
+            HighRiskDevices.ToList(),
+            TopIssueTypes.ToList(),
+            new ReportSensorOverview
+            {
+                OfflineDevices = SensorOfflineDevices,
+                SensorFaultRows = SensorFaultRows,
+                SensorMissingRows = SensorMissingRows,
+                SkippedRows = SensorSkippedRows,
+            },
+            DetailPreviewTotalCount,
+            DetailPreview.ToList());
+
+    private bool CanOpenCurrentReport() =>
+        !string.IsNullOrWhiteSpace(WorkbenchReportPath) && File.Exists(WorkbenchReportPath);
+
+    [RelayCommand(CanExecute = nameof(CanOpenCurrentReport))]
+    private void OpenCurrentReport() => OpenPath(WorkbenchReportPath);
+
+    [RelayCommand(CanExecute = nameof(CanOpenCurrentReport))]
+    private void OpenCurrentReportFolder() => OpenContainingFolder(WorkbenchReportPath);
+
+    private bool CanCopyCurrentReportPath() =>
+        !string.IsNullOrWhiteSpace(WorkbenchReportPath);
+
+    [RelayCommand(CanExecute = nameof(CanCopyCurrentReportPath))]
+    private void CopyCurrentReportPath()
+    {
+        CopyTextToClipboard(WorkbenchReportPath);
+        AddLog("复制", "已复制报告路径。");
+    }
+
+    private bool CanOpenSelectedReport() =>
+        SelectedReport is not null && File.Exists(SelectedReport.Path);
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedReport))]
+    private void OpenSelectedReport()
+    {
+        if (SelectedReport is not null)
+        {
+            OpenPath(SelectedReport.Path);
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanOpenSelectedReport))]
+    private void OpenSelectedReportFolder()
+    {
+        if (SelectedReport is not null)
+        {
+            OpenContainingFolder(SelectedReport.Path);
+        }
+    }
+
+    private bool CanUseSelectedReportDirectories() =>
+        !IsRunning && SelectedReport is not null && !string.IsNullOrWhiteSpace(SelectedReport.InputDirectory);
+
+    [RelayCommand(CanExecute = nameof(CanUseSelectedReportDirectories))]
+    private void UseSelectedReportDirectories()
+    {
+        if (SelectedReport is null)
+        {
+            return;
+        }
+
+        InputDirectory = SelectedReport.InputDirectory;
+        if (!string.IsNullOrWhiteSpace(SelectedReport.OutputDirectory))
+        {
+            OutputDirectory = SelectedReport.OutputDirectory;
+        }
+
+        StatusText = $"已复用路径: {SelectedReport.FileName}";
+        SaveSettings();
+    }
+
+    private bool CanRemoveSelectedReport() => SelectedReport is not null;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveSelectedReport))]
+    private void RemoveSelectedReport()
+    {
+        if (!ReportHistory.RemoveSelected())
+        {
+            return;
+        }
+
+        NotifyWorkbenchSnapshotChanged();
+        ClearRecentReportsCommand.NotifyCanExecuteChanged();
+        SaveSettings();
+    }
+
+    private bool CanClearRecentReports() => RecentReports.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanClearRecentReports))]
+    private void ClearRecentReports()
+    {
+        ReportHistory.Clear();
+        NotifyWorkbenchSnapshotChanged();
+        ClearRecentReportsCommand.NotifyCanExecuteChanged();
+        SaveSettings();
+    }
+
+    private static void OpenPath(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = path,
+            UseShellExecute = true,
+        });
+    }
+
+    private static void OpenContainingFolder(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            ArgumentList = { "/select,", path },
+            UseShellExecute = true,
+        });
+    }
+
+    private static void OpenFolder(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = path,
+            UseShellExecute = true,
+        });
+    }
+}
