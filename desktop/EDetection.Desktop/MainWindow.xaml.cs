@@ -46,6 +46,7 @@ public sealed partial class MainWindow : Window
         ViewModel = new MainViewModel(
             new PythonBackendService(),
             new SettingsService(),
+            new DetectionConfigService(),
             new DesktopDiagnosticsService(),
             new ReportHistoryService(),
             new RuntimeLogService(),
@@ -73,7 +74,6 @@ public sealed partial class MainWindow : Window
         _trayIcon.OpenReportFolderRequested += (_, _) => ExecuteTrayCommand(ViewModel.OpenCurrentReportFolderCommand);
         _desktopNotifications.Activated += DesktopNotifications_Activated;
         _desktopNotifications.Register();
-        Shell.SettingsRequested += (_, _) => ShowSettingsDialog();
         Shell.AboutRequested += (_, _) => ShowAboutDialog();
 
         ExtendsContentIntoTitleBar = true;
@@ -276,33 +276,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async void ShowSettingsDialog()
-    {
-        var rootWidth = Shell.RootElement.ActualWidth > 0
-            ? Shell.RootElement.ActualWidth
-            : ViewModel.WindowWidth;
-        var rootHeight = Shell.RootElement.ActualHeight > 0
-            ? Shell.RootElement.ActualHeight
-            : ViewModel.WindowHeight;
-        var dialogWidth = Math.Clamp(rootWidth - 96, 560, 920);
-        var dialogHeight = Math.Max(520, rootHeight - 128);
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Shell.XamlRoot,
-            Title = "设置",
-            Width = dialogWidth,
-            MaxWidth = 960,
-            Content = new SettingsView
-            {
-                DataContext = ViewModel,
-                MaxHeight = dialogHeight,
-            },
-            CloseButtonText = "关闭",
-            DefaultButton = ContentDialogButton.Close,
-        };
-        await dialog.ShowAsync();
-    }
-
     private async void ShowAboutDialog()
     {
         var info = _appInfo.GetInfo();
@@ -430,7 +403,7 @@ public sealed partial class MainWindow : Window
             requestedHeight,
             minSize.Height,
             Math.Max(minSize.Height, workArea.Height));
-        if (ViewModel.WindowLeft >= 0 && ViewModel.WindowTop >= 0)
+        if (IsSavedPlacementVisible(workArea, ViewModel.WindowLeft, ViewModel.WindowTop))
         {
             var left = Math.Clamp(ViewModel.WindowLeft, workArea.X, Math.Max(workArea.X, workArea.X + workArea.Width - width));
             var top = Math.Clamp(ViewModel.WindowTop, workArea.Y, Math.Max(workArea.Y, workArea.Y + workArea.Height - height));
@@ -451,6 +424,12 @@ public sealed partial class MainWindow : Window
             presenter.Maximize();
         }
     }
+
+    private static bool IsSavedPlacementVisible(RectInt32 workArea, int left, int top) =>
+        left >= workArea.X
+        && top >= workArea.Y
+        && left < workArea.X + workArea.Width
+        && top < workArea.Y + workArea.Height;
 
     private void SaveWindowPlacement()
     {

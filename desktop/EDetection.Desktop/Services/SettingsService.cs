@@ -56,6 +56,8 @@ public sealed class SettingsService
         WriteAtomic(SettingsPath, json);
     }
 
+    public AppSettings CreateDefault() => CreateDefaultSettings();
+
     private static AppSettings CreateDefaultSettings() => new()
     {
         SettingsVersion = CurrentSettingsVersion,

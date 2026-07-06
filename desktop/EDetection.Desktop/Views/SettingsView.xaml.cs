@@ -1,6 +1,7 @@
 using EDetection.Desktop.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -9,120 +10,188 @@ namespace EDetection.Desktop.Views;
 
 public sealed partial class SettingsView : UserControl
 {
-    private const double CompactWidth = 640;
+    private bool _suppressCategoryScroll;
+    private bool _suppressScrollSync;
+    private int _navigationScrollVersion;
 
     public SettingsView()
     {
         InitializeComponent();
+        _suppressCategoryScroll = true;
+        SettingsCategoryList.SelectedIndex = 0;
+        _suppressCategoryScroll = false;
     }
+
+    public event EventHandler? BackRequested;
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
-    private void SettingsScroll_SizeChanged(object sender, SizeChangedEventArgs e) =>
-        ApplyResponsiveLayout(e.NewSize.Width);
-
-    private void ApplyResponsiveLayout(double width)
+    public void PrepareForDisplay()
     {
-        var compact = width < CompactWidth;
-        ApplyHeaderLayout(compact);
-        ApplyAppearanceLayout(compact);
-        ApplyReportLayout(compact);
-        ApplyLogLayout(compact);
-        ApplyWindowOptionsLayout(compact);
-        ApplyDesktopHealthLayout(compact);
-    }
-
-    private void ApplyHeaderLayout(bool compact)
-    {
-        HeaderGrid.RowDefinitions[1].Height = compact ? GridLength.Auto : new GridLength(0);
-        HeaderSummaryColumn.Width = compact ? new GridLength(0) : GridLength.Auto;
-        HeaderHealthText.MaxWidth = compact ? double.PositiveInfinity : 260;
-        Place(HeaderHealthText, compact ? 1 : 0, compact ? 0 : 1, compact ? 2 : 1);
-    }
-
-    private void ApplyAppearanceLayout(bool compact)
-    {
-        AppearanceGrid.RowDefinitions[1].Height = compact ? GridLength.Auto : new GridLength(0);
-        AppearanceColumn1.Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        Place(ThemeComboBox, 0, 0);
-        Place(BackdropComboBox, compact ? 1 : 0, compact ? 0 : 1);
-    }
-
-    private void ApplyReportLayout(bool compact)
-    {
-        ReportSettingsGrid.RowDefinitions[2].Height = compact ? GridLength.Auto : new GridLength(0);
-        ReportControlColumn.Width = compact ? GridLength.Auto : GridLength.Auto;
-        ReportButtonColumn.Width = compact ? new GridLength(0) : GridLength.Auto;
-
-        Place(ReportHistorySummary, 1, 0, compact ? 3 : 1);
-        Place(ReportLimitComboBox, compact ? 2 : 1, compact ? 0 : 1);
-        Place(ClearRecentReportsButton, compact ? 2 : 1, compact ? 1 : 2);
-    }
-
-    private void ApplyLogLayout(bool compact)
-    {
-        RuntimeLogGrid.RowDefinitions[1].Height = compact ? GridLength.Auto : new GridLength(0);
-        LogButtonColumn.Width = compact ? new GridLength(0) : GridLength.Auto;
-
-        Place(RuntimeLogSummary, 0, 0, compact ? 3 : 1);
-        Place(LogRetentionComboBox, compact ? 1 : 0, compact ? 0 : 1);
-        Place(ClearRuntimeLogsButton, compact ? 1 : 0, compact ? 1 : 2);
-    }
-
-    private void ApplyWindowOptionsLayout(bool compact)
-    {
-        WindowOptionsColumn1.Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        for (var i = 4; i < WindowOptionsGrid.RowDefinitions.Count; i++)
+        _suppressCategoryScroll = true;
+        _suppressScrollSync = true;
+        SettingsCategoryList.SelectedIndex = 0;
+        _suppressCategoryScroll = false;
+        SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
+        DispatcherQueue.TryEnqueue(() =>
         {
-            WindowOptionsGrid.RowDefinitions[i].Height = compact ? GridLength.Auto : new GridLength(0);
-        }
-
-        Place(CloseToTrayToggle, 0, 0, compact ? 2 : 1);
-        Place(DesktopNotificationsToggle, compact ? 1 : 0, compact ? 0 : 1, compact ? 2 : 1);
-        Place(StartMinimizedToggle, compact ? 2 : 1, 0, compact ? 2 : 1);
-        Place(AutoStartToggle, compact ? 3 : 1, compact ? 0 : 1, compact ? 2 : 1);
-        Place(StartupIntegrationText, compact ? 4 : 2, 0, 2);
-        Place(GlobalHotkeyPanel, compact ? 5 : 3, 0, compact ? 2 : 1);
-        Place(QuickActionsPanel, compact ? 6 : 3, compact ? 0 : 1, compact ? 2 : 1);
+            SettingsScroll.UpdateLayout();
+            SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
+            _suppressScrollSync = false;
+            UpdateSelectedCategoryFromScroll();
+        });
     }
 
-    private void ApplyDesktopHealthLayout(bool compact)
+    public void PlayEntranceAnimation(bool forward)
     {
-        DesktopHealthColumn1.Width = compact ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
-        for (var i = 4; i < DesktopHealthGrid.RowDefinitions.Count; i++)
-        {
-            DesktopHealthGrid.RowDefinitions[i].Height = compact ? GridLength.Auto : new GridLength(0);
-        }
+        SettingsRoot.Opacity = 0;
+        SettingsRootTransform.TranslateX = forward ? 28 : -28;
 
-        if (compact)
+        var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        var opacityAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
         {
-            Place(NotificationHealthText, 0, 0, 2);
-            Place(StartupHealthText, 1, 0, 2);
-            Place(SettingsHealthText, 2, 0, 2);
-            Place(PackageHealthText, 3, 0, 2);
-            Place(PythonBridgeHealthText, 4, 0, 2);
-            Place(InstallHealthText, 5, 0, 2);
-            Place(HotkeyHealthText, 6, 0, 2);
+            To = 1,
+            Duration = TimeSpan.FromMilliseconds(180),
+            EnableDependentAnimation = true,
+        };
+        var translateAnimation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+        {
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(220),
+            EnableDependentAnimation = true,
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
+            {
+                EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut,
+            },
+        };
+
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(opacityAnimation, SettingsRoot);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(opacityAnimation, "Opacity");
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(translateAnimation, SettingsRootTransform);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(translateAnimation, "TranslateX");
+        storyboard.Children.Add(opacityAnimation);
+        storyboard.Children.Add(translateAnimation);
+        storyboard.Begin();
+    }
+
+    private void BackButton_Click(object sender, RoutedEventArgs e) =>
+        BackRequested?.Invoke(this, EventArgs.Empty);
+
+    private void SettingsCategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressCategoryScroll)
+        {
             return;
         }
 
-        Place(NotificationHealthText, 0, 0);
-        Place(StartupHealthText, 0, 1);
-        Place(SettingsHealthText, 1, 0);
-        Place(PackageHealthText, 1, 1);
-        Place(PythonBridgeHealthText, 2, 0);
-        Place(InstallHealthText, 2, 1);
-        Place(HotkeyHealthText, 3, 0, 2);
+        if (SettingsCategoryList.SelectedItem is not ListViewItem { Tag: string sectionName }
+            || SettingsScroll is null)
+        {
+            return;
+        }
+
+        if (FindName(sectionName) is FrameworkElement section)
+        {
+            _suppressScrollSync = true;
+            var navigationVersion = ++_navigationScrollVersion;
+            section.StartBringIntoView(new BringIntoViewOptions
+            {
+                AnimationDesired = true,
+                VerticalAlignmentRatio = 0,
+            });
+            _ = ResumeScrollSyncAfterNavigationAsync(navigationVersion);
+        }
     }
 
-    private static void Place(FrameworkElement element, int row, int column, int columnSpan = 1)
+    private void SettingsScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
     {
-        Grid.SetRow(element, row);
-        Grid.SetColumn(element, column);
-        Grid.SetColumnSpan(element, columnSpan);
+        if (!_suppressScrollSync)
+        {
+            UpdateSelectedCategoryFromScroll();
+        }
     }
 
-    private async void BrowseInputDirectory_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private void SettingsScroll_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        SettingsContentStack.MaxWidth = e.NewSize.Width < 760 ? double.PositiveInfinity : 900;
+    }
+
+    private async Task ResumeScrollSyncAfterNavigationAsync(int navigationVersion)
+    {
+        await Task.Delay(280);
+        if (navigationVersion != _navigationScrollVersion)
+        {
+            return;
+        }
+
+        _suppressScrollSync = false;
+        UpdateSelectedCategoryFromScroll();
+    }
+
+    private void UpdateSelectedCategoryFromScroll()
+    {
+        var activeIndex = GetActiveSectionIndex();
+        if (activeIndex < 0 || SettingsCategoryList.SelectedIndex == activeIndex)
+        {
+            return;
+        }
+
+        _suppressCategoryScroll = true;
+        SettingsCategoryList.SelectedIndex = activeIndex;
+        _suppressCategoryScroll = false;
+    }
+
+    private int GetActiveSectionIndex()
+    {
+        var sections = GetSettingSections();
+        if (sections.Length == 0)
+        {
+            return -1;
+        }
+
+        if (SettingsScroll.ScrollableHeight > 0
+            && SettingsScroll.VerticalOffset >= SettingsScroll.ScrollableHeight - 1)
+        {
+            return sections.Length - 1;
+        }
+
+        var viewportHeight = SettingsScroll.ViewportHeight > 0
+            ? SettingsScroll.ViewportHeight
+            : SettingsScroll.ActualHeight;
+        var activationY = Math.Clamp(viewportHeight * 0.34, 120, 300);
+        var activeIndex = 0;
+
+        for (var i = 0; i < sections.Length; i++)
+        {
+            var sectionTop = sections[i]
+                .TransformToVisual(SettingsScroll)
+                .TransformPoint(new Point(0, 0))
+                .Y;
+
+            if (sectionTop <= activationY)
+            {
+                activeIndex = i;
+                continue;
+            }
+
+            break;
+        }
+
+        return activeIndex;
+    }
+
+    private FrameworkElement[] GetSettingSections() =>
+    [
+        AppearanceSection,
+        DefaultsSection,
+        ThresholdsSection,
+        ReportsSection,
+        LogsSection,
+        WindowSection,
+        AdvancedSection,
+    ];
+
+    private async void BrowseInputDirectory_Click(object sender, RoutedEventArgs e)
     {
         var folder = await PickFolderAsync();
         if (folder is null || ViewModel is null)
@@ -137,7 +206,7 @@ public sealed partial class SettingsView : UserControl
         }
     }
 
-    private async void BrowseOutputDirectory_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private async void BrowseOutputDirectory_Click(object sender, RoutedEventArgs e)
     {
         var folder = await PickFolderAsync();
         if (folder is not null && ViewModel is not null)
@@ -146,7 +215,7 @@ public sealed partial class SettingsView : UserControl
         }
     }
 
-    private async void BrowseConfigPath_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private async void BrowseConfigPath_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(".json");
         if (file is not null && ViewModel is not null)
@@ -155,7 +224,7 @@ public sealed partial class SettingsView : UserControl
         }
     }
 
-    private async void BrowsePythonExecutable_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private async void BrowsePythonExecutable_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(".exe");
         if (file is not null && ViewModel is not null)

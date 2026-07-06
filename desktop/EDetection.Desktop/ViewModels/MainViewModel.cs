@@ -19,6 +19,7 @@ public partial class MainViewModel : ObservableObject
 
     private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
+    private readonly DetectionConfigService _detectionConfig;
     private readonly DesktopDiagnosticsService _diagnostics;
     private readonly RunEventService _runEvents;
     private readonly ReportDetailPreviewService _detailPreview;
@@ -36,6 +37,7 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(
         PythonBackendService backend,
         SettingsService settings,
+        DetectionConfigService detectionConfig,
         DesktopDiagnosticsService diagnostics,
         ReportHistoryService reportHistory,
         RuntimeLogService runtimeLogs,
@@ -48,6 +50,7 @@ public partial class MainViewModel : ObservableObject
     {
         _backend = backend;
         _settings = settings;
+        _detectionConfig = detectionConfig;
         _diagnostics = diagnostics;
         _runEvents = runEvents;
         _detailPreview = detailPreview;
@@ -71,6 +74,7 @@ public partial class MainViewModel : ObservableObject
         ConfigPath = string.IsNullOrWhiteSpace(saved.ConfigPath)
             ? (File.Exists(configPath) ? configPath : "config.json")
             : saved.ConfigPath;
+        ApplyDetectionConfig(_detectionConfig.Load(ConfigPath));
         PythonExecutable = string.IsNullOrWhiteSpace(saved.PythonExecutable)
             ? "python"
             : saved.PythonExecutable;
@@ -659,6 +663,54 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(BackdropMode))]
     public partial int SelectedBackdropIndex { get; set; }
 
+    [ObservableProperty]
+    public partial double VoltageMinThreshold { get; set; } = 353.0;
+
+    [ObservableProperty]
+    public partial double VoltageMaxThreshold { get; set; } = 430.0;
+
+    [ObservableProperty]
+    public partial double CurrentMaxThreshold { get; set; } = 1000.0;
+
+    [ObservableProperty]
+    public partial double CurrentUnbalanceMaxThreshold { get; set; } = 0.15;
+
+    [ObservableProperty]
+    public partial double ActivePowerMinThreshold { get; set; }
+
+    [ObservableProperty]
+    public partial double PowerFactorMinThreshold { get; set; } = 0.9;
+
+    [ObservableProperty]
+    public partial double TemperatureMinThreshold { get; set; }
+
+    [ObservableProperty]
+    public partial double TemperatureMaxThreshold { get; set; } = 70.0;
+
+    [ObservableProperty]
+    public partial double CurrentActiveMinThreshold { get; set; } = 1.0;
+
+    [ObservableProperty]
+    public partial double FreezeCountThreshold { get; set; } = 3;
+
+    [ObservableProperty]
+    public partial double FreezeStdThreshold { get; set; } = 0.01;
+
+    [ObservableProperty]
+    public partial double VoltageImbalanceThreshold { get; set; } = 0.02;
+
+    [ObservableProperty]
+    public partial bool CurrentOverloadEnabled { get; set; } = true;
+
+    [ObservableProperty]
+    public partial bool CurrentUnbalanceEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool PowerFactorEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool DetailOutputEnabled { get; set; }
+
     public string DiagnosticSummaryText => Diagnostics.SummaryText;
 
     public string PythonDiagnosticText => Diagnostics.PythonText;
@@ -821,6 +873,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnConfigPathChanged(string value)
     {
+        ApplyDetectionConfig(_detectionConfig.Load(value));
         RefreshLocalDiagnostics();
         RefreshFirstRunGuide();
         SavePreferenceSettings();
@@ -852,6 +905,29 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedIssueTypeFilterIndexChanged(int value) => RefreshDetailPreview();
 
     partial void OnSelectedDetailSortKeyChanged(string value) => RefreshDetailPreview();
+
+    [RelayCommand]
+    private void SaveSettingsFromPage()
+    {
+        SaveSettings();
+        SaveDetectionConfig();
+        RefreshDesktopHealth();
+        RefreshLocalDiagnostics();
+        AddLog("设置", "设置已保存。");
+    }
+
+    [RelayCommand]
+    private void ResetSettingsToDefaults()
+    {
+        ApplySettingsDefaults(_settings.CreateDefault());
+        ApplyDetectionConfig(_detectionConfig.CreateDefault());
+        SaveDetectionConfig();
+        SaveSettings();
+        RefreshDesktopHealth();
+        RefreshLocalDiagnostics();
+        AppearanceChanged?.Invoke(this, EventArgs.Empty);
+        AddLog("设置", "设置已恢复默认值。");
+    }
 
     private void ReportHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -979,6 +1055,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        SaveDetectionConfig();
         ResetRunState();
         var request = new DetectionRequest
         {
@@ -1926,6 +2003,92 @@ public partial class MainViewModel : ObservableObject
             WindowHeight = WindowHeight,
             IsWindowMaximized = IsWindowMaximized,
         });
+    }
+
+    private void ApplySettingsDefaults(AppSettings defaults)
+    {
+        InputDirectory = defaults.InputDirectory;
+        OutputDirectory = defaults.OutputDirectory;
+        ConfigPath = defaults.ConfigPath;
+        PythonExecutable = defaults.PythonExecutable;
+        WriteReport = defaults.WriteReport;
+        CloseToTrayOnClose = defaults.CloseToTrayOnClose;
+        StartMinimizedToTray = defaults.StartMinimizedToTray;
+        EnableDesktopNotifications = defaults.EnableDesktopNotifications;
+        EnableGlobalHotkeys = defaults.EnableGlobalHotkeys;
+        SelectedQuickActionsShortcutIndex = defaults.SelectedQuickActionsShortcutIndex;
+        EnableQuickActionsShortcut = defaults.EnableQuickActionsShortcut;
+        RuntimeLogs.SelectedRetentionIndex = defaults.SelectedLogRetentionIndex;
+        ReportHistory.SelectedRecentReportLimitIndex = defaults.SelectedRecentReportLimitIndex;
+        SelectedThemeIndex = defaults.SelectedThemeIndex;
+        SelectedBackdropIndex = defaults.SelectedBackdropIndex;
+
+        try
+        {
+            _startup.SetEnabled(defaults.AutoStartOnSignIn);
+        }
+        catch (Exception ex)
+        {
+            StartupIntegrationStatusText = $"重置登录自启动失败: {ex.Message}";
+        }
+
+        _syncingStartupPreference = true;
+        var startupStatus = _startup.GetStatus();
+        AutoStartOnSignIn = startupStatus.IsEnabled;
+        _syncingStartupPreference = false;
+        UpdateStartupIntegrationStatus(startupStatus);
+    }
+
+    private void ApplyDetectionConfig(DetectionConfigSettings config)
+    {
+        VoltageMinThreshold = config.VoltageMinThreshold;
+        VoltageMaxThreshold = config.VoltageMaxThreshold;
+        CurrentMaxThreshold = config.CurrentMaxThreshold;
+        CurrentUnbalanceMaxThreshold = config.CurrentUnbalanceMaxThreshold;
+        ActivePowerMinThreshold = config.ActivePowerMinThreshold;
+        PowerFactorMinThreshold = config.PowerFactorMinThreshold;
+        TemperatureMinThreshold = config.TemperatureMinThreshold;
+        TemperatureMaxThreshold = config.TemperatureMaxThreshold;
+        CurrentActiveMinThreshold = config.CurrentActiveMinThreshold;
+        FreezeCountThreshold = config.FreezeCountThreshold;
+        FreezeStdThreshold = config.FreezeStdThreshold;
+        VoltageImbalanceThreshold = config.VoltageImbalanceThreshold;
+        CurrentOverloadEnabled = config.CurrentOverloadEnabled;
+        CurrentUnbalanceEnabled = config.CurrentUnbalanceEnabled;
+        PowerFactorEnabled = config.PowerFactorEnabled;
+        DetailOutputEnabled = config.DetailOutputEnabled;
+    }
+
+    private DetectionConfigSettings CaptureDetectionConfig() => new()
+    {
+        VoltageMinThreshold = VoltageMinThreshold,
+        VoltageMaxThreshold = VoltageMaxThreshold,
+        CurrentMaxThreshold = CurrentMaxThreshold,
+        CurrentUnbalanceMaxThreshold = CurrentUnbalanceMaxThreshold,
+        ActivePowerMinThreshold = ActivePowerMinThreshold,
+        PowerFactorMinThreshold = PowerFactorMinThreshold,
+        TemperatureMinThreshold = TemperatureMinThreshold,
+        TemperatureMaxThreshold = TemperatureMaxThreshold,
+        CurrentActiveMinThreshold = CurrentActiveMinThreshold,
+        FreezeCountThreshold = FreezeCountThreshold,
+        FreezeStdThreshold = FreezeStdThreshold,
+        VoltageImbalanceThreshold = VoltageImbalanceThreshold,
+        CurrentOverloadEnabled = CurrentOverloadEnabled,
+        CurrentUnbalanceEnabled = CurrentUnbalanceEnabled,
+        PowerFactorEnabled = PowerFactorEnabled,
+        DetailOutputEnabled = DetailOutputEnabled,
+    };
+
+    private void SaveDetectionConfig()
+    {
+        try
+        {
+            _detectionConfig.Save(ConfigPath, CaptureDetectionConfig());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            AddLog("设置警告", $"检测阈值保存失败: {ex.Message}");
+        }
     }
 
     public void SaveWindowPlacement(int left, int top, int width, int height, bool isMaximized)

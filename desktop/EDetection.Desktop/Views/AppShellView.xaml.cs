@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using EDetection.Desktop.Models;
 using EDetection.Desktop.Services;
 using EDetection.Desktop.ViewModels;
@@ -16,6 +17,7 @@ public sealed partial class AppShellView : UserControl
     private TextBox? _quickActionSearchBox;
     private ListView? _quickActionListView;
     private bool? _lastCompactLayout;
+    private bool _isSettingsPageVisible;
     private const double CompactShellWidth = 1080;
     private const double ComfortableShellWidth = 1100;
 
@@ -24,18 +26,17 @@ public sealed partial class AppShellView : UserControl
         InitializeComponent();
         RegisterKeyboardAccelerators();
         Loaded += AppShellView_Loaded;
+        ShellSettings.BackRequested += (_, _) => ShowWorkbench();
     }
 
     public FrameworkElement TitleBarElement => AppTitleBar;
 
     public FrameworkElement RootElement => Root;
 
-    public event EventHandler? SettingsRequested;
-
     public event EventHandler? AboutRequested;
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) =>
-        SettingsRequested?.Invoke(this, EventArgs.Empty);
+        ShowSettingsPage();
 
     private void AboutButton_Click(object sender, RoutedEventArgs e) =>
         AboutRequested?.Invoke(this, EventArgs.Empty);
@@ -85,7 +86,7 @@ public sealed partial class AppShellView : UserControl
         AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, (_, e) =>
         {
             e.Handled = true;
-            SettingsRequested?.Invoke(this, EventArgs.Empty);
+            ShowSettingsPage();
         });
     }
 
@@ -108,6 +109,61 @@ public sealed partial class AppShellView : UserControl
     private void Root_SizeChanged(object sender, SizeChangedEventArgs e) =>
         ApplyResponsiveLayout(e.NewSize.Width);
 
+    public void ShowSettingsPage()
+    {
+        if (_isSettingsPageVisible)
+        {
+            return;
+        }
+
+        _isSettingsPageVisible = true;
+        StatusBand.Visibility = Visibility.Collapsed;
+        WorkbenchLayout.Visibility = Visibility.Collapsed;
+        ShellSettings.Visibility = Visibility.Visible;
+        SettingsTitleBarButton.Visibility = Visibility.Collapsed;
+        ShellSettings.PrepareForDisplay();
+        ShellSettings.PlayEntranceAnimation(forward: true);
+        ShellSettings.Focus(FocusState.Programmatic);
+    }
+
+    public void ShowWorkbench()
+    {
+        if (!_isSettingsPageVisible)
+        {
+            return;
+        }
+
+        _isSettingsPageVisible = false;
+        ShellSettings.Visibility = Visibility.Collapsed;
+        StatusBand.Visibility = Visibility.Visible;
+        WorkbenchLayout.Visibility = Visibility.Visible;
+        SettingsTitleBarButton.Visibility = Visibility.Visible;
+        ApplyResponsiveLayout(Root.ActualWidth);
+        PlayWorkbenchEntranceAnimation();
+    }
+
+    private void PlayWorkbenchEntranceAnimation()
+    {
+        StatusBand.Opacity = 0;
+        WorkbenchLayout.Opacity = 0;
+
+        var storyboard = new Storyboard();
+        foreach (var target in new FrameworkElement[] { StatusBand, WorkbenchLayout })
+        {
+            var animation = new DoubleAnimation
+            {
+                To = 1,
+                Duration = TimeSpan.FromMilliseconds(160),
+                EnableDependentAnimation = true,
+            };
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, "Opacity");
+            storyboard.Children.Add(animation);
+        }
+
+        storyboard.Begin();
+    }
+
     private void AppShellView_Loaded(object sender, RoutedEventArgs e)
     {
         if (Root.ActualWidth < CompactShellWidth)
@@ -118,6 +174,11 @@ public sealed partial class AppShellView : UserControl
 
     private void ApplyResponsiveLayout(double width)
     {
+        if (_isSettingsPageVisible)
+        {
+            return;
+        }
+
         var compact = width < CompactShellWidth;
         var reduced = width < ComfortableShellWidth;
         var layoutModeChanged = _lastCompactLayout != compact;
@@ -194,7 +255,7 @@ public sealed partial class AppShellView : UserControl
         Grid.SetColumn(ProgressPanel, 2);
         Grid.SetColumnSpan(ProgressPanel, 1);
 
-        SetupColumn.Width = new GridLength(reduced ? 360 : 420);
+        SetupColumn.Width = new GridLength(reduced ? 340 : 380);
         WorkbenchColumn.Width = new GridLength(1, GridUnitType.Star);
         WorkbenchLayout.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
         WorkbenchLayout.RowDefinitions[1].Height = new GridLength(0);
@@ -248,7 +309,7 @@ public sealed partial class AppShellView : UserControl
 
     private Task OpenSettingsAsync()
     {
-        SettingsRequested?.Invoke(this, EventArgs.Empty);
+        ShowSettingsPage();
         return Task.CompletedTask;
     }
 

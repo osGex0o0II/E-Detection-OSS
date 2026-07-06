@@ -43,10 +43,11 @@
 
             <StackPanel Grid.Column="2"
                         Orientation="Horizontal"
-                        Spacing="2"
                         Margin="0,0,148,0"
-                        VerticalAlignment="Center">
-                <Button Style="{StaticResource TitleBarIconButtonStyle}"
+                        Height="44"
+                        VerticalAlignment="Top">
+                <Button x:Name="SettingsTitleBarButton"
+                        Style="{StaticResource TitleBarIconButtonStyle}"
                         Click="SettingsButton_Click"
                         AutomationProperties.Name="设置"
                         ToolTipService.ToolTip="设置 (Ctrl+S)">
@@ -171,7 +172,7 @@
                 <RowDefinition Height="0" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SetupColumn" Width="420" />
+                <ColumnDefinition x:Name="SetupColumn" Width="380" />
                 <ColumnDefinition x:Name="WorkbenchColumn" Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -187,5 +188,10 @@
                                               Margin="0,0,20,0" />
             </ScrollViewer>
         </Grid>
+
+        <views:SettingsView x:Name="ShellSettings"
+                            Grid.Row="1"
+                            Grid.RowSpan="2"
+                            Visibility="Collapsed" />
     </Grid>
 </UserControl>
