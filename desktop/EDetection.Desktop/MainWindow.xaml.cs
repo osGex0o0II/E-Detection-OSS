@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private readonly DesktopNotificationService _desktopNotifications = new();
     private readonly SecureCredentialService _credentials = new();
     private readonly NtfyNotificationService _ntfyNotifications;
+    private readonly LlmAssistantService _llmAssistant;
     private readonly ShellResourceService _shellResources = new();
     private readonly ShellHotkeyService _shellHotkeys = new();
     private readonly TrayIconService _trayIcon;
@@ -46,6 +47,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         _ntfyNotifications = new NtfyNotificationService(_credentials);
+        _llmAssistant = new LlmAssistantService(_credentials);
         ViewModel = new MainViewModel(
             new PythonBackendService(),
             new SettingsService(),
@@ -59,7 +61,8 @@ public sealed partial class MainWindow : Window
             new RunStateService(),
             new StartupService(),
             _credentials,
-            _ntfyNotifications);
+            _ntfyNotifications,
+            _llmAssistant);
         InitializeComponent();
         Shell.DataContext = ViewModel;
         _windowHandle = WindowNative.GetWindowHandle(this);

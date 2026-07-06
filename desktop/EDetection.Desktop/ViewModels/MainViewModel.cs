@@ -29,6 +29,7 @@ public partial class MainViewModel : ObservableObject
     private readonly StartupService _startup;
     private readonly SecureCredentialService _credentials;
     private readonly NtfyNotificationService _ntfyNotifications;
+    private readonly LlmAssistantService _llmAssistant;
     private readonly UpdateCheckService _updateCheck;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
@@ -54,6 +55,7 @@ public partial class MainViewModel : ObservableObject
         StartupService startup,
         SecureCredentialService? credentials = null,
         NtfyNotificationService? ntfyNotifications = null,
+        LlmAssistantService? llmAssistant = null,
         UpdateCheckService? updateCheck = null,
         DesktopHealthService? desktopHealth = null)
     {
@@ -67,6 +69,7 @@ public partial class MainViewModel : ObservableObject
         _startup = startup;
         _credentials = credentials ?? new SecureCredentialService();
         _ntfyNotifications = ntfyNotifications ?? new NtfyNotificationService(_credentials);
+        _llmAssistant = llmAssistant ?? new LlmAssistantService(_credentials);
         _updateCheck = updateCheck ?? new UpdateCheckService();
         Diagnostics = new DiagnosticsViewModel();
         RunTelemetry = new RunTelemetryViewModel(runTelemetry);
@@ -610,6 +613,10 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string LlmApiKeyStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestLlmConnectionCommand))]
+    public partial bool IsTestingLlmConnection { get; set; }
 
     [ObservableProperty]
     public partial bool EnableNtfyNotifications { get; set; }
@@ -1216,6 +1223,36 @@ public partial class MainViewModel : ObservableObject
     private void ClearLlmApiKey()
     {
         ClearSecureSecret(_credentials.ClearLlmApiKey, "LLM API Key 已清除。");
+    }
+
+    private bool CanTestLlmConnection() => !IsTestingLlmConnection;
+
+    [RelayCommand(CanExecute = nameof(CanTestLlmConnection))]
+    private async Task TestLlmConnectionAsync()
+    {
+        IsTestingLlmConnection = true;
+        try
+        {
+            var response = await _llmAssistant.TestConnectionAsync(this);
+            var detail = string.IsNullOrWhiteSpace(response)
+                ? "服务已响应。"
+                : $"服务已响应: {response}";
+            ShowSettingsFeedback($"LLM 连接测试成功，{detail}", InfoBarSeverity.Success);
+            AddLog("智能助手", "LLM 连接测试成功。");
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or TaskCanceledException
+                                   or UriFormatException
+                                   or JsonException)
+        {
+            ShowSettingsFeedback($"LLM 连接测试失败: {ex.Message}", InfoBarSeverity.Warning);
+            AddLog("智能助手提醒", $"LLM 连接测试失败: {ex.Message}");
+        }
+        finally
+        {
+            IsTestingLlmConnection = false;
+        }
     }
 
     [RelayCommand]

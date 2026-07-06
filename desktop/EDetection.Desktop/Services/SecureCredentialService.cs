@@ -30,6 +30,8 @@ public sealed class SecureCredentialService
 
     public void ClearProxyPassword() => ClearSecret(ProxyPasswordResource);
 
+    public string GetLlmApiKey() => GetSecret(LlmApiKeyResource);
+
     public string GetNtfyToken() => GetSecret(NtfyTokenResource);
 
     public string GetProxyPassword() => GetSecret(ProxyPasswordResource);

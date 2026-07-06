@@ -377,6 +377,7 @@ try {
     $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手" $WaitSeconds
     $llmEndpointControl = Wait-ForAutomationName $mainWindow.Handle "LLM 服务地址" $WaitSeconds
     $llmProxyToggle = Wait-ForAutomationName $mainWindow.Handle "LLM 使用网络代理" $WaitSeconds
+    $llmTestButton = Wait-ForAutomationName $mainWindow.Handle "测试 LLM 连接" $WaitSeconds
     $ntfySection = Wait-ForAutomationName $mainWindow.Handle "消息推送" $WaitSeconds
     $ntfyServerControl = Wait-ForAutomationName $mainWindow.Handle "ntfy 服务地址" $WaitSeconds
     $ntfyProxyToggle = Wait-ForAutomationName $mainWindow.Handle "ntfy 使用网络代理" $WaitSeconds
@@ -427,6 +428,7 @@ try {
         LlmSection = $llmSection
         LlmEndpointControl = $llmEndpointControl
         LlmProxyToggle = $llmProxyToggle
+        LlmTestButton = $llmTestButton
         NtfySection = $ntfySection
         NtfyServerControl = $ntfyServerControl
         NtfyProxyToggle = $ntfyProxyToggle
