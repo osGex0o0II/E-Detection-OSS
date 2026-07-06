@@ -103,16 +103,17 @@
                             <FontIcon Glyph="&#xE711;" FontSize="14" />
                         </AppBarButton.Icon>
                     </AppBarButton>
-                    <AppBarSeparator />
-                    <AppBarButton x:Name="DiagnosticsButton"
-                                  Label="运行诊断"
-                                  AutomationProperties.Name="运行诊断"
-                                  ToolTipService.ToolTip="运行诊断 (F6)"
-                                  Command="{Binding RefreshDiagnosticsCommand}">
-                        <AppBarButton.Icon>
-                            <FontIcon Glyph="&#xE895;" FontSize="14" />
-                        </AppBarButton.Icon>
-                    </AppBarButton>
+                    <CommandBar.SecondaryCommands>
+                        <AppBarButton x:Name="DiagnosticsButton"
+                                      Label="运行诊断"
+                                      AutomationProperties.Name="运行诊断"
+                                      ToolTipService.ToolTip="运行诊断 (F6)"
+                                      Command="{Binding RefreshDiagnosticsCommand}">
+                            <AppBarButton.Icon>
+                                <FontIcon Glyph="&#xE895;" FontSize="14" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                    </CommandBar.SecondaryCommands>
                 </CommandBar>
 
                 <StackPanel x:Name="StatusTextPanel"

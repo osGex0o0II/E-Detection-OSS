@@ -37,14 +37,16 @@ public sealed partial class DetectionWorkbenchView : UserControl
 
     private void ApplyFirstRunLayout(bool compact)
     {
-        FirstRunGuideLayout.RowDefinitions[1].Height = compact ? GridLength.Auto : new GridLength(0);
+        FirstRunGuideLayout.RowDefinitions[1].Height = GridLength.Auto;
+        FirstRunGuideLayout.RowDefinitions[2].Height = compact ? GridLength.Auto : new GridLength(0);
         FirstRunActionColumn.Width = compact ? new GridLength(0) : GridLength.Auto;
-        FirstRunActionPanel.Orientation = compact ? Orientation.Horizontal : Orientation.Vertical;
-        FirstRunActionPanel.Width = compact ? double.NaN : 188;
+        FirstRunStartButton.HorizontalAlignment = compact ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+        FirstRunDiagnosticsPanel.Orientation = compact ? Orientation.Vertical : Orientation.Horizontal;
 
-        Grid.SetRow(FirstRunActionPanel, compact ? 1 : 0);
-        Grid.SetColumn(FirstRunActionPanel, compact ? 0 : 1);
-        Grid.SetColumnSpan(FirstRunActionPanel, compact ? 2 : 1);
+        Grid.SetRow(FirstRunStartButton, compact ? 1 : 0);
+        Grid.SetColumn(FirstRunStartButton, compact ? 0 : 1);
+        Grid.SetColumnSpan(FirstRunStartButton, compact ? 2 : 1);
+        Grid.SetRow(FirstRunDiagnosticsExpander, compact ? 2 : 1);
     }
 
     private void ApplyTelemetryLayout(bool compact)
