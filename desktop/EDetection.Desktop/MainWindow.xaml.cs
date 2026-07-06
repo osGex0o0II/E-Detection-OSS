@@ -58,7 +58,8 @@ public sealed partial class MainWindow : Window
             new ReportDetailPreviewService(),
             new RunStateService(),
             new StartupService(),
-            _credentials);
+            _credentials,
+            _ntfyNotifications);
         InitializeComponent();
         Shell.DataContext = ViewModel;
         _windowHandle = WindowNative.GetWindowHandle(this);

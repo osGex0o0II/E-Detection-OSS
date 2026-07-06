@@ -28,6 +28,7 @@ public partial class MainViewModel : ObservableObject
     private readonly RunStateService _runState;
     private readonly StartupService _startup;
     private readonly SecureCredentialService _credentials;
+    private readonly NtfyNotificationService _ntfyNotifications;
     private readonly UpdateCheckService _updateCheck;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
@@ -52,6 +53,7 @@ public partial class MainViewModel : ObservableObject
         RunStateService runState,
         StartupService startup,
         SecureCredentialService? credentials = null,
+        NtfyNotificationService? ntfyNotifications = null,
         UpdateCheckService? updateCheck = null,
         DesktopHealthService? desktopHealth = null)
     {
@@ -64,6 +66,7 @@ public partial class MainViewModel : ObservableObject
         _runState = runState;
         _startup = startup;
         _credentials = credentials ?? new SecureCredentialService();
+        _ntfyNotifications = ntfyNotifications ?? new NtfyNotificationService(_credentials);
         _updateCheck = updateCheck ?? new UpdateCheckService();
         Diagnostics = new DiagnosticsViewModel();
         RunTelemetry = new RunTelemetryViewModel(runTelemetry);
@@ -628,6 +631,10 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string NtfyTokenStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendTestNtfyNotificationCommand))]
+    public partial bool IsSendingTestNtfyNotification { get; set; }
 
     [ObservableProperty]
     public partial bool EnableNetworkProxy { get; set; }
@@ -1221,6 +1228,54 @@ public partial class MainViewModel : ObservableObject
     private void ClearNtfyToken()
     {
         ClearSecureSecret(_credentials.ClearNtfyToken, "ntfy Token 已清除。");
+    }
+
+    private bool CanSendTestNtfyNotification() => !IsSendingTestNtfyNotification;
+
+    [RelayCommand(CanExecute = nameof(CanSendTestNtfyNotification))]
+    private async Task SendTestNtfyNotificationAsync()
+    {
+        if (!EnableNtfyNotifications)
+        {
+            ShowSettingsFeedback("请先启用 ntfy 推送。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NtfyServerUrl) || string.IsNullOrWhiteSpace(NtfyTopic))
+        {
+            ShowSettingsFeedback("请填写 ntfy 服务地址和主题。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        IsSendingTestNtfyNotification = true;
+        try
+        {
+            var request = new DesktopNotificationRequest(
+                DesktopNotificationKind.Success,
+                "E-Detection 测试推送",
+                $"这是一条测试消息 · {DateTimeOffset.Now:yyyy-MM-dd HH:mm}");
+
+            if (await _ntfyNotifications.TrySendAsync(request, this))
+            {
+                ShowSettingsFeedback("测试推送已发送。", InfoBarSeverity.Success);
+                AddLog("消息推送", "已发送 ntfy 测试推送。");
+                return;
+            }
+
+            ShowSettingsFeedback("ntfy 推送未启用或配置不完整。", InfoBarSeverity.Warning);
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or TaskCanceledException
+                                   or UriFormatException)
+        {
+            ShowSettingsFeedback($"测试推送失败: {ex.Message}", InfoBarSeverity.Warning);
+            AddLog("推送提醒", $"ntfy 测试推送失败: {ex.Message}");
+        }
+        finally
+        {
+            IsSendingTestNtfyNotification = false;
+        }
     }
 
     [RelayCommand]

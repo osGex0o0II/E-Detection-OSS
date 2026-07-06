@@ -380,6 +380,7 @@ try {
     $ntfySection = Wait-ForAutomationName $mainWindow.Handle "消息推送" $WaitSeconds
     $ntfyServerControl = Wait-ForAutomationName $mainWindow.Handle "ntfy 服务地址" $WaitSeconds
     $ntfyProxyToggle = Wait-ForAutomationName $mainWindow.Handle "ntfy 使用网络代理" $WaitSeconds
+    $ntfyTestButton = Wait-ForAutomationName $mainWindow.Handle "发送 ntfy 测试推送" $WaitSeconds
     $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络代理" $WaitSeconds
     $proxyAddressControl = Wait-ForAutomationName $mainWindow.Handle "代理地址" $WaitSeconds
     $updatesSection = Wait-ForAutomationName $mainWindow.Handle "软件更新" $WaitSeconds
@@ -429,6 +430,7 @@ try {
         NtfySection = $ntfySection
         NtfyServerControl = $ntfyServerControl
         NtfyProxyToggle = $ntfyProxyToggle
+        NtfyTestButton = $ntfyTestButton
         ProxySection = $proxySection
         ProxyAddressControl = $proxyAddressControl
         UpdatesSection = $updatesSection
