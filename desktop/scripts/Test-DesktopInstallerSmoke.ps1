@@ -29,9 +29,14 @@ function Invoke-Native {
         [string]$FailureMessage
     )
 
-    & $FilePath @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FailureMessage ExitCode=$LASTEXITCODE"
+    $process = Start-Process `
+        -FilePath $FilePath `
+        -ArgumentList $Arguments `
+        -Wait `
+        -PassThru `
+        -NoNewWindow
+    if ($process.ExitCode -ne 0) {
+        throw "$FailureMessage ExitCode=$($process.ExitCode)"
     }
 }
 
