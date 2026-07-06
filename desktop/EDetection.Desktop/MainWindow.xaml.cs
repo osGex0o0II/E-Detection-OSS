@@ -372,10 +372,15 @@ public sealed partial class MainWindow : Window
             XamlRoot = Shell.XamlRoot,
             Title = info.ProductName,
             Content = content,
+            PrimaryButtonText = "软件更新",
             CloseButtonText = "关闭",
             DefaultButton = ContentDialogButton.Close,
         };
-        await dialog.ShowAsync();
+        var result = await dialog.ShowAsync();
+        if (result is ContentDialogResult.Primary)
+        {
+            Shell.OpenSettingsSection("UpdatesSection");
+        }
     }
 
     private void HideToTray(bool showBalloon = true, bool savePlacement = true)

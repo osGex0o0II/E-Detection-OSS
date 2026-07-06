@@ -164,6 +164,9 @@ public sealed partial class AppShellView : UserControl
         ShellSettings.Focus(FocusState.Programmatic);
     }
 
+    public void OpenSettingsSection(string sectionName) =>
+        ShowSettingsPage(sectionName);
+
     public void ShowWorkbench()
     {
         if (!_isSettingsPageVisible)
