@@ -1,9 +1,11 @@
 using EDetection.Desktop.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.System;
 using WinRT.Interop;
 
 namespace EDetection.Desktop.Views;
@@ -32,6 +34,7 @@ public sealed partial class SettingsView : UserControl
         SettingsCategoryList.SelectedIndex = 0;
         _suppressCategoryScroll = false;
         Loaded += SettingsView_Loaded;
+        RegisterKeyboardAccelerators();
     }
 
     public event EventHandler? BackRequested;
@@ -88,6 +91,41 @@ public sealed partial class SettingsView : UserControl
 
     private void BackButton_Click(object sender, RoutedEventArgs e) =>
         BackRequested?.Invoke(this, EventArgs.Empty);
+
+    private void RegisterKeyboardAccelerators()
+    {
+        AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, (_, e) =>
+        {
+            SettingsSearchBox.Focus(FocusState.Keyboard);
+            e.Handled = true;
+        });
+        AddShortcut(VirtualKey.Escape, VirtualKeyModifiers.None, (_, e) =>
+        {
+            if (string.IsNullOrWhiteSpace(SettingsSearchBox.Text))
+            {
+                return;
+            }
+
+            SettingsSearchBox.Text = "";
+            SettingsSearchBox.ItemsSource = null;
+            SettingsCategoryList.Focus(FocusState.Keyboard);
+            e.Handled = true;
+        });
+    }
+
+    private void AddShortcut(
+        VirtualKey key,
+        VirtualKeyModifiers modifiers,
+        TypedEventHandler<KeyboardAccelerator, KeyboardAcceleratorInvokedEventArgs> invoked)
+    {
+        var accelerator = new KeyboardAccelerator
+        {
+            Key = key,
+            Modifiers = modifiers,
+        };
+        accelerator.Invoked += invoked;
+        KeyboardAccelerators.Add(accelerator);
+    }
 
     private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
