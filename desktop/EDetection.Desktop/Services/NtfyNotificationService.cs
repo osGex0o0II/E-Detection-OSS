@@ -41,6 +41,10 @@ public sealed class NtfyNotificationService(
         message.Headers.TryAddWithoutValidation("Title", request.Title);
         message.Headers.TryAddWithoutValidation("Priority", BuildPriority(settings.SelectedNtfyPriorityIndex));
         message.Headers.TryAddWithoutValidation("Tags", BuildTags(request.Kind));
+        if (!string.IsNullOrWhiteSpace(request.ActionUrl))
+        {
+            message.Headers.TryAddWithoutValidation("Click", request.ActionUrl);
+        }
 
         var token = credentials.GetNtfyToken();
         if (!string.IsNullOrWhiteSpace(token))
