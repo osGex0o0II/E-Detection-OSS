@@ -48,6 +48,8 @@ For release packaging, prefer the repo script:
 
 The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
 
+GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.1.0`, or run the `desktop` workflow manually with a `release_tag`, to upload `E-Detection.Desktop-win-x64.zip` to GitHub Releases.
+
 Useful options:
 
 ```powershell

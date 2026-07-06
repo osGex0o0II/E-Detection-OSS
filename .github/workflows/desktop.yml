@@ -1,6 +1,12 @@
 name: desktop
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag to publish, for example v0.1.0. Leave empty to only build."
+        required: false
+        type: string
   pull_request:
     paths:
       - "desktop/**"
@@ -10,11 +16,16 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
     paths:
       - "desktop/**"
       - "desktop/scripts/**"
       - "NuGet.Config"
       - ".github/workflows/desktop.yml"
+
+permissions:
+  contents: write
 
 jobs:
   winui-build:
@@ -24,10 +35,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
 
@@ -50,8 +61,64 @@ jobs:
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
 
       - name: Upload desktop artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: E-Detection.Desktop-win-x64
           path: artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip
           if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $false
+          $tag = if ($env:GITHUB_REF_TYPE -eq "tag") {
+              $env:GITHUB_REF_NAME
+          }
+          else {
+              $env:RELEASE_TAG_INPUT
+          }
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+              throw "Release tag is required for publishing a GitHub Release."
+          }
+
+          $zipPath = "artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip"
+          if (!(Test-Path $zipPath)) {
+              throw "Release asset was not found: $zipPath"
+          }
+
+          $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
+          @(
+              "Windows x64 desktop build generated from commit $env:GITHUB_SHA."
+              ""
+              "Included checks:"
+              "- dotnet restore/build"
+              "- publish package health"
+              "- install/uninstall smoke"
+          ) | Set-Content -Path $notesPath -Encoding UTF8
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          $global:LASTEXITCODE = 0
+
+          if ($releaseExists) {
+              gh release upload $tag $zipPath --repo $env:GITHUB_REPOSITORY --clobber
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to upload release asset for $tag."
+              }
+
+              gh release edit $tag --repo $env:GITHUB_REPOSITORY --title "E-Detection Desktop $tag" --notes-file $notesPath
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to update release $tag."
+              }
+          }
+          else {
+              gh release create $tag $zipPath --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "E-Detection Desktop $tag" --notes-file $notesPath
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Failed to create release $tag."
+              }
+          }

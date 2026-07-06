@@ -101,6 +101,7 @@ function Restore-RegistryValueSnapshot($Snapshot, [string]$KeyPath) {
 function Get-ScheduledTaskXml([string]$TaskName) {
     $output = & schtasks.exe /Query /TN $TaskName /XML 2>$null
     if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
         return $null
     }
 
@@ -109,6 +110,9 @@ function Get-ScheduledTaskXml([string]$TaskName) {
 
 function Remove-ScheduledTaskIfExists([string]$TaskName) {
     & schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
+    }
 }
 
 function Restore-ScheduledTaskXml([string]$TaskName, [string]$TaskXml) {
@@ -133,6 +137,7 @@ function New-SmokeScheduledStartupTask([string]$TaskName, [string]$ExecutablePat
     $taskCommand = "`"$ExecutablePath`" --startup-minimized"
     & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR $taskCommand /F 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
         return $false
     }
 
@@ -408,3 +413,6 @@ if (!$result.Passed) {
 if (!$AsJson) {
     Write-Host "Install smoke passed: $packageFull"
 }
+
+$global:LASTEXITCODE = 0
+exit 0
