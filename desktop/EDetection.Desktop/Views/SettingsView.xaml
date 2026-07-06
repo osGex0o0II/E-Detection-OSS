@@ -29,7 +29,7 @@
                 <ColumnDefinition x:Name="SettingsNavColumn" Width="184" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Grid RowSpacing="10">
+            <Grid x:Name="SettingsNavRail" RowSpacing="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />

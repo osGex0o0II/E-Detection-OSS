@@ -14,10 +14,12 @@ public sealed partial class SettingsView : UserControl
 {
     private const double ExpandedNavigationWidth = 184;
     private const double CompactNavigationWidth = 152;
+    private const double IconNavigationWidth = 56;
     private const double ExpandedLabelWidth = 200;
     private const double CompactLabelWidth = 168;
     private const double SettingsContentMaxWidth = 900;
     private const double CompactBodyBreakpoint = 960;
+    private const double IconNavigationBreakpoint = CompactBodyBreakpoint;
     private const double CompactContentBreakpoint = 720;
     private const double StackedActionBreakpoint = CompactContentBreakpoint;
     private const double StackedFooterBreakpoint = 820;
@@ -315,11 +317,15 @@ public sealed partial class SettingsView : UserControl
         }
 
         var compact = availableWidth < CompactBodyBreakpoint;
+        var iconOnlyNavigation = availableWidth < IconNavigationBreakpoint;
         SettingsBody.Padding = compact
             ? new Thickness(18, 18, 18, 0)
             : new Thickness(24, 22, 24, 0);
-        SettingsBody.ColumnSpacing = compact ? 18 : 24;
-        SettingsNavColumn.Width = new GridLength(compact ? CompactNavigationWidth : ExpandedNavigationWidth);
+        SettingsBody.ColumnSpacing = iconOnlyNavigation ? 14 : compact ? 18 : 24;
+        SettingsNavColumn.Width = new GridLength(iconOnlyNavigation
+            ? IconNavigationWidth
+            : compact ? CompactNavigationWidth : ExpandedNavigationWidth);
+        UpdateNavigationRailLayout(iconOnlyNavigation);
         UpdateFooterLayout(availableWidth < StackedFooterBreakpoint);
 
         var contentWidth = SettingsScroll.ActualWidth;
@@ -347,6 +353,80 @@ public sealed partial class SettingsView : UserControl
         {
             ApplyActionGridLayout(grid, stackActions);
         }
+    }
+
+    private void UpdateNavigationRailLayout(bool iconOnly)
+    {
+        SettingsSearchBox.Visibility = Visibility.Visible;
+        SettingsSearchBox.Width = iconOnly ? IconNavigationWidth : double.NaN;
+        SettingsSearchBox.PlaceholderText = iconOnly ? "" : "搜索设置";
+        SettingsNavRail.RowSpacing = iconOnly ? 0 : 10;
+
+        foreach (var item in SettingsCategoryList.Items.OfType<ListViewItem>())
+        {
+            var title = FindFirstTextBlockText(item.Content as DependencyObject);
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, title);
+                ToolTipService.SetToolTip(item, title);
+            }
+
+            item.HorizontalContentAlignment = iconOnly
+                ? HorizontalAlignment.Center
+                : HorizontalAlignment.Stretch;
+            item.Padding = iconOnly ? new Thickness(0) : new Thickness(12, 0, 12, 0);
+            item.MinHeight = iconOnly ? 44 : 40;
+
+            if (item.Content is DependencyObject content)
+            {
+                UpdateNavigationItemContent(content, iconOnly);
+            }
+        }
+    }
+
+    private static void UpdateNavigationItemContent(DependencyObject root, bool iconOnly)
+    {
+        if (root is StackPanel stack)
+        {
+            stack.Spacing = iconOnly ? 0 : 10;
+            stack.HorizontalAlignment = iconOnly ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        }
+
+        if (root is TextBlock textBlock)
+        {
+            textBlock.Visibility = iconOnly ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < childCount; i++)
+        {
+            UpdateNavigationItemContent(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i), iconOnly);
+        }
+    }
+
+    private static string? FindFirstTextBlockText(DependencyObject? root)
+    {
+        if (root is null)
+        {
+            return null;
+        }
+
+        if (root is TextBlock textBlock)
+        {
+            return textBlock.Text;
+        }
+
+        var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < childCount; i++)
+        {
+            var text = FindFirstTextBlockText(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i));
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+        }
+
+        return null;
     }
 
     private void UpdateFooterLayout(bool stack)
