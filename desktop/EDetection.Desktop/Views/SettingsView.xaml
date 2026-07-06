@@ -16,7 +16,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <Button Grid.Column="1" Click="BackButton_Click" VerticalAlignment="Center" ToolTipService.ToolTip="返回工作台">
+                <Button Grid.Column="1" Click="BackButton_Click" VerticalAlignment="Center" AutomationProperties.Name="返回工作台" ToolTipService.ToolTip="返回工作台">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE72B;" FontSize="14" />
                         <TextBlock Text="返回" />
@@ -91,7 +91,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="应用主题" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedThemeIndex, Mode=TwoWay}" HorizontalAlignment="Stretch">
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedThemeIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="应用主题">
                                         <ComboBoxItem Content="跟随系统" />
                                         <ComboBoxItem Content="浅色" />
                                         <ComboBoxItem Content="深色" />
@@ -104,7 +104,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="窗口背景" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedBackdropIndex, Mode=TwoWay}" HorizontalAlignment="Stretch">
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedBackdropIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="窗口背景">
                                         <ComboBoxItem Content="Mica" />
                                         <ComboBoxItem Content="Acrylic" />
                                         <ComboBoxItem Content="无" />
@@ -128,8 +128,8 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding InputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="CSV 根目录" />
-                                        <Button Grid.Column="1" Click="BrowseInputDirectory_Click" IsEnabled="{Binding CanEditRunConfiguration}" ToolTipService.ToolTip="选择输入目录">
+                                        <TextBox Text="{Binding InputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="CSV 根目录" AutomationProperties.Name="输入目录" />
+                                        <Button Grid.Column="1" Click="BrowseInputDirectory_Click" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="选择输入目录" ToolTipService.ToolTip="选择输入目录">
                                             <FontIcon Glyph="&#xE8B7;" FontSize="14" />
                                         </Button>
                                     </Grid>
@@ -146,8 +146,8 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding OutputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="留空则写入输入目录" />
-                                        <Button Grid.Column="1" Click="BrowseOutputDirectory_Click" IsEnabled="{Binding CanEditRunConfiguration}" ToolTipService.ToolTip="选择报告目录">
+                                        <TextBox Text="{Binding OutputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="留空则写入输入目录" AutomationProperties.Name="报告目录" />
+                                        <Button Grid.Column="1" Click="BrowseOutputDirectory_Click" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="选择报告目录" ToolTipService.ToolTip="选择报告目录">
                                             <FontIcon Glyph="&#xE8B7;" FontSize="14" />
                                         </Button>
                                     </Grid>
@@ -283,7 +283,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="电流过载检测" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CurrentOverloadEnabled, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CurrentOverloadEnabled, Mode=TwoWay}" AutomationProperties.Name="电流过载检测" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -292,7 +292,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="电流不平衡检测" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CurrentUnbalanceEnabled, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CurrentUnbalanceEnabled, Mode=TwoWay}" AutomationProperties.Name="电流不平衡检测" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -301,7 +301,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="功率因数检测" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding PowerFactorEnabled, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding PowerFactorEnabled, Mode=TwoWay}" AutomationProperties.Name="功率因数检测" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -310,7 +310,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="详细异常输出" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding DetailOutputEnabled, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding DetailOutputEnabled, Mode=TwoWay}" AutomationProperties.Name="详细异常输出" />
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -325,7 +325,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="生成 Excel 报告" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding WriteReport, Mode=TwoWay}" IsEnabled="{Binding CanEditRunConfiguration}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding WriteReport, Mode=TwoWay}" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="生成 Excel 报告" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -334,7 +334,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="报告历史保留" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding ReportHistory.SelectedRecentReportLimitIndex, Mode=TwoWay}" HorizontalAlignment="Stretch">
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding ReportHistory.SelectedRecentReportLimitIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="报告历史保留">
                                         <ComboBoxItem Content="10 个" />
                                         <ComboBoxItem Content="20 个" />
                                         <ComboBoxItem Content="50 个" />
@@ -347,7 +347,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="清空报告历史" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <Button Grid.Column="1" Command="{Binding ClearRecentReportsCommand}" HorizontalAlignment="Stretch">
+                                    <Button Grid.Column="1" Command="{Binding ClearRecentReportsCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="清空报告历史">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
                                             <TextBlock Text="清空" />
@@ -367,7 +367,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="运行记录保留" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding RuntimeLogs.SelectedRetentionIndex, Mode=TwoWay}" HorizontalAlignment="Stretch">
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding RuntimeLogs.SelectedRetentionIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="运行记录保留">
                                         <ComboBoxItem Content="200 条" />
                                         <ComboBoxItem Content="500 条" />
                                         <ComboBoxItem Content="1000 条" />
@@ -381,7 +381,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="清空运行记录" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <Button Grid.Column="1" Command="{Binding ClearRuntimeLogsCommand}" HorizontalAlignment="Stretch">
+                                    <Button Grid.Column="1" Command="{Binding ClearRuntimeLogsCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="清空运行记录">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
                                             <TextBlock Text="清空" />
@@ -401,7 +401,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="关闭后最小化到托盘" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CloseToTrayOnClose, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding CloseToTrayOnClose, Mode=TwoWay}" AutomationProperties.Name="关闭后最小化到托盘" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -410,7 +410,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="启动时隐藏到托盘" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding StartMinimizedToTray, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding StartMinimizedToTray, Mode=TwoWay}" AutomationProperties.Name="启动时隐藏到托盘" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -419,7 +419,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="桌面通知" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding EnableDesktopNotifications, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding EnableDesktopNotifications, Mode=TwoWay}" AutomationProperties.Name="桌面通知" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -428,7 +428,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="登录后自动启动" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding AutoStartOnSignIn, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding AutoStartOnSignIn, Mode=TwoWay}" AutomationProperties.Name="登录后自动启动" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -437,7 +437,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="全局热键" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding EnableGlobalHotkeys, Mode=TwoWay}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding EnableGlobalHotkeys, Mode=TwoWay}" AutomationProperties.Name="全局热键" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -446,7 +446,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="快速操作快捷键" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedQuickActionsShortcutIndex, Mode=TwoWay}" HorizontalAlignment="Stretch">
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedQuickActionsShortcutIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="快速操作快捷键">
                                         <ComboBoxItem Content="Ctrl+K" />
                                         <ComboBoxItem Content="Ctrl+Shift+P" />
                                         <ComboBoxItem Content="关闭" />
@@ -465,7 +465,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="应用状态" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <Button Grid.Column="1" Command="{Binding RefreshDesktopHealthCommand}" HorizontalAlignment="Stretch">
+                                    <Button Grid.Column="1" Command="{Binding RefreshDesktopHealthCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="刷新应用状态">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE72C;" FontSize="14" />
                                             <TextBlock Text="刷新状态" />
@@ -484,8 +484,8 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding ConfigPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="默认检测设置" />
-                                        <Button Grid.Column="1" Click="BrowseConfigPath_Click" IsEnabled="{Binding CanEditRunConfiguration}" ToolTipService.ToolTip="选择检测设置文件">
+                                        <TextBox Text="{Binding ConfigPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="默认检测设置" AutomationProperties.Name="检测设置文件" />
+                                        <Button Grid.Column="1" Click="BrowseConfigPath_Click" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="选择检测设置文件" ToolTipService.ToolTip="选择检测设置文件">
                                             <FontIcon Glyph="&#xE8A5;" FontSize="14" />
                                         </Button>
                                     </Grid>
@@ -502,8 +502,8 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding PythonExecutable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="默认检测组件" />
-                                        <Button Grid.Column="1" Click="BrowsePythonExecutable_Click" IsEnabled="{Binding CanEditRunConfiguration}" ToolTipService.ToolTip="选择检测组件运行程序">
+                                        <TextBox Text="{Binding PythonExecutable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="默认检测组件" AutomationProperties.Name="检测组件运行程序" />
+                                        <Button Grid.Column="1" Click="BrowsePythonExecutable_Click" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="选择检测组件运行程序" ToolTipService.ToolTip="选择检测组件运行程序">
                                             <FontIcon Glyph="&#xE756;" FontSize="14" />
                                         </Button>
                                     </Grid>
@@ -540,13 +540,13 @@
                 </Grid.ColumnDefinitions>
                 <InfoBar IsOpen="{Binding IsSettingsFeedbackOpen, Mode=TwoWay}" Message="{Binding SettingsFeedbackText}" Severity="{Binding SettingsFeedbackSeverity}" IsIconVisible="True" IsClosable="True" MaxWidth="520" HorizontalAlignment="Left" VerticalAlignment="Center" />
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
-                    <Button Command="{Binding ResetSettingsToDefaultsCommand}" MinWidth="120">
+                    <Button Command="{Binding ResetSettingsToDefaultsCommand}" MinWidth="120" AutomationProperties.Name="重置设置">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE777;" FontSize="14" />
                             <TextBlock Text="重置设置" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding SaveSettingsFromPageCommand}" Style="{StaticResource AccentButtonStyle}" MinWidth="128">
+                    <Button Command="{Binding SaveSettingsFromPageCommand}" Style="{StaticResource AccentButtonStyle}" MinWidth="128" AutomationProperties.Name="保存设置">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE74E;" FontSize="14" />
                             <TextBlock Text="保存设置" />

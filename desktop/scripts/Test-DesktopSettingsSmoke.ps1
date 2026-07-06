@@ -342,7 +342,11 @@ try {
     }
 
     $settingsTitle = Wait-ForAutomationName $mainWindow.Handle "设置" $WaitSeconds
+    $themeControl = Wait-ForAutomationName $mainWindow.Handle "应用主题" $WaitSeconds
+    $backdropControl = Wait-ForAutomationName $mainWindow.Handle "窗口背景" $WaitSeconds
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
+    $inputDirectoryControl = Wait-ForAutomationName $mainWindow.Handle "输入目录" $WaitSeconds
+    $browseInputDirectoryButton = Wait-ForAutomationName $mainWindow.Handle "选择输入目录" $WaitSeconds
     $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "检测阈值" $WaitSeconds
     $rulesSection = Wait-ForAutomationName $mainWindow.Handle "检测规则" $WaitSeconds
     $reportsSection = Wait-ForAutomationName $mainWindow.Handle "报告" $WaitSeconds
@@ -357,6 +361,8 @@ try {
     $recentLimitControl = Wait-ForAutomationName $mainWindow.Handle "报告历史保留" $WaitSeconds
     $logLimitControl = Wait-ForAutomationName $mainWindow.Handle "运行记录保留" $WaitSeconds
     $desktopHealthSection = Wait-ForAutomationName $mainWindow.Handle "应用状态" $WaitSeconds
+    $saveSettingsButton = Wait-ForAutomationName $mainWindow.Handle "保存设置" $WaitSeconds
+    $resetSettingsButton = Wait-ForAutomationName $mainWindow.Handle "重置设置" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
     if ($settingsJson.SettingsVersion -ne 5) {
         throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '5'."
@@ -372,7 +378,11 @@ try {
         ProcessId = $process.Id
         MainWindowTitle = $mainWindow.Title
         SettingsTitle = $settingsTitle
+        ThemeControl = $themeControl
+        BackdropControl = $backdropControl
         DefaultsSection = $defaultsSection
+        InputDirectoryControl = $inputDirectoryControl
+        BrowseInputDirectoryButton = $browseInputDirectoryButton
         ThresholdsSection = $thresholdsSection
         RulesSection = $rulesSection
         ReportsSection = $reportsSection
@@ -389,6 +399,8 @@ try {
         DesktopHealthSection = $desktopHealthSection
         RecentLimitControl = $recentLimitControl
         LogLimitControl = $logLimitControl
+        SaveSettingsButton = $saveSettingsButton
+        ResetSettingsButton = $resetSettingsButton
         Dpi = $dpi
         RequestedDipWidth = $Width
         RequestedDipHeight = $Height
