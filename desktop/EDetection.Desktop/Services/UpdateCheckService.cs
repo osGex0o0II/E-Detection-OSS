@@ -39,11 +39,14 @@ public sealed class UpdateCheckService
 
         var releaseUrl = GetString(root, "html_url");
         var releaseName = GetString(root, "name");
+        var installerAsset = FindRecommendedInstallerAsset(root);
         var publishedAt = TryGetDateTimeOffset(root, "published_at");
         return new UpdateCheckResult(
             NormalizeVersionText(tagName),
             string.IsNullOrWhiteSpace(releaseName) ? tagName : releaseName,
             releaseUrl,
+            installerAsset.Name,
+            installerAsset.DownloadUrl,
             publishedAt,
             IsNewer(tagName, currentVersion));
     }
@@ -108,6 +111,76 @@ public sealed class UpdateCheckService
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? ""
             : "";
+
+    private static (string Name, string DownloadUrl) FindRecommendedInstallerAsset(JsonElement root)
+    {
+        if (!root.TryGetProperty("assets", out var assets)
+            || assets.ValueKind is not JsonValueKind.Array)
+        {
+            return ("", "");
+        }
+
+        var candidates = new List<(string Name, string DownloadUrl, int Score)>();
+        foreach (var asset in assets.EnumerateArray())
+        {
+            if (asset.ValueKind is not JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var name = GetString(asset, "name");
+            var downloadUrl = GetString(asset, "browser_download_url");
+            if (string.IsNullOrWhiteSpace(name)
+                || string.IsNullOrWhiteSpace(downloadUrl)
+                || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var score = ScoreInstallerAsset(name);
+            if (score > 0)
+            {
+                candidates.Add((name, downloadUrl, score));
+            }
+        }
+
+        var selected = candidates
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        return selected.Score > 0
+            ? (selected.Name ?? "", selected.DownloadUrl ?? "")
+            : ("", "");
+    }
+
+    private static int ScoreInstallerAsset(string name)
+    {
+        var score = 0;
+        if (name.Contains("E-Detection.Desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 30;
+        }
+
+        if (name.Contains("Setup", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Installer", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 40;
+        }
+
+        if (name.Contains("win-x64", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("x64", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 20;
+        }
+
+        if (name.Contains("portable", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("zip", StringComparison.OrdinalIgnoreCase))
+        {
+            score -= 50;
+        }
+
+        return score;
+    }
 
     private static DateTimeOffset? TryGetDateTimeOffset(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value)

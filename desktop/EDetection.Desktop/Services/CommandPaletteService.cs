@@ -96,8 +96,8 @@ public sealed class CommandPaletteService
                 context.ViewModel?.CheckForUpdatesCommand,
                 null),
             FromCommand(
-                "打开更新页面",
-                "打开最新版本或配置的更新源页面",
+                "获取更新安装向导",
+                "下载安装向导，按 Windows 安装界面完成更新",
                 "\uE8A7",
                 "更新",
                 context.ViewModel?.OpenUpdateFeedCommand,

@@ -99,8 +99,11 @@ public sealed class DesktopNotificationService
 
             if (!string.IsNullOrWhiteSpace(request.ActionUrl))
             {
+                var actionText = request.Kind is DesktopNotificationKind.Update
+                    ? "下载安装向导"
+                    : "打开详情";
                 builder.AddArgument(ActionUrlKey, request.ActionUrl)
-                    .AddButton(new AppNotificationButton("打开更新页面")
+                    .AddButton(new AppNotificationButton(actionText)
                         .AddArgument(ActionKey, DesktopNotificationActivation.OpenUpdateAction)
                         .AddArgument(ActionUrlKey, request.ActionUrl));
             }

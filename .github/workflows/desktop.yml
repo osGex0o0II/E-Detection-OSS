@@ -114,8 +114,9 @@ jobs:
           @(
               "Windows x64 desktop build generated from commit $env:GITHUB_SHA."
               ""
-              "Recommended download for most users: E-Detection.Desktop-Setup-win-x64.exe"
-              "Portable package: E-Detection.Desktop-win-x64.zip"
+              "Recommended for most users: download and run E-Detection.Desktop-Setup-win-x64.exe."
+              "Use the same setup wizard to install or update the desktop app. It supports choosing the install location and normal Windows uninstall."
+              "Portable package for advanced users: E-Detection.Desktop-win-x64.zip"
               ""
               "Included checks:"
               "- dotnet restore/build"

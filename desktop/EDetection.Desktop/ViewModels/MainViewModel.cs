@@ -733,8 +733,20 @@ public partial class MainViewModel : ObservableObject
     public partial string LatestReleaseUrl { get; set; } = "";
 
     [ObservableProperty]
+    public partial string LatestInstallerName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string LatestInstallerDownloadUrl { get; set; } = "";
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CheckForUpdatesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenUpdateFeedCommand))]
     public partial bool IsCheckingForUpdates { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CheckForUpdatesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(OpenUpdateFeedCommand))]
+    public partial bool IsDownloadingUpdateInstaller { get; set; }
 
     public bool ShouldCheckForUpdatesOnStartup =>
         EnableUpdateChecks && SelectedUpdateChannelIndex != 2;
@@ -2504,22 +2516,46 @@ public partial class MainViewModel : ObservableObject
         OpenFolder(PythonBackendService.ResolveBackendWorkingDirectory());
     }
 
-    [RelayCommand]
-    private void OpenUpdateFeed()
+    private bool CanOpenUpdateFeed() => !IsCheckingForUpdates && !IsDownloadingUpdateInstaller;
+
+    [RelayCommand(CanExecute = nameof(CanOpenUpdateFeed))]
+    private async Task OpenUpdateFeedAsync()
     {
-        var targetUrl = string.IsNullOrWhiteSpace(LatestReleaseUrl)
-            ? UpdateFeedUrl
-            : LatestReleaseUrl;
-        if (string.IsNullOrWhiteSpace(targetUrl))
+        if (string.IsNullOrWhiteSpace(UpdateFeedUrl))
         {
             ShowSettingsFeedback("请先填写更新源。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var result = await CheckForUpdatesCoreAsync(showProgress: true);
+        if (result is { IsUpdateAvailable: false })
+        {
+            ShowSettingsFeedback("当前已是最新版本。", InfoBarSeverity.Informational);
+            return;
+        }
+
+        if (result is { IsUpdateAvailable: true, HasInstallerDownload: true })
+        {
+            await DownloadAndLaunchUpdateInstallerAsync(result);
+            return;
+        }
+
+        var targetUrl = result?.PreferredActionUrl;
+        if (string.IsNullOrWhiteSpace(targetUrl))
+        {
+            targetUrl = GetPreferredUpdateActionUrl();
+        }
+
+        if (string.IsNullOrWhiteSpace(targetUrl))
+        {
+            ShowSettingsFeedback("未找到可用的更新地址。", InfoBarSeverity.Warning);
             return;
         }
 
         OpenUri(targetUrl);
     }
 
-    private bool CanCheckForUpdates() => !IsCheckingForUpdates;
+    private bool CanCheckForUpdates() => !IsCheckingForUpdates && !IsDownloadingUpdateInstaller;
 
     [RelayCommand(CanExecute = nameof(CanCheckForUpdates))]
     private async Task CheckForUpdatesAsync()
@@ -2552,14 +2588,19 @@ public partial class MainViewModel : ObservableObject
             using var handler = _networkProxy.BuildHandler(this, UseProxyForUpdates);
             var result = await _updateCheck.CheckLatestAsync(UpdateFeedUrl, currentVersion, handler);
             LatestReleaseUrl = result.ReleaseUrl;
+            LatestInstallerName = result.InstallerName;
+            LatestInstallerDownloadUrl = result.InstallerDownloadUrl;
             var publishedText = result.PublishedAt is { } publishedAt
                 ? $" · {publishedAt:yyyy-MM-dd}"
                 : "";
+            var installerText = result.HasInstallerDownload
+                ? " · 可下载安装向导"
+                : " · 打开发布页面获取安装包";
             UpdateStatusText = result.IsUpdateAvailable
-                ? $"发现新版本 {result.LatestVersion}{publishedText}"
+                ? $"发现新版本 {result.LatestVersion}{publishedText}{installerText}"
                 : $"已是最新版本 {currentVersion}";
             AddLog("更新", result.IsUpdateAvailable
-                ? $"发现新版本 {result.LatestVersion}: {result.ReleaseName}"
+                ? BuildUpdateAvailableLogText(result)
                 : $"已是最新版本 {currentVersion}");
             return result;
         }
@@ -2599,16 +2640,158 @@ public partial class MainViewModel : ObservableObject
         }
 
         _lastNotifiedUpdateVersion = result.LatestVersion;
-        var targetUrl = string.IsNullOrWhiteSpace(result.ReleaseUrl)
+        var targetUrl = string.IsNullOrWhiteSpace(result.PreferredActionUrl)
             ? UpdateFeedUrl
-            : result.ReleaseUrl;
+            : result.PreferredActionUrl;
+        var message = result.HasInstallerDownload
+            ? $"可更新到 {result.LatestVersion} · 点击下载安装向导"
+            : $"可更新到 {result.LatestVersion} · 打开发布页面获取安装包";
         DesktopNotificationRequested?.Invoke(
             this,
             new DesktopNotificationRequest(
                 DesktopNotificationKind.Update,
                 "发现 E-Detection 新版本",
-                $"可更新到 {result.LatestVersion} · {result.ReleaseName}",
+                message,
                 ActionUrl: targetUrl));
+    }
+
+    private string GetPreferredUpdateActionUrl()
+    {
+        if (!string.IsNullOrWhiteSpace(LatestInstallerDownloadUrl))
+        {
+            return LatestInstallerDownloadUrl;
+        }
+
+        if (!string.IsNullOrWhiteSpace(LatestReleaseUrl))
+        {
+            return LatestReleaseUrl;
+        }
+
+        return UpdateFeedUrl;
+    }
+
+    private async Task DownloadAndLaunchUpdateInstallerAsync(UpdateCheckResult result)
+    {
+        IsDownloadingUpdateInstaller = true;
+        UpdateStatusText = $"正在下载安装向导 {result.LatestVersion}...";
+        try
+        {
+            var installerPath = await DownloadUpdateInstallerAsync(result);
+            UpdateStatusText = $"安装向导已下载 {result.LatestVersion}";
+            AddLog("更新", $"已下载更新安装向导: {installerPath}");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = installerPath,
+                UseShellExecute = true,
+            });
+            ShowSettingsFeedback("安装向导已启动，请按界面提示完成更新。", InfoBarSeverity.Success);
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or IOException
+                                   or UnauthorizedAccessException
+                                   or ArgumentException
+                                   or InvalidOperationException
+                                   or NotSupportedException
+                                   or TaskCanceledException
+                                   or Win32Exception)
+        {
+            UpdateStatusText = $"下载安装向导失败: {ex.Message}";
+            AddLog("更新提醒", UpdateStatusText);
+            var fallbackUrl = string.IsNullOrWhiteSpace(result.ReleaseUrl)
+                ? UpdateFeedUrl
+                : result.ReleaseUrl;
+            if (!string.IsNullOrWhiteSpace(fallbackUrl))
+            {
+                OpenUri(fallbackUrl);
+            }
+        }
+        finally
+        {
+            IsDownloadingUpdateInstaller = false;
+        }
+    }
+
+    private async Task<string> DownloadUpdateInstallerAsync(UpdateCheckResult result)
+    {
+        if (string.IsNullOrWhiteSpace(result.InstallerDownloadUrl))
+        {
+            throw new InvalidOperationException("更新源未提供安装向导下载地址。");
+        }
+
+        var fileName = BuildUpdateInstallerFileName(result.InstallerName, result.LatestVersion);
+        var updatesDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "E-Detection",
+            "Desktop",
+            "Updates",
+            result.LatestVersion);
+        Directory.CreateDirectory(updatesDirectory);
+        var installerPath = Path.Combine(updatesDirectory, fileName);
+        var partialPath = installerPath + ".download";
+
+        if (File.Exists(partialPath))
+        {
+            File.Delete(partialPath);
+        }
+
+        using var handler = _networkProxy.BuildHandler(this, UseProxyForUpdates);
+        using var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromMinutes(10),
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("E-Detection-Desktop");
+
+        using var response = await client.GetAsync(
+            result.InstallerDownloadUrl,
+            HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        await using (var source = await response.Content.ReadAsStreamAsync())
+        await using (var target = File.Create(partialPath))
+        {
+            await source.CopyToAsync(target);
+        }
+
+        var downloadedFile = new FileInfo(partialPath);
+        if (!downloadedFile.Exists || downloadedFile.Length == 0)
+        {
+            throw new InvalidOperationException("安装向导下载为空。");
+        }
+
+        if (File.Exists(installerPath))
+        {
+            File.Delete(installerPath);
+        }
+
+        File.Move(partialPath, installerPath);
+        return installerPath;
+    }
+
+    private static string BuildUpdateInstallerFileName(string assetName, string latestVersion)
+    {
+        var fallback = $"E-Detection.Desktop-Setup-win-x64-{latestVersion}.exe";
+        var fileName = Path.GetFileName(string.IsNullOrWhiteSpace(assetName) ? fallback : assetName);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            fileName = fallback;
+        }
+
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+        {
+            fileName = fileName.Replace(invalid, '_');
+        }
+
+        return fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? fileName
+            : $"{fileName}.exe";
+    }
+
+    private static string BuildUpdateAvailableLogText(UpdateCheckResult result)
+    {
+        var installerText = result.HasInstallerDownload
+            ? $"，安装向导: {result.InstallerName}"
+            : "，未在发布产物中找到安装向导";
+        return $"发现新版本 {result.LatestVersion}: {result.ReleaseName}{installerText}";
     }
 
     [RelayCommand]

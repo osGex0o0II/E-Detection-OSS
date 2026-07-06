@@ -4,5 +4,15 @@ public sealed record UpdateCheckResult(
     string LatestVersion,
     string ReleaseName,
     string ReleaseUrl,
+    string InstallerName,
+    string InstallerDownloadUrl,
     DateTimeOffset? PublishedAt,
-    bool IsUpdateAvailable);
+    bool IsUpdateAvailable)
+{
+    public bool HasInstallerDownload => !string.IsNullOrWhiteSpace(InstallerDownloadUrl);
+
+    public string PreferredActionUrl =>
+        HasInstallerDownload || string.IsNullOrWhiteSpace(ReleaseUrl)
+            ? InstallerDownloadUrl
+            : ReleaseUrl;
+}
