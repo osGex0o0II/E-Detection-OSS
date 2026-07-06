@@ -37,9 +37,9 @@ jobs:
       - name: Build
         run: dotnet build desktop/EDetection.Desktop.slnx -c Debug --no-restore
 
-      - name: Publish smoke
+      - name: Publish
         shell: pwsh
-        run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64 -NoZip
+        run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64
 
       - name: Package health
         shell: pwsh
@@ -48,3 +48,10 @@ jobs:
       - name: Install smoke
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: E-Detection.Desktop-win-x64
+          path: artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip
+          if-no-files-found: error
