@@ -359,6 +359,7 @@ try {
     }
 
     $settingsTitle = Wait-ForAutomationName $mainWindow.Handle "设置" $WaitSeconds
+    $settingsSearchBox = Wait-ForAutomationName $mainWindow.Handle "搜索设置" $WaitSeconds
     $themeControl = Wait-ForAutomationName $mainWindow.Handle "应用主题" $WaitSeconds
     $backdropControl = Wait-ForAutomationName $mainWindow.Handle "窗口背景" $WaitSeconds
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
@@ -418,6 +419,7 @@ try {
         ProcessId = $process.Id
         MainWindowTitle = $mainWindow.Title
         SettingsTitle = $settingsTitle
+        SettingsSearchBox = $settingsSearchBox
         ThemeControl = $themeControl
         BackdropControl = $backdropControl
         DefaultsSection = $defaultsSection

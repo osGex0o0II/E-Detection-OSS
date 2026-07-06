@@ -22,10 +22,12 @@ public sealed partial class SettingsView : UserControl
     private bool _suppressScrollSync;
     private int _navigationScrollVersion;
     private readonly List<Grid> _settingRows = [];
+    private readonly IReadOnlyList<SettingsSearchEntry> _searchEntries;
 
     public SettingsView()
     {
         InitializeComponent();
+        _searchEntries = BuildSearchEntries();
         _suppressCategoryScroll = true;
         SettingsCategoryList.SelectedIndex = 0;
         _suppressCategoryScroll = false;
@@ -87,6 +89,60 @@ public sealed partial class SettingsView : UserControl
     private void BackButton_Click(object sender, RoutedEventArgs e) =>
         BackRequested?.Invoke(this, EventArgs.Empty);
 
+    private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            return;
+        }
+
+        var query = sender.Text.Trim();
+        sender.ItemsSource = string.IsNullOrWhiteSpace(query)
+            ? null
+            : _searchEntries
+                .Where(entry => entry.Matches(query))
+                .Take(8)
+                .ToList();
+    }
+
+    private void SettingsSearchBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (args.SelectedItem is not SettingsSearchEntry entry)
+        {
+            return;
+        }
+
+        sender.Text = entry.Title;
+        NavigateToSearchEntry(entry);
+    }
+
+    private void SettingsSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (args.ChosenSuggestion is SettingsSearchEntry chosenEntry)
+        {
+            NavigateToSearchEntry(chosenEntry);
+            return;
+        }
+
+        var query = args.QueryText.Trim();
+        var entry = _searchEntries.FirstOrDefault(item => item.Matches(query));
+        if (entry is not null)
+        {
+            NavigateToSearchEntry(entry);
+        }
+    }
+
+    private void NavigateToSearchEntry(SettingsSearchEntry entry)
+    {
+        if (entry.ExpandMoreThresholds)
+        {
+            MoreThresholdsExpander.IsExpanded = true;
+        }
+
+        SelectCategoryBySection(entry.SectionName);
+        NavigateToSection(entry.SectionName);
+    }
+
     private void SettingsCategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressCategoryScroll)
@@ -100,17 +156,39 @@ public sealed partial class SettingsView : UserControl
             return;
         }
 
-        if (FindName(sectionName) is FrameworkElement section)
+        NavigateToSection(sectionName);
+    }
+
+    private void SelectCategoryBySection(string sectionName)
+    {
+        for (var i = 0; i < SettingsCategoryList.Items.Count; i++)
         {
-            _suppressScrollSync = true;
-            var navigationVersion = ++_navigationScrollVersion;
-            section.StartBringIntoView(new BringIntoViewOptions
+            if (SettingsCategoryList.Items[i] is ListViewItem { Tag: string itemSection }
+                && string.Equals(itemSection, sectionName, StringComparison.Ordinal))
             {
-                AnimationDesired = true,
-                VerticalAlignmentRatio = 0,
-            });
-            _ = ResumeScrollSyncAfterNavigationAsync(navigationVersion);
+                _suppressCategoryScroll = true;
+                SettingsCategoryList.SelectedIndex = i;
+                _suppressCategoryScroll = false;
+                return;
+            }
         }
+    }
+
+    private void NavigateToSection(string sectionName)
+    {
+        if (FindName(sectionName) is not FrameworkElement section)
+        {
+            return;
+        }
+
+        _suppressScrollSync = true;
+        var navigationVersion = ++_navigationScrollVersion;
+        section.StartBringIntoView(new BringIntoViewOptions
+        {
+            AnimationDesired = true,
+            VerticalAlignmentRatio = 0,
+        });
+        _ = ResumeScrollSyncAfterNavigationAsync(navigationVersion);
     }
 
     private void SettingsScroll_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
@@ -282,6 +360,35 @@ public sealed partial class SettingsView : UserControl
         AdvancedSection,
     ];
 
+    private static IReadOnlyList<SettingsSearchEntry> BuildSearchEntries() =>
+    [
+        new("外观", "外观 主题 背景 mica acrylic 深色 浅色 跟随系统", "AppearanceSection"),
+        new("应用主题", "外观 主题 深色 浅色 跟随系统", "AppearanceSection"),
+        new("窗口背景", "外观 背景 mica acrylic", "AppearanceSection"),
+        new("检测目录", "检测 输入目录 报告目录 csv 路径", "DefaultsSection"),
+        new("输入目录", "检测 输入目录 csv 路径", "DefaultsSection"),
+        new("报告目录", "检测 报告目录 输出目录 路径", "DefaultsSection"),
+        new("阈值设置", "阈值 电压 电流 功率 温度 冻结 不平衡", "ThresholdsSection"),
+        new("阈值配置文件", "阈值 配置 文件 json config", "ThresholdsSection"),
+        new("电压阈值", "阈值 电压 下限 上限 不平衡", "ThresholdsSection"),
+        new("电流阈值", "阈值 电流 上限 不平衡 激活", "ThresholdsSection", true),
+        new("功率因数阈值", "阈值 功率 因数 下限", "ThresholdsSection"),
+        new("温度阈值", "阈值 温度 上限 下限", "ThresholdsSection", true),
+        new("冻结阈值", "阈值 冻结 持续点数 波动", "ThresholdsSection", true),
+        new("检测规则", "规则 电流过载 电流不平衡 功率因数 详细异常输出", "DetectionRulesSection"),
+        new("报告设置", "报告 excel 历史 清空", "ReportsSection"),
+        new("运行记录", "日志 运行记录 保留 清空", "LogsSection"),
+        new("窗口设置", "窗口 托盘 自启动 通知 热键 快捷键", "WindowSection"),
+        new("智能助手", "llm ai 智能助手 模型 api key 代理 测试", "LlmSection"),
+        new("LLM 服务地址", "llm endpoint 服务地址 模型 api key", "LlmSection"),
+        new("消息推送", "ntfy 通知 推送 主题 token 优先级 代理 测试", "NotificationsSection"),
+        new("网络代理", "代理 proxy 地址 认证 用户名 密码 测试", "ProxySection"),
+        new("软件更新", "更新 版本 检查 通道 代理 更新源 release", "UpdatesSection"),
+        new("更新代理", "更新 网络代理 proxy", "UpdatesSection"),
+        new("高级设置", "高级 应用状态 检测组件 python 设置存储", "AdvancedSection"),
+        new("检测组件", "高级 python 检测组件 运行程序", "AdvancedSection"),
+    ];
+
     private async void BrowseInputDirectory_Click(object sender, RoutedEventArgs e)
     {
         var folder = await PickFolderAsync();
@@ -350,5 +457,19 @@ public sealed partial class SettingsView : UserControl
         }
 
         return await picker.PickSingleFileAsync();
+    }
+
+    private sealed record SettingsSearchEntry(
+        string Title,
+        string Keywords,
+        string SectionName,
+        bool ExpandMoreThresholds = false)
+    {
+        public bool Matches(string query) =>
+            !string.IsNullOrWhiteSpace(query)
+            && (Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || Keywords.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        public override string ToString() => Title;
     }
 }
