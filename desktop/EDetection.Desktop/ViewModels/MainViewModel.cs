@@ -277,6 +277,14 @@ public partial class MainViewModel : ObservableObject
                 ? $"最新运行结果 · {Path.GetFileName(ReportPath)}"
                 : "实时读取 Python JSONL 事件";
 
+    public string WorkbenchStatusBadgeText => SelectedReport is not null
+        ? ReportHistoryStatusText
+        : IsRunning
+            ? CurrentFileText
+            : !string.IsNullOrWhiteSpace(ReportPath)
+                ? "报告已生成"
+                : "待开始";
+
     public ShellStatusSnapshot ShellStatus => new(
         StatusText,
         IsRunning,
@@ -486,6 +494,7 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
     [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     [NotifyCanExecuteChangedFor(nameof(UseSelectedReportDirectoriesCommand))]
@@ -495,6 +504,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
     [NotifyPropertyChangedFor(nameof(WorkbenchStatusText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideTitleText))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideSubtitleText))]
     [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
@@ -550,6 +560,7 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(WorkbenchReportPath))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportPathText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
     [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
     [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportCommand))]
@@ -579,6 +590,7 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(WorkbenchReportButtonText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportFolderButtonText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportDeviceCount))]
     [NotifyPropertyChangedFor(nameof(WorkbenchHighRiskDevices))]
     [NotifyPropertyChangedFor(nameof(WorkbenchTopIssueTypes))]
@@ -959,6 +971,7 @@ public partial class MainViewModel : ObservableObject
         if (e.PropertyName is nameof(ReportHistoryViewModel.StatusText))
         {
             OnPropertyChanged(nameof(ReportHistoryStatusText));
+            OnPropertyChanged(nameof(WorkbenchStatusBadgeText));
         }
 
         if (e.PropertyName is nameof(ReportHistoryViewModel.RecentReportLimit)
@@ -1020,6 +1033,7 @@ public partial class MainViewModel : ObservableObject
         {
             case nameof(RunTelemetryViewModel.CurrentFileText):
                 OnPropertyChanged(nameof(CurrentFileText));
+                OnPropertyChanged(nameof(WorkbenchStatusBadgeText));
                 OnPropertyChanged(nameof(RunTelemetryVisibility));
                 break;
             case nameof(RunTelemetryViewModel.ElapsedText):

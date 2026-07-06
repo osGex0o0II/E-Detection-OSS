@@ -129,7 +129,7 @@
                                    FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="1"
-                                   Text="{Binding Diagnostics.SummaryText}"
+                                   Text="{Binding WorkbenchStatusBadgeText}"
                                    MaxWidth="320"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextTrimming="CharacterEllipsis" />
