@@ -7,5 +7,4 @@ public sealed record DesktopHealthSnapshot(
     string SettingsText,
     string PackageText,
     string PythonBridgeText,
-    string InstallText,
-    string HotkeyText);
+    string InstallText);

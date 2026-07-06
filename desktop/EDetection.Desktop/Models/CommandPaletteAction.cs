@@ -3,7 +3,6 @@ namespace EDetection.Desktop.Models;
 public sealed class CommandPaletteAction(
     string title,
     string description,
-    string shortcut,
     string glyph,
     string category,
     Func<Task> executeAsync,
@@ -12,8 +11,6 @@ public sealed class CommandPaletteAction(
     public string Title { get; } = title;
 
     public string Description { get; } = description;
-
-    public string Shortcut { get; } = shortcut;
 
     public string Glyph { get; } = glyph;
 
@@ -45,8 +42,6 @@ public sealed class CommandPaletteAction(
             return 10;
         }
 
-        return Shortcut.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-            ? 5
-            : -1;
+        return -1;
     }
 }

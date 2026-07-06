@@ -32,6 +32,7 @@ public sealed partial class RunSetupView : UserControl
             OutputDirectoryTextBox,
             OutputDirectoryButton,
             compact);
+        ApplyRunCommandLayout(compact);
         ApplyReportFilterLayout(compact);
     }
 
@@ -140,5 +141,19 @@ public sealed partial class RunSetupView : UserControl
         Grid.SetColumn(ReportFilterComboBox, compact ? 0 : 1);
         Grid.SetColumnSpan(ReportFilterComboBox, compact ? 2 : 1);
         ReportFilterComboBox.MaxWidth = compact ? 180 : double.PositiveInfinity;
+    }
+
+    private void ApplyRunCommandLayout(bool compact)
+    {
+        RunCommandGrid.RowDefinitions[1].Height = compact ? GridLength.Auto : new GridLength(0);
+        RunPrimaryCommandColumn.Width = new GridLength(1, GridUnitType.Star);
+        RunSecondaryCommandColumn.Width = compact ? new GridLength(0) : GridLength.Auto;
+
+        Grid.SetRow(RunStartButton, 0);
+        Grid.SetColumn(RunStartButton, 0);
+        Grid.SetColumnSpan(RunStartButton, compact ? 2 : 1);
+        Grid.SetRow(RunCancelButton, compact ? 1 : 0);
+        Grid.SetColumn(RunCancelButton, compact ? 0 : 1);
+        Grid.SetColumnSpan(RunCancelButton, compact ? 2 : 1);
     }
 }

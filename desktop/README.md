@@ -59,7 +59,6 @@ Run a local visual smoke test after publishing:
 
 ```powershell
 .\desktop\scripts\Test-DesktopVisualSmoke.ps1
-.\desktop\scripts\Test-DesktopKeyboardSmoke.ps1
 .\desktop\scripts\Test-DesktopSingleInstanceSmoke.ps1
 .\desktop\scripts\Test-DesktopSessionEndingSmoke.ps1
 .\desktop\scripts\Test-DesktopStartupIntegrationSmoke.ps1
@@ -67,7 +66,7 @@ Run a local visual smoke test after publishing:
 
 When running against a publish folder, every desktop GUI smoke script also accepts `-PackagePath .\artifacts\desktop\win-x64\publish`.
 
-The visual smoke test starts the published app, verifies the main window title, moves the main window to a stable size, captures a PNG under `artifacts\desktop\visual-smoke`, checks that the image is not blank or undersized, and writes a JSON result next to the screenshot. The keyboard smoke test verifies representative accelerators such as `F5`, `Esc`, `F6`, `Ctrl+O`, `Ctrl+S`, and `Ctrl+I` against the published app, confirms the quick action palette exposes diagnostics, desktop health refresh, and report actions when enabled, then writes a JSON result under `artifacts\desktop\keyboard-smoke`. The global-hotkey smoke verifies the system-wide `Ctrl+Alt+Shift+E` shell restore action. The settings smoke verifies persisted settings, startup provider status, settings schema migration, and the desktop health card. The single-instance smoke test starts the app hidden with `--startup-minimized`, launches a second copy, verifies the duplicate exits, and confirms the first instance is restored. The session-ending smoke test sends Windows session-ending messages to the main window, verifies a cancelled session does not close the app, then verifies a real end-session message exits cleanly. The startup-integration smoke toggles login startup from the settings UI, verifies the scheduled task or fallback startup entry points to the published app, then verifies disabling removes it.
+The visual smoke test starts the published app, verifies the main window title, moves the main window to a stable size, captures a PNG under `artifacts\desktop\visual-smoke`, checks that the image is not blank or undersized, and writes a JSON result next to the screenshot. The settings smoke verifies persisted settings, startup provider status, settings schema migration, and the desktop health card. The single-instance smoke test starts the app hidden with `--startup-minimized`, launches a second copy, verifies the duplicate exits, and confirms the first instance is restored. The session-ending smoke test sends Windows session-ending messages to the main window, verifies a cancelled session does not close the app, then verifies a real end-session message exits cleanly. The startup-integration smoke toggles login startup from the settings UI, verifies the scheduled task or fallback startup entry points to the published app, then verifies disabling removes it.
 
 Validate the install/uninstall path without keeping user artifacts:
 
@@ -79,18 +78,7 @@ The install smoke test installs to a temporary smoke directory, verifies the ins
 
 The Python package must be importable by the Python executable configured in the app. The run setup panel and empty workbench state can probe the selected Python executable, verify `e_detection` importability, copy a local editable-install repair command, open the detected backend directory, and copy the current diagnostic details. Starting a run performs the same readiness gate before launching the backend process: missing input/config, empty CSV input, unavailable Python, an unimportable detection core, or an uncreatable report directory are reported in the shell instead of surfacing as a late process failure. During development, run `python -m pip install -e .[dev]` from the repository root when the probe reports that the detection core cannot be imported.
 
-Keyboard accelerators:
-
-- `Ctrl+O`: choose the CSV input directory.
-- `F5`: start detection.
-- `Esc`: cancel the current detection.
-- `F6`: run diagnostics.
-- `Ctrl+S`: open settings.
-- `Ctrl+I`: open app information.
-- `Ctrl+1`: choose the config file.
-- `Ctrl+2`: choose the Python executable.
-
-The quick action palette is category-aware and command-aware. It is disabled by default and can be enabled from Settings with the user's preferred shortcut. It exposes entries for copying diagnostics, refreshing desktop health, opening or copying the current report path, opening the report folder, and opening up to five recent reports.
+The quick action palette is available from the title bar search button. It exposes entries for copying diagnostics, refreshing desktop health, opening settings sections, opening or copying the current report path, opening the report folder, and opening up to five recent reports.
 
 ## Installable User Build
 
@@ -122,9 +110,8 @@ By default uninstall keeps `%LOCALAPPDATA%\E-Detection\Desktop\settings.json`. U
 ## Runtime Notes
 
 - The app stores settings under `%LOCALAPPDATA%\E-Detection\Desktop\settings.json`.
-- The settings file is versioned (`SettingsVersion=7` currently). Older settings without a version are migrated and written back on load.
-- The settings page includes a desktop health card covering notification availability, startup provider, settings store, package integrity, Python JSONL bridge mode, install shape, and global hotkey registration.
-- Global hotkeys are enabled by default: `Ctrl+Alt+Shift+E` restores the workbench. If another app owns the gesture, the settings page reports the registration conflict.
+- The settings file is versioned (`SettingsVersion=8` currently). Older settings without a version are migrated and written back on load.
+- The settings page includes a desktop health card covering notification availability, startup provider, settings store, package integrity, Python JSONL bridge mode, and install shape.
 - The tray menu is command-aware: it shows the current run state and can restore the workbench, start/cancel detection when available, and open the latest report or its folder. The tray and window/taskbar icon switch to `running.ico` while detection is active.
 - System notifications are registered on a best-effort basis for the unpackaged app. Completion/error notifications can restore the workbench, and completed runs can open the generated report directly when a report path is available. If Windows notification policy or registration blocks them, detection continues normally.
 - Native taskbar progress mirrors the run lifecycle: indeterminate while starting, normal while processing, paused while cancel confirmation is armed or a run is cancelled, and error when a backend failure occurs.

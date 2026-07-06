@@ -2,5 +2,5 @@ namespace EDetection.Desktop.Models;
 
 public static class SettingsServiceVersion
 {
-    public const int Current = 7;
+    public const int Current = 8;
 }

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -5,7 +6,6 @@ using Microsoft.UI.Xaml.Media.Animation;
 using EDetection.Desktop.Models;
 using EDetection.Desktop.Services;
 using EDetection.Desktop.ViewModels;
-using System.ComponentModel;
 using Windows.Foundation;
 using Windows.System;
 
@@ -17,7 +17,7 @@ public sealed partial class AppShellView : UserControl
     private ContentDialog? _quickActionDialog;
     private TextBox? _quickActionSearchBox;
     private ListView? _quickActionListView;
-    private MainViewModel? _subscribedViewModel;
+    private MainViewModel? _observedViewModel;
     private bool? _lastCompactLayout;
     private bool _isSettingsPageVisible;
     private const double StackedStatusWidth = 1008;
@@ -27,7 +27,6 @@ public sealed partial class AppShellView : UserControl
     public AppShellView()
     {
         InitializeComponent();
-        RegisterKeyboardAccelerators();
         Loaded += AppShellView_Loaded;
         DataContextChanged += AppShellView_DataContextChanged;
         ShellSettings.BackRequested += (_, _) => ShowWorkbench();
@@ -48,99 +47,35 @@ public sealed partial class AppShellView : UserControl
     private void AboutButton_Click(object sender, RoutedEventArgs e) =>
         AboutRequested?.Invoke(this, EventArgs.Empty);
 
+    private MainViewModel? ViewModel => DataContext as MainViewModel;
+
+    private void Root_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyResponsiveLayout(e.NewSize.Width);
+
     private void AppShellView_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
     {
-        if (_subscribedViewModel is not null)
+        if (_observedViewModel is not null)
         {
-            _subscribedViewModel.PropertyChanged -= ViewModel_PropertyChanged;
-            _subscribedViewModel = null;
+            _observedViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+            _observedViewModel = null;
         }
 
         if (args.NewValue is MainViewModel newViewModel)
         {
             newViewModel.PropertyChanged += ViewModel_PropertyChanged;
-            _subscribedViewModel = newViewModel;
+            _observedViewModel = newViewModel;
         }
 
-        UpdateQuickActionsToolTip();
+        ApplyResponsiveLayout(Root.ActualWidth);
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainViewModel.SelectedQuickActionsShortcutIndex)
-            or nameof(MainViewModel.EnableQuickActionsShortcut))
+        if (e.PropertyName is nameof(MainViewModel.IsRunning))
         {
-            UpdateQuickActionsToolTip();
+            ApplyResponsiveLayout(Root.ActualWidth);
         }
     }
-
-    private void RegisterKeyboardAccelerators()
-    {
-        AddShortcut(VirtualKey.K, VirtualKeyModifiers.Control, async (_, e) =>
-        {
-            await TryShowQuickActionsAsync(0, e);
-        });
-        AddShortcut(VirtualKey.P, VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift, async (_, e) =>
-        {
-            await TryShowQuickActionsAsync(1, e);
-        });
-        AddShortcut(VirtualKey.F5, VirtualKeyModifiers.None, (_, e) =>
-        {
-            e.Handled = TryExecuteCommand(StartButton.Command, StartButton.CommandParameter);
-        });
-        AddShortcut(VirtualKey.Escape, VirtualKeyModifiers.None, (_, e) =>
-        {
-            e.Handled = TryExecuteCommand(CancelButton.Command, CancelButton.CommandParameter);
-        });
-        AddShortcut(VirtualKey.F6, VirtualKeyModifiers.None, (_, e) =>
-        {
-            e.Handled = TryExecuteCommand(DiagnosticsButton.Command, DiagnosticsButton.CommandParameter);
-        });
-        AddShortcut(VirtualKey.O, VirtualKeyModifiers.Control, async (_, e) =>
-        {
-            e.Handled = true;
-            await RunSetup.BrowseInputDirectoryAsync();
-        });
-        AddShortcut(VirtualKey.I, VirtualKeyModifiers.Control, (_, e) =>
-        {
-            e.Handled = true;
-            AboutRequested?.Invoke(this, EventArgs.Empty);
-        });
-        AddShortcut(VirtualKey.Number1, VirtualKeyModifiers.Control, async (_, e) =>
-        {
-            e.Handled = true;
-            await RunSetup.BrowseConfigPathAsync();
-        });
-        AddShortcut(VirtualKey.Number2, VirtualKeyModifiers.Control, async (_, e) =>
-        {
-            e.Handled = true;
-            await RunSetup.BrowsePythonExecutableAsync();
-        });
-        AddShortcut(VirtualKey.S, VirtualKeyModifiers.Control, (_, e) =>
-        {
-            e.Handled = true;
-            ShowSettingsPage();
-        });
-    }
-
-    private MainViewModel? ViewModel => DataContext as MainViewModel;
-
-    private async Task TryShowQuickActionsAsync(
-        int shortcutIndex,
-        KeyboardAcceleratorInvokedEventArgs e)
-    {
-        if (ViewModel?.EnableQuickActionsShortcut == false
-            || ViewModel?.SelectedQuickActionsShortcutIndex != shortcutIndex)
-        {
-            return;
-        }
-
-        e.Handled = true;
-        await ShowQuickActionsAsync();
-    }
-
-    private void Root_SizeChanged(object sender, SizeChangedEventArgs e) =>
-        ApplyResponsiveLayout(e.NewSize.Width);
 
     public void ShowSettingsPage(string? initialSectionName = null)
     {
@@ -207,7 +142,6 @@ public sealed partial class AppShellView : UserControl
 
     private void AppShellView_Loaded(object sender, RoutedEventArgs e)
     {
-        UpdateQuickActionsToolTip();
         if (Root.ActualWidth < CompactShellWidth)
         {
             QueueCompactScrollReset();
@@ -221,17 +155,12 @@ public sealed partial class AppShellView : UserControl
             return;
         }
 
-        UpdateQuickActionsToolTip();
-
         var compact = width < CompactShellWidth;
         var reduced = width < ComfortableShellWidth;
+        var showProgress = ViewModel?.IsRunning == true;
         var stackedStatus = compact && width < StackedStatusWidth;
         var layoutModeChanged = _lastCompactLayout != compact;
         _lastCompactLayout = compact;
-
-        PrimaryCommandBar.DefaultLabelPosition = reduced
-            ? CommandBarDefaultLabelPosition.Collapsed
-            : CommandBarDefaultLabelPosition.Right;
 
         StatusLayout.RowDefinitions[1].Height = stackedStatus ? GridLength.Auto : new GridLength(0);
         StatusLayout.RowDefinitions[2].Height = compact ? GridLength.Auto : new GridLength(0);
@@ -248,26 +177,29 @@ public sealed partial class AppShellView : UserControl
 
         if (compact)
         {
-            StatusCommandColumn.Width = stackedStatus
-                ? new GridLength(1, GridUnitType.Star)
-                : GridLength.Auto;
             StatusTextColumn.Width = stackedStatus
+                ? new GridLength(1, GridUnitType.Star)
+                : new GridLength(1, GridUnitType.Star);
+            StatusProgressColumn.Width = !showProgress
+                ? new GridLength(0)
+                : stackedStatus
+                ? new GridLength(1, GridUnitType.Star)
+                : new GridLength(1, GridUnitType.Star);
+            StatusPoetryColumn.Width = !showProgress
+                ? new GridLength(1.4, GridUnitType.Star)
+                : stackedStatus
                 ? new GridLength(0)
                 : new GridLength(1, GridUnitType.Star);
-            StatusProgressColumn.Width = stackedStatus
-                ? new GridLength(0)
-                : new GridLength(1, GridUnitType.Star);
-            PrimaryCommandBar.MinHeight = 40;
 
-            Grid.SetRow(PrimaryCommandBar, 0);
-            Grid.SetColumn(PrimaryCommandBar, 0);
-            Grid.SetColumnSpan(PrimaryCommandBar, stackedStatus ? 3 : 1);
-            Grid.SetRow(StatusTextPanel, stackedStatus ? 1 : 0);
-            Grid.SetColumn(StatusTextPanel, stackedStatus ? 0 : 1);
-            Grid.SetColumnSpan(StatusTextPanel, stackedStatus ? 3 : 2);
-            Grid.SetRow(ProgressPanel, 2);
-            Grid.SetColumn(ProgressPanel, 0);
-            Grid.SetColumnSpan(ProgressPanel, 3);
+            Grid.SetRow(StatusTextPanel, 0);
+            Grid.SetColumn(StatusTextPanel, 0);
+            Grid.SetColumnSpan(StatusTextPanel, stackedStatus ? 3 : 1);
+            Grid.SetRow(ProgressPanel, stackedStatus ? 1 : 0);
+            Grid.SetColumn(ProgressPanel, stackedStatus ? 0 : 1);
+            Grid.SetColumnSpan(ProgressPanel, stackedStatus ? 3 : 1);
+            Grid.SetRow(PoetryPanel, 0);
+            Grid.SetColumn(PoetryPanel, showProgress ? 2 : 1);
+            Grid.SetColumnSpan(PoetryPanel, showProgress ? 1 : 2);
 
             SetupColumn.Width = new GridLength(1, GridUnitType.Star);
             WorkbenchColumn.Width = new GridLength(1, GridUnitType.Star);
@@ -290,22 +222,25 @@ public sealed partial class AppShellView : UserControl
             return;
         }
 
-        StatusCommandColumn.Width = GridLength.Auto;
-        StatusTextColumn.Width = new GridLength(1, GridUnitType.Star);
-        StatusProgressColumn.Width = reduced
+        StatusTextColumn.Width = showProgress
+            ? new GridLength(1, GridUnitType.Star)
+            : new GridLength(320);
+        StatusProgressColumn.Width = !showProgress
+            ? new GridLength(0)
+            : reduced
             ? new GridLength(188)
             : new GridLength(220);
-        PrimaryCommandBar.MinHeight = 0;
+        StatusPoetryColumn.Width = new GridLength(1.4, GridUnitType.Star);
 
-        Grid.SetRow(PrimaryCommandBar, 0);
-        Grid.SetColumn(PrimaryCommandBar, 0);
-        Grid.SetColumnSpan(PrimaryCommandBar, 1);
         Grid.SetRow(StatusTextPanel, 0);
-        Grid.SetColumn(StatusTextPanel, 1);
+        Grid.SetColumn(StatusTextPanel, 0);
         Grid.SetColumnSpan(StatusTextPanel, 1);
         Grid.SetRow(ProgressPanel, 0);
-        Grid.SetColumn(ProgressPanel, 2);
+        Grid.SetColumn(ProgressPanel, 1);
         Grid.SetColumnSpan(ProgressPanel, 1);
+        Grid.SetRow(PoetryPanel, 0);
+        Grid.SetColumn(PoetryPanel, showProgress ? 2 : 1);
+        Grid.SetColumnSpan(PoetryPanel, showProgress ? 1 : 2);
 
         SetupColumn.Width = new GridLength(reduced ? 340 : 380);
         WorkbenchColumn.Width = new GridLength(1, GridUnitType.Star);
@@ -330,7 +265,7 @@ public sealed partial class AppShellView : UserControl
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
-            StartButton.Focus(FocusState.Programmatic);
+            RunSetup.Focus(FocusState.Programmatic);
             foreach (var delay in new[] { 0, 120, 360, 800 })
             {
                 if (delay > 0)
@@ -347,16 +282,17 @@ public sealed partial class AppShellView : UserControl
     private CommandPaletteContext BuildCommandPaletteContext() =>
         new(
             ViewModel,
-            StartButton.Command,
-            StartButton.CommandParameter,
-            CancelButton.Command,
-            CancelButton.CommandParameter,
-            DiagnosticsButton.Command,
-            DiagnosticsButton.CommandParameter,
+            ViewModel?.StartCommand,
+            null,
+            ViewModel?.CancelCommand,
+            null,
+            ViewModel?.RefreshDiagnosticsCommand,
+            null,
             RunSetup.BrowseInputDirectoryAsync,
             RunSetup.BrowseConfigPathAsync,
             RunSetup.BrowsePythonExecutableAsync,
             OpenSettingsAsync,
+            OpenAppearanceSettingsAsync,
             OpenThresholdSettingsAsync,
             OpenDetectionRulesAsync,
             OpenUpdateSettingsAsync,
@@ -365,6 +301,12 @@ public sealed partial class AppShellView : UserControl
     private Task OpenSettingsAsync()
     {
         ShowSettingsPage();
+        return Task.CompletedTask;
+    }
+
+    private Task OpenAppearanceSettingsAsync()
+    {
+        ShowSettingsPage("AppearanceSection");
         return Task.CompletedTask;
     }
 
@@ -442,15 +384,6 @@ public sealed partial class AppShellView : UserControl
         };
 
         await _quickActionDialog.ShowAsync();
-    }
-
-    private void UpdateQuickActionsToolTip()
-    {
-        var shortcutText = ViewModel?.QuickActionsShortcutText ?? "快速操作";
-        var toolTip = shortcutText.Contains("已关闭", StringComparison.Ordinal)
-            ? "快速操作"
-            : shortcutText;
-        ToolTipService.SetToolTip(QuickActionsTitleBarButton, toolTip);
     }
 
     private void QuickActionSearchBox_TextChanged(object sender, TextChangedEventArgs e) =>
@@ -536,40 +469,11 @@ public sealed partial class AppShellView : UserControl
             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
             <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
         </StackPanel>
-        <StackPanel Grid.Column="2" MinWidth="64" HorizontalAlignment="Right" Spacing="2">
-            <TextBlock Text="{Binding Category}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" HorizontalAlignment="Right" />
-            <TextBlock Text="{Binding Shortcut}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" HorizontalAlignment="Right" />
-        </StackPanel>
+        <TextBlock Grid.Column="2" Text="{Binding Category}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" />
     </Grid>
 </DataTemplate>
 """;
         return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
-    }
-
-    private void AddShortcut(
-        VirtualKey key,
-        VirtualKeyModifiers modifiers,
-        TypedEventHandler<KeyboardAccelerator, KeyboardAcceleratorInvokedEventArgs> invoked)
-    {
-        var accelerator = new KeyboardAccelerator
-        {
-            Key = key,
-            Modifiers = modifiers,
-            ScopeOwner = this,
-        };
-        accelerator.Invoked += invoked;
-        KeyboardAccelerators.Add(accelerator);
-    }
-
-    private static bool TryExecuteCommand(System.Windows.Input.ICommand? command, object? parameter)
-    {
-        if (command is null || !command.CanExecute(parameter))
-        {
-            return false;
-        }
-
-        command.Execute(parameter);
-        return true;
     }
 
 }

@@ -14,7 +14,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -81,73 +80,23 @@
 
         <Border Grid.Row="1"
                 Style="{StaticResource MetricCardStyle}"
-                Visibility="{Binding FirstRunGuideVisibility}">
-            <Grid x:Name="FirstRunGuideLayout"
-                  ColumnSpacing="16"
-                  RowSpacing="12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="0" />
-                    <RowDefinition Height="0" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="FirstRunContentColumn" Width="*" />
-                    <ColumnDefinition x:Name="FirstRunActionColumn" Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="{Binding FirstRunGuideTitleText}"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding FirstRunGuideSubtitleText}"
-                               TextWrapping="WrapWholeWords"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-
-                <Button x:Name="FirstRunStartButton"
-                        Grid.Column="1"
-                        MinWidth="156"
-                        Command="{Binding StartCommand}"
-                        Style="{StaticResource AccentButtonStyle}"
-                        ToolTipService.ToolTip="开始检测 (F5)"
-                        VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <FontIcon Glyph="&#xE768;" FontSize="14" />
-                        <TextBlock Text="开始检测" />
-                    </StackPanel>
-                </Button>
-                <Expander x:Name="FirstRunDiagnosticsExpander"
-                          Grid.Row="1"
-                          Grid.ColumnSpan="2"
-                          Header="高级检查"
-                          HorizontalAlignment="Stretch"
-                          IsExpanded="False">
-                    <StackPanel x:Name="FirstRunDiagnosticsPanel"
-                                Orientation="Horizontal"
-                                Spacing="8">
-                        <Button Command="{Binding RefreshDiagnosticsCommand}"
-                                ToolTipService.ToolTip="检查状态 (F6)">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE895;" FontSize="14" />
-                                <TextBlock Text="检查状态" />
-                            </StackPanel>
-                        </Button>
-                        <Button Command="{Binding CopyDiagnosticsCommand}"
-                                ToolTipService.ToolTip="复制状态详情">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="14" />
-                                <TextBlock Text="复制详情" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Expander>
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="2" Style="{StaticResource MetricCardStyle}">
+                Visibility="{Binding WorkbenchActivityVisibility}">
             <StackPanel Spacing="10">
-                <Grid RowSpacing="3">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding WorkbenchActivityTitleText}"
+                               Style="{StaticResource SectionTitleTextStyle}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding WorkbenchProgressText}"
+                               Visibility="{Binding StatusProgressVisibility}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
+                <Grid Visibility="{Binding RunTelemetryVisibility}"
+                      RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -157,37 +106,15 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding WorkbenchStatusText}"
-                                   FontWeight="SemiBold"
+                        <TextBlock Text="{Binding RunTelemetry.CurrentFileText}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="1"
-                                   Text="{Binding WorkbenchProgressText}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ProgressBar Grid.Column="1"
+                                     Width="160"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="{Binding WorkbenchProgressPercent}" />
                     </Grid>
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding WorkbenchModeText}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="1"
-                                   Margin="10,0,0,0"
-                                   Text="{Binding WorkbenchContextText}"
-                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                   TextTrimming="CharacterEllipsis" />
-                    </Grid>
-                </Grid>
-                <ProgressBar Minimum="0" Maximum="100" Value="{Binding WorkbenchProgressPercent}" />
-                <Grid Visibility="{Binding RunTelemetryVisibility}"
-                      RowSpacing="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <TextBlock Text="{Binding RunTelemetry.CurrentFileText}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               TextTrimming="CharacterEllipsis" />
                     <Grid x:Name="RunTelemetryStatsGrid"
                           Grid.Row="1"
                           ColumnSpacing="14"
@@ -229,6 +156,7 @@
                     </Grid>
                 </Grid>
                 <TextBlock Text="{Binding WorkbenchReportPathText}"
+                           Visibility="{Binding ReportActionsVisibility}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextTrimming="CharacterEllipsis" />
                 <Border Visibility="{Binding CancelConfirmationVisibility}"
@@ -293,7 +221,9 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-                <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            Visibility="{Binding ReportActionsVisibility}">
                     <Button Command="{Binding OpenCurrentReportCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <FontIcon Glyph="&#xE8A5;" FontSize="14" />
@@ -344,7 +274,7 @@
                                     Spacing="8"
                                     VerticalAlignment="Center">
                             <Button Command="{Binding RefreshDiagnosticsCommand}"
-                                    ToolTipService.ToolTip="检查状态 (F6)">
+                                    ToolTipService.ToolTip="检查状态">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon Glyph="&#xE895;" FontSize="14" />
                                     <TextBlock Text="检查状态" />
@@ -364,7 +294,7 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="3" Style="{StaticResource MetricCardStyle}">
+        <Border Grid.Row="2" Style="{StaticResource MetricCardStyle}">
             <Grid x:Name="RiskLayout"
                   ColumnSpacing="18"
                   RowSpacing="14">
@@ -449,7 +379,7 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="4" Style="{StaticResource MetricCardStyle}">
+        <Border Grid.Row="3" Style="{StaticResource MetricCardStyle}">
             <TabView IsAddTabButtonVisible="False"
                      CanDragTabs="False"
                      CanReorderTabs="False">

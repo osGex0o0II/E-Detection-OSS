@@ -29,8 +29,6 @@ $requiredFiles = @(
     "Uninstall-Desktop.ps1",
     "Test-DesktopPackageHealth.ps1",
     "Test-DesktopVisualSmoke.ps1",
-    "Test-DesktopKeyboardSmoke.ps1",
-    "Test-DesktopGlobalHotkeySmoke.ps1",
     "Test-DesktopTrayMenuSmoke.ps1",
     "Test-DesktopSingleInstanceSmoke.ps1",
     "Test-DesktopSessionEndingSmoke.ps1",

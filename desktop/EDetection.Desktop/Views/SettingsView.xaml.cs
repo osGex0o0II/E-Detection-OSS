@@ -1,11 +1,9 @@
 using EDetection.Desktop.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
 using Windows.Storage;
 using Windows.Storage.Pickers;
-using Windows.System;
 using WinRT.Interop;
 
 namespace EDetection.Desktop.Views;
@@ -23,6 +21,7 @@ public sealed partial class SettingsView : UserControl
     private const double CompactContentBreakpoint = 720;
     private const double StackedActionBreakpoint = CompactContentBreakpoint;
     private const double StackedFooterBreakpoint = 820;
+    private const double StackedThresholdBreakpoint = 760;
 
     private bool _suppressCategoryScroll;
     private bool _suppressScrollSync;
@@ -38,7 +37,6 @@ public sealed partial class SettingsView : UserControl
         SettingsCategoryList.SelectedIndex = 0;
         _suppressCategoryScroll = false;
         Loaded += SettingsView_Loaded;
-        RegisterKeyboardAccelerators();
     }
 
     public event EventHandler? BackRequested;
@@ -117,41 +115,6 @@ public sealed partial class SettingsView : UserControl
 
     private void OpenDetectionRules_Click(object sender, RoutedEventArgs e) =>
         NavigateToDetectionRules();
-
-    private void RegisterKeyboardAccelerators()
-    {
-        AddShortcut(VirtualKey.F, VirtualKeyModifiers.Control, (_, e) =>
-        {
-            SettingsSearchBox.Focus(FocusState.Keyboard);
-            e.Handled = true;
-        });
-        AddShortcut(VirtualKey.Escape, VirtualKeyModifiers.None, (_, e) =>
-        {
-            if (string.IsNullOrWhiteSpace(SettingsSearchBox.Text))
-            {
-                return;
-            }
-
-            SettingsSearchBox.Text = "";
-            SettingsSearchBox.ItemsSource = null;
-            SettingsCategoryList.Focus(FocusState.Keyboard);
-            e.Handled = true;
-        });
-    }
-
-    private void AddShortcut(
-        VirtualKey key,
-        VirtualKeyModifiers modifiers,
-        TypedEventHandler<KeyboardAccelerator, KeyboardAcceleratorInvokedEventArgs> invoked)
-    {
-        var accelerator = new KeyboardAccelerator
-        {
-            Key = key,
-            Modifiers = modifiers,
-        };
-        accelerator.Invoked += invoked;
-        KeyboardAccelerators.Add(accelerator);
-    }
 
     private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
@@ -353,6 +316,10 @@ public sealed partial class SettingsView : UserControl
         {
             ApplyActionGridLayout(grid, stackActions);
         }
+
+        var stackThresholds = contentWidth < StackedThresholdBreakpoint;
+        ApplyThresholdGridLayout(PrimaryThresholdGrid, stackThresholds);
+        ApplyThresholdGridLayout(MoreThresholdGrid, stackThresholds);
     }
 
     private void UpdateNavigationRailLayout(bool iconOnly)
@@ -497,6 +464,48 @@ public sealed partial class SettingsView : UserControl
         Grid.SetRow(second, 0);
     }
 
+    private static void ApplyThresholdGridLayout(Grid grid, bool stack)
+    {
+        if (grid.ColumnDefinitions.Count < 2)
+        {
+            return;
+        }
+
+        grid.ColumnSpacing = stack ? 0 : 14;
+        grid.RowSpacing = stack ? 10 : 12;
+        grid.Padding = stack
+            ? new Thickness(16, 12, 16, 12)
+            : new Thickness(18, 12, 18, 12);
+        grid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+        grid.ColumnDefinitions[1].Width = stack
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+
+        var itemIndex = 0;
+        foreach (var child in grid.Children.OfType<FrameworkElement>())
+        {
+            Grid.SetRow(child, stack ? itemIndex : itemIndex / 2);
+            Grid.SetColumn(child, stack ? 0 : itemIndex % 2);
+            Grid.SetColumnSpan(child, stack ? 2 : 1);
+            itemIndex++;
+        }
+
+        var requiredRows = stack
+            ? itemIndex
+            : (int)Math.Ceiling(itemIndex / 2.0);
+        while (grid.RowDefinitions.Count < requiredRows)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+
+        for (var i = 0; i < grid.RowDefinitions.Count; i++)
+        {
+            grid.RowDefinitions[i].Height = i < requiredRows
+                ? GridLength.Auto
+                : new GridLength(0);
+        }
+    }
+
     private void SettingsExpander_Expanding(Expander sender, ExpanderExpandingEventArgs args)
     {
         DispatcherQueue.TryEnqueue(UpdateResponsiveLayout);
@@ -584,9 +593,10 @@ public sealed partial class SettingsView : UserControl
 
     private static IReadOnlyList<SettingsSearchEntry> BuildSearchEntries() =>
     [
-        new("外观", "外观", "外观 主题 背景 mica acrylic 深色 浅色 跟随系统", "AppearanceSection"),
+        new("外观", "外观", "外观 主题 背景 mica acrylic 深色 浅色 跟随系统 诗词", "AppearanceSection"),
         new("应用主题", "外观", "外观 主题 深色 浅色 跟随系统", "AppearanceSection"),
         new("窗口背景", "外观", "外观 背景 mica acrylic", "AppearanceSection"),
+        new("顶部诗词", "外观", "诗词 poetry palemoky 顶部 信息栏", "AppearanceSection"),
         new("检测目录", "检测", "检测 输入目录 报告目录 csv 路径", "DefaultsSection"),
         new("输入目录", "检测", "检测 输入目录 csv 路径", "DefaultsSection"),
         new("报告目录", "检测", "检测 报告目录 输出目录 路径", "DefaultsSection"),
@@ -601,7 +611,7 @@ public sealed partial class SettingsView : UserControl
         new("检测规则", "检测规则", "规则 电流过载 电流不平衡 功率因数 详细异常输出", "DetectionRulesSection"),
         new("报告设置", "报告", "报告 excel 历史 清空", "ReportsSection"),
         new("运行记录", "运行记录", "日志 运行记录 保留 清空", "LogsSection"),
-        new("窗口设置", "窗口", "窗口 托盘 自启动 启动应用 通知 热键 快捷键", "WindowSection"),
+        new("窗口设置", "窗口", "窗口 托盘 自启动 启动应用 通知", "WindowSection"),
         new("Windows 启动应用设置", "窗口", "Windows 系统 启动 应用 设置 startupapps", "WindowSection"),
         new("桌面通知测试", "窗口", "桌面通知 通知 测试 toast Windows 系统设置", "WindowSection"),
         new("Windows 通知设置", "窗口", "Windows 系统 通知 设置 ms-settings", "WindowSection"),

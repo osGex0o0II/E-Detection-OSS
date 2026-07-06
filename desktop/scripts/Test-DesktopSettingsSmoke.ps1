@@ -356,13 +356,16 @@ try {
         UseProxyForUpdates = $true
         SelectedUpdateChannelIndex = 2
         UpdateFeedUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest"
-        EnableGlobalHotkeys = $true
-        EnableQuickActionsShortcut = $true
-        SelectedQuickActionsShortcutIndex = 1
+        EnableGlobalHotkeys = $false
+        EnableQuickActionsShortcut = $false
+        SelectedQuickActionsShortcutIndex = 2
         SelectedLogRetentionIndex = 2
         SelectedRecentReportLimitIndex = 2
         SelectedThemeIndex = 0
         SelectedBackdropIndex = 0
+        EnablePoetryStatus = $true
+        PoetryServiceUrl = "https://poetry.palemoky.com/"
+        SelectedPoetryLanguageIndex = 0
         RecentReports = @()
     } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
 
@@ -394,6 +397,9 @@ try {
     $settingsSearchBox = Wait-ForAutomationName $mainWindow.Handle "搜索设置" $WaitSeconds
     $themeControl = Wait-ForAutomationName $mainWindow.Handle "应用主题" $WaitSeconds
     $backdropControl = Wait-ForAutomationName $mainWindow.Handle "窗口背景" $WaitSeconds
+    $poetryToggle = Wait-ForAutomationName $mainWindow.Handle "顶部诗词" $WaitSeconds
+    $poetryServiceControl = Wait-ForAutomationName $mainWindow.Handle "诗词接口" $WaitSeconds
+    $poetryLanguageControl = Wait-ForAutomationName $mainWindow.Handle "诗词语言" $WaitSeconds
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
     $inputDirectoryControl = Wait-ForAutomationName $mainWindow.Handle "输入目录" $WaitSeconds
     $browseInputDirectoryButton = Wait-ForAutomationName $mainWindow.Handle "选择输入目录" $WaitSeconds
@@ -429,8 +435,6 @@ try {
     $startupTrayToggle = Wait-ForAutomationName $mainWindow.Handle "启动时隐藏到托盘" $WaitSeconds
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $openWindowsStartupSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 启动应用设置" $WaitSeconds
-    $globalHotkeyToggle = Wait-ForAutomationName $mainWindow.Handle "全局热键" $WaitSeconds
-    $quickActionsToggle = Wait-ForAutomationName $mainWindow.Handle "快速操作快捷键" $WaitSeconds
     $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手" $WaitSeconds
     $llmEndpointControl = Wait-ForAutomationName $mainWindow.Handle "LLM 服务地址" $WaitSeconds
     $llmProxyToggle = Wait-ForAutomationName $mainWindow.Handle "LLM 使用网络代理" $WaitSeconds
@@ -455,12 +459,20 @@ try {
     $saveSettingsButton = Wait-ForAutomationName $mainWindow.Handle "保存设置" $WaitSeconds
     $resetSettingsButton = Wait-ForAutomationName $mainWindow.Handle "重置设置" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-    if ($settingsJson.SettingsVersion -ne 7) {
-        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '7'."
+    if ($settingsJson.SettingsVersion -ne 8) {
+        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '8'."
     }
 
-    if ($settingsJson.SelectedQuickActionsShortcutIndex -ne 1) {
-        throw "Settings smoke failed: SelectedQuickActionsShortcutIndex was '$($settingsJson.SelectedQuickActionsShortcutIndex)', expected '1'."
+    if ($settingsJson.EnableGlobalHotkeys -ne $false) {
+        throw "Settings smoke failed: EnableGlobalHotkeys was '$($settingsJson.EnableGlobalHotkeys)', expected 'False'."
+    }
+
+    if ($settingsJson.EnableQuickActionsShortcut -ne $false) {
+        throw "Settings smoke failed: EnableQuickActionsShortcut was '$($settingsJson.EnableQuickActionsShortcut)', expected 'False'."
+    }
+
+    if ($settingsJson.SelectedQuickActionsShortcutIndex -ne 2) {
+        throw "Settings smoke failed: SelectedQuickActionsShortcutIndex was '$($settingsJson.SelectedQuickActionsShortcutIndex)', expected '2'."
     }
 
     if ($settingsJson.UseProxyForUpdates -ne $true) {
@@ -476,6 +488,9 @@ try {
         SettingsSearchBox = $settingsSearchBox
         ThemeControl = $themeControl
         BackdropControl = $backdropControl
+        PoetryToggle = $poetryToggle
+        PoetryServiceControl = $poetryServiceControl
+        PoetryLanguageControl = $poetryLanguageControl
         DefaultsSection = $defaultsSection
         InputDirectoryControl = $inputDirectoryControl
         BrowseInputDirectoryButton = $browseInputDirectoryButton
@@ -510,8 +525,6 @@ try {
         StartupTrayToggle = $startupTrayToggle
         AutoStartToggle = $autoStartToggle
         OpenWindowsStartupSettingsButton = $openWindowsStartupSettingsButton
-        GlobalHotkeyToggle = $globalHotkeyToggle
-        QuickActionsToggle = $quickActionsToggle
         LlmSection = $llmSection
         LlmEndpointControl = $llmEndpointControl
         LlmProxyToggle = $llmProxyToggle
@@ -530,6 +543,8 @@ try {
         CheckUpdatesButton = $checkUpdatesButton
         OpenUpdatePageButton = $openUpdatePageButton
         UpdateFeedControl = $updateFeedControl
+        EnableGlobalHotkeys = $settingsJson.EnableGlobalHotkeys
+        EnableQuickActionsShortcut = $settingsJson.EnableQuickActionsShortcut
         QuickActionsShortcutIndex = $settingsJson.SelectedQuickActionsShortcutIndex
         SettingsVersion = $settingsJson.SettingsVersion
         DesktopHealthSection = $desktopHealthSection
@@ -543,7 +558,7 @@ try {
         TargetWidth = $targetWidth
         TargetHeight = $targetHeight
         ResponsiveMode = if ($Width -le 700) { "compact" } else { "comfortable" }
-        Trigger = "Ctrl+S after writing persisted settings"
+        Trigger = "Title bar settings button after writing persisted settings"
         Passed = $true
         CapturedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json | Set-Content -Path $resultPath -Encoding UTF8

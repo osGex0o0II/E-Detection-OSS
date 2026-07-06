@@ -14,10 +14,10 @@ namespace EDetection.Desktop.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const int MinWindowWidthDip = 960;
-    public const int MinWindowHeightDip = 640;
+    public const int MinWindowWidthDip = 1100;
+    public const int MinWindowHeightDip = 740;
     public const int DefaultWindowWidthDip = 1240;
-    public const int DefaultWindowHeightDip = 720;
+    public const int DefaultWindowHeightDip = 760;
     private const string WindowsNotificationSettingsUri = "ms-settings:notifications";
     private const string WindowsProxySettingsUri = "ms-settings:network-proxy";
     private const string WindowsStartupAppsSettingsUri = "ms-settings:startupapps";
@@ -35,6 +35,7 @@ public partial class MainViewModel : ObservableObject
     private readonly LlmAssistantService _llmAssistant;
     private readonly NetworkProxyService _networkProxy;
     private readonly UpdateCheckService _updateCheck;
+    private readonly PoetryStatusService _poetryStatus;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _cancelPromptCts;
@@ -44,7 +45,6 @@ public partial class MainViewModel : ObservableObject
     private bool _isShellShutdownRequested;
     private bool _suppressConfigPathReload;
     private string _lastNotifiedUpdateVersion = "";
-    private ShellHotkeySnapshot _globalHotkeySnapshot = ShellHotkeySnapshot.Disabled;
 
     public MainViewModel(
         PythonBackendService backend,
@@ -63,6 +63,7 @@ public partial class MainViewModel : ObservableObject
         LlmAssistantService? llmAssistant = null,
         NetworkProxyService? networkProxy = null,
         UpdateCheckService? updateCheck = null,
+        PoetryStatusService? poetryStatus = null,
         DesktopHealthService? desktopHealth = null)
     {
         _backend = backend;
@@ -78,6 +79,7 @@ public partial class MainViewModel : ObservableObject
         _llmAssistant = llmAssistant ?? new LlmAssistantService(_credentials);
         _networkProxy = networkProxy ?? new NetworkProxyService(_credentials);
         _updateCheck = updateCheck ?? new UpdateCheckService();
+        _poetryStatus = poetryStatus ?? new PoetryStatusService();
         Diagnostics = new DiagnosticsViewModel();
         RunTelemetry = new RunTelemetryViewModel(runTelemetry);
         RuntimeLogs = new RuntimeLogViewModel(runtimeLogs);
@@ -86,8 +88,7 @@ public partial class MainViewModel : ObservableObject
             desktopHealth ?? new DesktopHealthService(),
             _startup,
             _settings,
-            () => PythonExecutable,
-            BuildHotkeySnapshot);
+            () => PythonExecutable);
         var saved = _settings.Load();
         InputDirectory = saved.InputDirectory;
         OutputDirectory = saved.OutputDirectory;
@@ -122,12 +123,17 @@ public partial class MainViewModel : ObservableObject
         UpdateFeedUrl = saved.UpdateFeedUrl;
         UpdateStatusText = $"当前版本 {new AppInfoService().GetInfo().Version}";
         RefreshSecureCredentialStatus();
-        EnableGlobalHotkeys = saved.EnableGlobalHotkeys;
-        SelectedQuickActionsShortcutIndex = Math.Clamp(saved.SelectedQuickActionsShortcutIndex, 0, 2);
-        EnableQuickActionsShortcut = saved.EnableQuickActionsShortcut && SelectedQuickActionsShortcutIndex != 2;
+        EnableGlobalHotkeys = false;
+        SelectedQuickActionsShortcutIndex = 2;
+        EnableQuickActionsShortcut = false;
         RuntimeLogs.SelectedRetentionIndex = Math.Clamp(saved.SelectedLogRetentionIndex, 0, 3);
         SelectedThemeIndex = Math.Clamp(saved.SelectedThemeIndex, 0, 2);
         SelectedBackdropIndex = Math.Clamp(saved.SelectedBackdropIndex, 0, 2);
+        EnablePoetryStatus = saved.EnablePoetryStatus;
+        PoetryServiceUrl = string.IsNullOrWhiteSpace(saved.PoetryServiceUrl)
+            ? "https://poetry.palemoky.com/"
+            : saved.PoetryServiceUrl;
+        SelectedPoetryLanguageIndex = Math.Clamp(saved.SelectedPoetryLanguageIndex, 0, 1);
         WindowLeft = saved.WindowLeft;
         WindowTop = saved.WindowTop;
         WindowWidth = saved.WindowWidth;
@@ -169,6 +175,14 @@ public partial class MainViewModel : ObservableObject
     public bool IsIdle => !IsRunning;
 
     public bool CanEditRunConfiguration => !IsRunning;
+
+    public Visibility CancelCommandVisibility => IsRunning
+        ? Visibility.Visible
+        : Visibility.Collapsed;
+
+    public Visibility StatusProgressVisibility => IsRunning
+        ? Visibility.Visible
+        : Visibility.Collapsed;
 
     public Visibility RunTelemetryVisibility =>
         SelectedReport is null
@@ -308,6 +322,30 @@ public partial class MainViewModel : ObservableObject
 
     public string WorkbenchReportFolderButtonText => IsShowingReportSnapshot ? "选中报告目录" : "打开所在目录";
 
+    public Visibility ReportActionsVisibility => string.IsNullOrWhiteSpace(WorkbenchReportPath)
+        ? Visibility.Collapsed
+        : Visibility.Visible;
+
+    public Visibility WorkbenchActivityVisibility =>
+        IsRunning
+        || IsCancelConfirmationPending
+        || ShouldShowCompletionActions
+        || HasActionableFailure
+        || IsShowingReportSnapshot
+        || !string.IsNullOrWhiteSpace(WorkbenchReportPath)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string WorkbenchActivityTitleText => IsShowingReportSnapshot
+        ? "报告快照"
+        : IsRunning
+            ? "运行详情"
+            : HasActionableFailure
+                ? "处理建议"
+                : ShouldShowCompletionActions
+                    ? "完成摘要"
+                    : "报告操作";
+
     public string WorkbenchContextText => SelectedReport is { } report
         ? $"{report.SourceText} · {report.RunMetaText}"
         : IsRunning && !string.IsNullOrWhiteSpace(ActiveRunSummaryText)
@@ -323,6 +361,13 @@ public partial class MainViewModel : ObservableObject
             : !string.IsNullOrWhiteSpace(ReportPath)
                 ? "报告已生成"
                 : "待开始";
+
+    public Visibility WorkbenchStatusBadgeVisibility =>
+        SelectedReport is not null
+        || IsRunning
+        || !string.IsNullOrWhiteSpace(ReportPath)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     public string RunSetupReadinessText
     {
@@ -514,17 +559,13 @@ public partial class MainViewModel : ObservableObject
     public ReportHistoryViewModel ReportHistory { get; }
 
     [ObservableProperty]
-    public partial bool EnableGlobalHotkeys { get; set; } = true;
+    public partial bool EnableGlobalHotkeys { get; set; }
 
     [ObservableProperty]
     public partial bool EnableQuickActionsShortcut { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(QuickActionsShortcutText))]
     public partial int SelectedQuickActionsShortcutIndex { get; set; } = 2;
-
-    [ObservableProperty]
-    public partial string GlobalHotkeyStatusText { get; set; } = ShellHotkeySnapshot.Disabled.StatusText;
 
     public void PrepareForShellShutdown()
     {
@@ -702,12 +743,16 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyPropertyChangedFor(nameof(CanEditRunConfiguration))]
+    [NotifyPropertyChangedFor(nameof(CancelCommandVisibility))]
+    [NotifyPropertyChangedFor(nameof(StatusProgressVisibility))]
     [NotifyPropertyChangedFor(nameof(RunTelemetryVisibility))]
     [NotifyPropertyChangedFor(nameof(CompletionActionsVisibility))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
     [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityVisibility))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeVisibility))]
     [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
     [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
@@ -723,9 +768,11 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FirstRunGuideTitleText))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideSubtitleText))]
     [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityVisibility))]
     [NotifyPropertyChangedFor(nameof(FailureActionTitleText))]
     [NotifyPropertyChangedFor(nameof(FailureActionBodyText))]
     [NotifyPropertyChangedFor(nameof(CompletionActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityTitleText))]
     [NotifyPropertyChangedFor(nameof(CompletionActionTitleText))]
     [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
     [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
@@ -776,8 +823,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportPath))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportPathText))]
+    [NotifyPropertyChangedFor(nameof(ReportActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityTitleText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeVisibility))]
     [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
     [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
@@ -807,10 +858,14 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(WorkbenchSkippedFiles))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportPath))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportPathText))]
+    [NotifyPropertyChangedFor(nameof(ReportActionsVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityTitleText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportButtonText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportFolderButtonText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeVisibility))]
     [NotifyPropertyChangedFor(nameof(WorkbenchReportDeviceCount))]
     [NotifyPropertyChangedFor(nameof(WorkbenchHighRiskDevices))]
     [NotifyPropertyChangedFor(nameof(WorkbenchTopIssueTypes))]
@@ -905,6 +960,30 @@ public partial class MainViewModel : ObservableObject
     public partial int SelectedBackdropIndex { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PoetryStatusVisibility))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshPoetryStatusCommand))]
+    public partial bool EnablePoetryStatus { get; set; } = true;
+
+    [ObservableProperty]
+    public partial string PoetryServiceUrl { get; set; } = "https://poetry.palemoky.com/";
+
+    [ObservableProperty]
+    public partial int SelectedPoetryLanguageIndex { get; set; }
+
+    [ObservableProperty]
+    public partial string PoetryStatusText { get; set; } = "山重水复疑无路，柳暗花明又一村。";
+
+    [ObservableProperty]
+    public partial string PoetryStatusSourceText { get; set; } = "陆游 · 游山西村";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RefreshPoetryStatusCommand))]
+    public partial bool IsRefreshingPoetryStatus { get; set; }
+
+    public Visibility PoetryStatusVisibility =>
+        EnablePoetryStatus ? Visibility.Visible : Visibility.Collapsed;
+
+    [ObservableProperty]
     public partial bool IsSettingsFeedbackOpen { get; set; }
 
     [ObservableProperty]
@@ -977,13 +1056,6 @@ public partial class MainViewModel : ObservableObject
 
     public string DiagnosticActionText => Diagnostics.ActionText;
 
-    public string QuickActionsShortcutText => SelectedQuickActionsShortcutIndex switch
-    {
-        1 => "快速操作 · Ctrl+Shift+P",
-        2 => "快速操作快捷键已关闭",
-        _ => "快速操作 · Ctrl+K",
-    };
-
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ActiveRunSummaryVisibility))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
@@ -1020,6 +1092,33 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedThemeIndexChanged(int value) => SaveAppearanceSettings();
 
     partial void OnSelectedBackdropIndexChanged(int value) => SaveAppearanceSettings();
+
+    partial void OnEnablePoetryStatusChanged(bool value)
+    {
+        SaveAppearanceSettings();
+        if (value)
+        {
+            _ = RefreshPoetryStatusAsync();
+        }
+    }
+
+    partial void OnPoetryServiceUrlChanged(string value) => SaveAppearanceSettings();
+
+    partial void OnSelectedPoetryLanguageIndexChanged(int value)
+    {
+        var normalized = Math.Clamp(value, 0, 1);
+        if (normalized != value)
+        {
+            SelectedPoetryLanguageIndex = normalized;
+            return;
+        }
+
+        SaveAppearanceSettings();
+        if (EnablePoetryStatus)
+        {
+            _ = RefreshPoetryStatusAsync();
+        }
+    }
 
     partial void OnCloseToTrayOnCloseChanged(bool value) => SavePreferenceSettings();
 
@@ -1116,22 +1215,27 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnEnableGlobalHotkeysChanged(bool value)
     {
-        _globalHotkeySnapshot = value
-            ? _globalHotkeySnapshot with { IsEnabled = true }
-            : ShellHotkeySnapshot.Disabled;
-        ApplyGlobalHotkeySnapshot(_globalHotkeySnapshot);
+        if (value)
+        {
+            EnableGlobalHotkeys = false;
+            return;
+        }
+
         SavePreferenceSettings();
     }
 
     partial void OnEnableQuickActionsShortcutChanged(bool value)
     {
-        if (!value && SelectedQuickActionsShortcutIndex != 2)
+        if (value)
+        {
+            EnableQuickActionsShortcut = false;
+            return;
+        }
+
+        if (SelectedQuickActionsShortcutIndex != 2)
         {
             SelectedQuickActionsShortcutIndex = 2;
-        }
-        else if (value && SelectedQuickActionsShortcutIndex == 2)
-        {
-            SelectedQuickActionsShortcutIndex = 0;
+            return;
         }
 
         SavePreferenceSettings();
@@ -1139,17 +1243,16 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedQuickActionsShortcutIndexChanged(int value)
     {
-        var normalized = Math.Clamp(value, 0, 2);
-        if (normalized != value)
+        if (value != 2)
         {
-            SelectedQuickActionsShortcutIndex = normalized;
+            SelectedQuickActionsShortcutIndex = 2;
             return;
         }
 
-        var enabled = normalized != 2;
-        if (EnableQuickActionsShortcut != enabled)
+        if (EnableQuickActionsShortcut)
         {
-            EnableQuickActionsShortcut = enabled;
+            EnableQuickActionsShortcut = false;
+            return;
         }
 
         SavePreferenceSettings();
@@ -1266,6 +1369,33 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanTestLlmConnection() => !IsTestingLlmConnection;
+
+    private bool CanRefreshPoetryStatus() => EnablePoetryStatus && !IsRefreshingPoetryStatus;
+
+    [RelayCommand(CanExecute = nameof(CanRefreshPoetryStatus))]
+    public async Task RefreshPoetryStatusAsync()
+    {
+        if (!EnablePoetryStatus || IsRefreshingPoetryStatus)
+        {
+            return;
+        }
+
+        IsRefreshingPoetryStatus = true;
+        try
+        {
+            var snapshot = await _poetryStatus.GetRandomAsync(
+                PoetryServiceUrl,
+                SelectedPoetryLanguageIndex);
+            PoetryStatusText = snapshot.Text;
+            PoetryStatusSourceText = string.IsNullOrWhiteSpace(snapshot.Source)
+                ? "诗泉"
+                : snapshot.Source;
+        }
+        finally
+        {
+            IsRefreshingPoetryStatus = false;
+        }
+    }
 
     [RelayCommand(CanExecute = nameof(CanTestLlmConnection))]
     private async Task TestLlmConnectionAsync()
@@ -1835,7 +1965,11 @@ public partial class MainViewModel : ObservableObject
             SkippedFiles,
             ProgressPercent,
             HighRiskDevices.Count,
-            TopIssueTypes.Count);
+            TopIssueTypes.Count,
+            SensorOfflineDevices,
+            SensorFaultRows,
+            SensorMissingRows,
+            SensorSkippedRows);
 
     private void ApplySummary(DetectionBackendEvent evt)
     {
@@ -2294,13 +2428,6 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void RefreshDesktopHealth() => DesktopHealth.Refresh();
 
-    public void ApplyGlobalHotkeySnapshot(ShellHotkeySnapshot snapshot)
-    {
-        _globalHotkeySnapshot = snapshot;
-        GlobalHotkeyStatusText = snapshot.StatusText;
-        RefreshDesktopHealth();
-    }
-
     private void RefreshLocalDiagnostics()
     {
         var snapshot = _diagnostics.BuildLocalSnapshot(BuildDiagnosticsRequest());
@@ -2711,14 +2838,17 @@ public partial class MainViewModel : ObservableObject
             UseProxyForUpdates = UseProxyForUpdates,
             SelectedUpdateChannelIndex = SelectedUpdateChannelIndex,
             UpdateFeedUrl = UpdateFeedUrl,
-            EnableGlobalHotkeys = EnableGlobalHotkeys,
-            EnableQuickActionsShortcut = EnableQuickActionsShortcut,
-            SelectedQuickActionsShortcutIndex = SelectedQuickActionsShortcutIndex,
+            EnableGlobalHotkeys = false,
+            EnableQuickActionsShortcut = false,
+            SelectedQuickActionsShortcutIndex = 2,
             SelectedLogRetentionIndex = SelectedLogRetentionIndex,
             SelectedRecentReportLimitIndex = ReportHistory.SelectedRecentReportLimitIndex,
             RecentReports = RecentReports.ToList(),
             SelectedThemeIndex = SelectedThemeIndex,
             SelectedBackdropIndex = SelectedBackdropIndex,
+            EnablePoetryStatus = EnablePoetryStatus,
+            PoetryServiceUrl = PoetryServiceUrl,
+            SelectedPoetryLanguageIndex = SelectedPoetryLanguageIndex,
             WindowLeft = WindowLeft,
             WindowTop = WindowTop,
             WindowWidth = WindowWidth,
@@ -2754,13 +2884,16 @@ public partial class MainViewModel : ObservableObject
         UseProxyForUpdates = defaults.UseProxyForUpdates;
         SelectedUpdateChannelIndex = defaults.SelectedUpdateChannelIndex;
         UpdateFeedUrl = defaults.UpdateFeedUrl;
-        EnableGlobalHotkeys = defaults.EnableGlobalHotkeys;
-        SelectedQuickActionsShortcutIndex = defaults.SelectedQuickActionsShortcutIndex;
-        EnableQuickActionsShortcut = defaults.EnableQuickActionsShortcut;
+        EnableGlobalHotkeys = false;
+        SelectedQuickActionsShortcutIndex = 2;
+        EnableQuickActionsShortcut = false;
         RuntimeLogs.SelectedRetentionIndex = defaults.SelectedLogRetentionIndex;
         ReportHistory.SelectedRecentReportLimitIndex = defaults.SelectedRecentReportLimitIndex;
         SelectedThemeIndex = defaults.SelectedThemeIndex;
         SelectedBackdropIndex = defaults.SelectedBackdropIndex;
+        EnablePoetryStatus = defaults.EnablePoetryStatus;
+        PoetryServiceUrl = defaults.PoetryServiceUrl;
+        SelectedPoetryLanguageIndex = defaults.SelectedPoetryLanguageIndex;
 
         try
         {
@@ -2895,13 +3028,6 @@ public partial class MainViewModel : ObservableObject
     private void UpdateStartupIntegrationStatus(StartupIntegrationSnapshot status)
     {
         StartupIntegrationStatusText = status.StatusText;
-    }
-
-    private ShellHotkeySnapshot BuildHotkeySnapshot()
-    {
-        return EnableGlobalHotkeys
-            ? _globalHotkeySnapshot
-            : ShellHotkeySnapshot.Disabled;
     }
 
     private void AddRecentReport(string path, DetectionBackendEvent? evt)

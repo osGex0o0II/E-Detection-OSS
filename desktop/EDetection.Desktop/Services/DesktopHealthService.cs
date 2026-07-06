@@ -23,8 +23,6 @@ public sealed class DesktopHealthService
         "Uninstall-Desktop.ps1",
         "Test-DesktopPackageHealth.ps1",
         "Test-DesktopVisualSmoke.ps1",
-        "Test-DesktopKeyboardSmoke.ps1",
-        "Test-DesktopGlobalHotkeySmoke.ps1",
         "Test-DesktopTrayMenuSmoke.ps1",
         "Test-DesktopSingleInstanceSmoke.ps1",
         "Test-DesktopSessionEndingSmoke.ps1",
@@ -40,8 +38,7 @@ public sealed class DesktopHealthService
     public DesktopHealthSnapshot Build(
         StartupIntegrationSnapshot startupStatus,
         SettingsService settings,
-        string pythonExecutable,
-        ShellHotkeySnapshot hotkeys)
+        string pythonExecutable)
     {
         var notificationText = BuildNotificationText();
         var startupText = startupStatus.StatusText;
@@ -49,15 +46,13 @@ public sealed class DesktopHealthService
         var packageText = BuildPackageText();
         var pythonBridgeText = BuildPythonBridgeText(pythonExecutable);
         var installText = BuildInstallText();
-        var hotkeyText = hotkeys.StatusText;
         var attentionCount = CountAttention(
             notificationText,
             startupText,
             settingsText,
             packageText,
             pythonBridgeText,
-            installText,
-            hotkeyText);
+            installText);
 
         return new DesktopHealthSnapshot(
             attentionCount == 0
@@ -68,8 +63,7 @@ public sealed class DesktopHealthService
             settingsText,
             packageText,
             pythonBridgeText,
-            installText,
-            hotkeyText);
+            installText);
     }
 
     private static string BuildNotificationText()

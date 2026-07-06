@@ -56,7 +56,7 @@ public sealed class AppSettings
 
     public string UpdateFeedUrl { get; set; } = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest";
 
-    public bool EnableGlobalHotkeys { get; set; } = true;
+    public bool EnableGlobalHotkeys { get; set; }
 
     public bool EnableQuickActionsShortcut { get; set; }
 
@@ -71,6 +71,12 @@ public sealed class AppSettings
     public int SelectedThemeIndex { get; set; } = 0;
 
     public int SelectedBackdropIndex { get; set; } = 0;
+
+    public bool EnablePoetryStatus { get; set; } = true;
+
+    public string PoetryServiceUrl { get; set; } = "https://poetry.palemoky.com/";
+
+    public int SelectedPoetryLanguageIndex { get; set; }
 
     public int WindowLeft { get; set; } = -1;
 

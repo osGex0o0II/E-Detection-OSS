@@ -38,16 +38,35 @@ public sealed class RunEventService
         $"高风险设备 {state.HighRiskDeviceCount} 个，异常类型 {state.TopIssueTypeCount} 类。";
 
     public string BuildRunCompletedLogMessage(RunEventState state) =>
-        $"异常 {state.AnomalyRecords} 条，跳过 {state.SkippedFiles} 个文件。";
+        HasFaultResult(state)
+            ? $"发现故障: 异常 {state.AnomalyRecords} 条，传感器问题 {BuildSensorIssueCount(state)} 项，跳过 {state.SkippedFiles} 个文件。"
+            : $"检测成功: 已处理 {state.ProcessedFiles}/{state.TotalFiles} 个文件，未发现异常。";
 
     public DesktopNotificationRequest BuildRunCompletedNotification(
         RunEventState state,
-        string? reportPath) =>
-        new(
-            DesktopNotificationKind.Success,
-            "检测完成",
-            $"异常 {state.AnomalyRecords} 条，异常文件 {state.AnomalyFiles} 个，跳过 {state.SkippedFiles} 个。",
-            string.IsNullOrWhiteSpace(reportPath) ? null : reportPath);
+        string? reportPath)
+    {
+        var normalizedReportPath = string.IsNullOrWhiteSpace(reportPath) ? null : reportPath;
+        if (!HasFaultResult(state))
+        {
+            return new DesktopNotificationRequest(
+                DesktopNotificationKind.Success,
+                "检测成功",
+                $"已完成 {state.ProcessedFiles}/{state.TotalFiles} 个文件，未发现异常或传感器故障。",
+                normalizedReportPath);
+        }
+
+        var sensorIssues = BuildSensorIssueCount(state);
+        var message = sensorIssues > 0
+            ? $"异常 {state.AnomalyRecords} 条，异常文件 {state.AnomalyFiles} 个，传感器问题 {sensorIssues} 项，跳过 {state.SkippedFiles} 个。"
+            : $"异常 {state.AnomalyRecords} 条，异常文件 {state.AnomalyFiles} 个，跳过 {state.SkippedFiles} 个。";
+
+        return new DesktopNotificationRequest(
+            DesktopNotificationKind.Warning,
+            "检测发现故障",
+            message,
+            normalizedReportPath);
+    }
 
     private static RunEventAction BuildRunStarted(DetectionBackendEvent evt)
     {
@@ -141,4 +160,16 @@ public sealed class RunEventService
                 failure),
         };
     }
+
+    private static bool HasFaultResult(RunEventState state) =>
+        state.AnomalyRecords > 0
+        || state.AnomalyFiles > 0
+        || state.SensorOfflineDevices > 0
+        || state.SensorFaultRows > 0
+        || state.SensorMissingRows > 0;
+
+    private static int BuildSensorIssueCount(RunEventState state) =>
+        state.SensorOfflineDevices
+        + state.SensorFaultRows
+        + state.SensorMissingRows;
 }

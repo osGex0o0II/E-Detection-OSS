@@ -56,13 +56,13 @@
                         Style="{StaticResource TitleBarIconButtonStyle}"
                         Click="SettingsButton_Click"
                         AutomationProperties.Name="设置"
-                        ToolTipService.ToolTip="设置 (Ctrl+S)">
+                        ToolTipService.ToolTip="设置">
                     <FontIcon Glyph="&#xE713;" FontSize="14" />
                 </Button>
                 <Button Style="{StaticResource TitleBarIconButtonStyle}"
                         Click="AboutButton_Click"
                         AutomationProperties.Name="关于"
-                        ToolTipService.ToolTip="关于 (Ctrl+I)">
+                        ToolTipService.ToolTip="关于">
                     <FontIcon Glyph="&#xE946;" FontSize="14" />
                 </Button>
             </StackPanel>
@@ -82,48 +82,13 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="StatusCommandColumn" Width="Auto" />
                     <ColumnDefinition x:Name="StatusTextColumn" Width="*" />
                     <ColumnDefinition x:Name="StatusProgressColumn" Width="220" />
+                    <ColumnDefinition x:Name="StatusPoetryColumn" Width="1.4*" />
                 </Grid.ColumnDefinitions>
 
-                <CommandBar x:Name="PrimaryCommandBar"
-                            Background="Transparent"
-                            DefaultLabelPosition="Right"
-                            IsDynamicOverflowEnabled="True">
-                    <AppBarButton x:Name="StartButton"
-                                  Label="开始检测"
-                                  AutomationProperties.Name="开始检测"
-                                  ToolTipService.ToolTip="开始检测 (F5)"
-                                  Command="{Binding StartCommand}">
-                        <AppBarButton.Icon>
-                            <FontIcon Glyph="&#xE768;" FontSize="14" />
-                        </AppBarButton.Icon>
-                    </AppBarButton>
-                    <AppBarButton x:Name="CancelButton"
-                                  Label="{Binding CancelButtonText}"
-                                  AutomationProperties.Name="{Binding CancelButtonText}"
-                                  ToolTipService.ToolTip="取消检测 (Esc)"
-                                  Command="{Binding CancelCommand}">
-                        <AppBarButton.Icon>
-                            <FontIcon Glyph="&#xE711;" FontSize="14" />
-                        </AppBarButton.Icon>
-                    </AppBarButton>
-                    <CommandBar.SecondaryCommands>
-                        <AppBarButton x:Name="DiagnosticsButton"
-                                      Label="检查状态"
-                                      AutomationProperties.Name="检查状态"
-                                      ToolTipService.ToolTip="检查状态 (F6)"
-                                      Command="{Binding RefreshDiagnosticsCommand}">
-                            <AppBarButton.Icon>
-                                <FontIcon Glyph="&#xE895;" FontSize="14" />
-                            </AppBarButton.Icon>
-                        </AppBarButton>
-                    </CommandBar.SecondaryCommands>
-                </CommandBar>
-
                 <StackPanel x:Name="StatusTextPanel"
-                            Grid.Column="1"
+                            Grid.Column="0"
                             Spacing="2"
                             VerticalAlignment="Center">
                     <Grid ColumnSpacing="12">
@@ -136,6 +101,7 @@
                                    TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="1"
                                    Text="{Binding WorkbenchStatusBadgeText}"
+                                   Visibility="{Binding WorkbenchStatusBadgeVisibility}"
                                    MaxWidth="320"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextTrimming="CharacterEllipsis" />
@@ -147,7 +113,8 @@
                 </StackPanel>
 
                 <StackPanel x:Name="ProgressPanel"
-                            Grid.Column="2"
+                            Grid.Column="1"
+                            Visibility="{Binding StatusProgressVisibility}"
                             Spacing="5"
                             VerticalAlignment="Center">
                     <Grid>
@@ -167,6 +134,40 @@
                                  Maximum="100"
                                  Value="{Binding WorkbenchProgressPercent}" />
                 </StackPanel>
+
+                <Grid x:Name="PoetryPanel"
+                      Grid.Column="2"
+                      ColumnSpacing="10"
+                      Visibility="{Binding PoetryStatusVisibility}"
+                      VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Glyph="&#xE82D;"
+                              FontSize="15"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                              VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Spacing="1">
+                        <TextBlock Text="{Binding PoetryStatusText}"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding PoetryStatusSourceText}"
+                                   FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="2"
+                            Command="{Binding RefreshPoetryStatusCommand}"
+                            Style="{StaticResource TitleBarIconButtonStyle}"
+                            Width="32"
+                            Height="32"
+                            AutomationProperties.Name="刷新诗词"
+                            ToolTipService.ToolTip="刷新诗词">
+                        <FontIcon Glyph="&#xE72C;" FontSize="12" />
+                    </Button>
+                </Grid>
             </Grid>
         </Border>
 

@@ -8,8 +8,7 @@ public sealed partial class DesktopHealthViewModel(
     DesktopHealthService health,
     StartupService startup,
     SettingsService settings,
-    Func<string> pythonExecutable,
-    Func<ShellHotkeySnapshot> hotkeys) : ObservableObject
+    Func<string> pythonExecutable) : ObservableObject
 {
     [ObservableProperty]
     public partial string SummaryText { get; set; } = "应用状态待检查";
@@ -32,16 +31,12 @@ public sealed partial class DesktopHealthViewModel(
     [ObservableProperty]
     public partial string InstallText { get; set; } = "安装形态待检查";
 
-    [ObservableProperty]
-    public partial string HotkeyText { get; set; } = "全局热键待检查";
-
     public void Refresh()
     {
         var snapshot = health.Build(
             startup.GetStatus(),
             settings,
-            pythonExecutable(),
-            hotkeys());
+            pythonExecutable());
         Apply(snapshot);
     }
 
@@ -54,6 +49,5 @@ public sealed partial class DesktopHealthViewModel(
         PackageText = snapshot.PackageText;
         PythonBridgeText = snapshot.PythonBridgeText;
         InstallText = snapshot.InstallText;
-        HotkeyText = snapshot.HotkeyText;
     }
 }

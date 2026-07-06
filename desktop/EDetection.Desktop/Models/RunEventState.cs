@@ -8,4 +8,8 @@ public sealed record RunEventState(
     int SkippedFiles,
     double ProgressPercent,
     int HighRiskDeviceCount,
-    int TopIssueTypeCount);
+    int TopIssueTypeCount,
+    int SensorOfflineDevices,
+    int SensorFaultRows,
+    int SensorMissingRows,
+    int SensorSkippedRows);

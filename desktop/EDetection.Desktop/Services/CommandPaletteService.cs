@@ -13,14 +13,12 @@ public sealed class CommandPaletteService
             new(
                 "选择输入目录",
                 "选择包含 CSV 文件的根目录",
-                "Ctrl+O",
                 "\uE8B7",
                 "运行",
                 context.BrowseInputDirectoryAsync),
             FromCommand(
                 "开始检测",
                 "运行当前输入目录的异常检测",
-                "F5",
                 "\uE768",
                 "运行",
                 context.StartCommand,
@@ -28,7 +26,6 @@ public sealed class CommandPaletteService
             FromCommand(
                 "取消检测",
                 "停止当前正在运行的检测",
-                "Esc",
                 "\uE711",
                 "运行",
                 context.CancelCommand,
@@ -36,7 +33,6 @@ public sealed class CommandPaletteService
             FromCommand(
                 "检查状态",
                 "检查输入、阈值设置与检测组件",
-                "F6",
                 "\uE895",
                 "检查",
                 context.DiagnosticsCommand,
@@ -44,15 +40,13 @@ public sealed class CommandPaletteService
             FromCommand(
                 "复制状态详情",
                 "复制当前输入、阈值设置与组件状态摘要",
-                "",
                 "\uE8C8",
                 "检查",
                 context.ViewModel?.CopyDiagnosticsCommand,
                 null),
             FromCommand(
                 "刷新应用状态",
-                "重新检查通知、启动项、包完整性和全局热键状态",
-                "",
+                "重新检查通知、启动项和包完整性",
                 "\uE72C",
                 "检查",
                 context.ViewModel?.RefreshDesktopHealthCommand,
@@ -60,35 +54,43 @@ public sealed class CommandPaletteService
             new(
                 "打开设置",
                 "调整路径、报告、运行记录、外观与通知",
-                "Ctrl+S",
                 "\uE713",
                 "设置",
                 context.OpenSettingsAsync),
+            FromCommand(
+                "刷新顶部诗词",
+                "从诗词接口获取一条新的顶部诗词",
+                "\uE72C",
+                "外观",
+                context.ViewModel?.RefreshPoetryStatusCommand,
+                null),
+            new(
+                "打开诗词设置",
+                "配置顶部诗词显示、接口地址与语言",
+                "\uE82D",
+                "外观",
+                context.OpenAppearanceSettingsAsync),
             new(
                 "打开阈值设置",
                 "调整电压、电流、温度、冻结等检测阈值",
-                "",
                 "\uE9D2",
                 "设置",
                 context.OpenThresholdSettingsAsync),
             new(
                 "打开检测规则",
                 "启用或关闭电流、功率因数和详细输出规则",
-                "",
                 "\uE9D5",
                 "设置",
                 context.OpenDetectionRulesAsync),
             new(
                 "打开软件更新设置",
                 "查看版本、更新通道、更新源与代理设置",
-                "",
                 "\uE895",
                 "更新",
                 context.OpenUpdateSettingsAsync),
             FromCommand(
                 "检查软件更新",
                 "立即检查 E-Detection 是否有新版本",
-                "",
                 "\uE895",
                 "更新",
                 context.ViewModel?.CheckForUpdatesCommand,
@@ -96,7 +98,6 @@ public sealed class CommandPaletteService
             FromCommand(
                 "打开更新页面",
                 "打开最新版本或配置的更新源页面",
-                "",
                 "\uE8A7",
                 "更新",
                 context.ViewModel?.OpenUpdateFeedCommand,
@@ -104,7 +105,6 @@ public sealed class CommandPaletteService
             FromCommand(
                 "打开最新报告",
                 "打开当前检测或选中历史报告的 Excel 文件",
-                "",
                 "\uE8A5",
                 "报告",
                 context.ViewModel?.OpenCurrentReportCommand,
@@ -112,7 +112,6 @@ public sealed class CommandPaletteService
             FromCommand(
                 "打开报告目录",
                 "在资源管理器中打开当前报告所在目录",
-                "",
                 "\uE8B7",
                 "报告",
                 context.ViewModel?.OpenCurrentReportFolderCommand,
@@ -120,7 +119,6 @@ public sealed class CommandPaletteService
             FromCommand(
                 "复制报告路径",
                 "复制当前检测或选中历史报告的路径",
-                "",
                 "\uE8C8",
                 "报告",
                 context.ViewModel?.CopyCurrentReportPathCommand,
@@ -128,21 +126,18 @@ public sealed class CommandPaletteService
             new(
                 "选择阈值配置文件",
                 "选择检测阈值和规则配置文件",
-                "Ctrl+1",
                 "\uE8A5",
                 "设置",
                 context.BrowseConfigPathAsync),
             new(
                 "选择检测组件",
                 "选择检测组件运行程序",
-                "Ctrl+2",
                 "\uE756",
                 "设置",
                 context.BrowsePythonExecutableAsync),
             new(
                 "关于 E-Detection",
                 "查看版本、运行时与架构",
-                "Ctrl+I",
                 "\uE946",
                 "窗口",
                 context.OpenAboutAsync),
@@ -185,7 +180,6 @@ public sealed class CommandPaletteService
         new(
             $"打开最近报告: {report.FileName}",
             report.Summary,
-            "最近",
             "\uE8A5",
             "历史",
             () =>
@@ -198,7 +192,6 @@ public sealed class CommandPaletteService
     private static CommandPaletteAction FromCommand(
         string title,
         string description,
-        string shortcut,
         string glyph,
         string category,
         ICommand? command,
@@ -206,7 +199,6 @@ public sealed class CommandPaletteService
         new(
             title,
             description,
-            shortcut,
             glyph,
             category,
             () => ExecuteCommandAsync(command, parameter),
@@ -229,8 +221,9 @@ public sealed class CommandPaletteService
         "报告" => 2,
         "历史" => 3,
         "窗口" => 4,
-        "设置" => 5,
-        "更新" => 6,
+        "外观" => 5,
+        "设置" => 6,
+        "更新" => 7,
         _ => 99,
     };
 }
@@ -247,6 +240,7 @@ public sealed record CommandPaletteContext(
     Func<Task> BrowseConfigPathAsync,
     Func<Task> BrowsePythonExecutableAsync,
     Func<Task> OpenSettingsAsync,
+    Func<Task> OpenAppearanceSettingsAsync,
     Func<Task> OpenThresholdSettingsAsync,
     Func<Task> OpenDetectionRulesAsync,
     Func<Task> OpenUpdateSettingsAsync,

@@ -26,7 +26,6 @@ public sealed partial class MainWindow : Window
     private readonly NtfyNotificationService _ntfyNotifications;
     private readonly LlmAssistantService _llmAssistant;
     private readonly ShellResourceService _shellResources = new();
-    private readonly ShellHotkeyService _shellHotkeys = new();
     private readonly TrayIconService _trayIcon;
     private readonly WindowMessageMonitor _windowMessageMonitor;
     private readonly nint _windowHandle;
@@ -105,7 +104,6 @@ public sealed partial class MainWindow : Window
         ApplyAppearance();
         UpdateShellStatus();
         UpdateTrayCommands();
-        RegisterGlobalHotkeys();
     }
 
     private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
@@ -114,6 +112,7 @@ public sealed partial class MainWindow : Window
         await Task.Delay(TimeSpan.FromSeconds(2));
         if (!_isClosed)
         {
+            await ViewModel.RefreshPoetryStatusAsync();
             await ViewModel.CheckForUpdatesInBackgroundAsync();
         }
     }
@@ -136,7 +135,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Move(new PointInt32(-32000, -32000));
     }
 
-    public void HideForStartup() => HideToTray(showBalloon: false, savePlacement: false);
+    public void HideForStartup() => HideToTray(savePlacement: false);
 
     public void RestoreFromExternalActivation() => ShowFromTray();
 
@@ -149,13 +148,6 @@ public sealed partial class MainWindow : Window
 
     private void OnWindowMessageReceived(object? sender, WindowMessageEventArgs e)
     {
-        if (e.Message.MessageId == ShellHotkeyService.WmHotkey)
-        {
-            HandleGlobalHotkey(_shellHotkeys.ResolveAction(e.Message.WParam));
-            e.Handled = true;
-            return;
-        }
-
         if (e.Message.MessageId == WmGetMinMaxInfo)
         {
             ApplyMinMaxInfo(e.Message.LParam);
@@ -199,20 +191,6 @@ public sealed partial class MainWindow : Window
     {
         MarkSessionEnding();
         ViewModel.PrepareForShellShutdown();
-    }
-
-    private void RegisterGlobalHotkeys()
-    {
-        var snapshot = _shellHotkeys.Register(_windowHandle, ViewModel.EnableGlobalHotkeys);
-        ViewModel.ApplyGlobalHotkeySnapshot(snapshot);
-    }
-
-    private void HandleGlobalHotkey(ShellHotkeyAction action)
-    {
-        if (action is ShellHotkeyAction.RestoreWorkbench)
-        {
-            ShowFromTray();
-        }
     }
 
     private void HandleDesktopNotificationActivation(DesktopNotificationActivation activation)
@@ -288,11 +266,6 @@ public sealed partial class MainWindow : Window
         {
             UpdateShellStatus();
             UpdateTrayCommands();
-        }
-
-        if (e.PropertyName is nameof(MainViewModel.EnableGlobalHotkeys))
-        {
-            RegisterGlobalHotkeys();
         }
 
         if (e.PropertyName is nameof(MainViewModel.ReportPath)
@@ -383,7 +356,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void HideToTray(bool showBalloon = true, bool savePlacement = true)
+    private void HideToTray(bool savePlacement = true)
     {
         if (_isHiddenToTray)
         {
@@ -400,12 +373,6 @@ public sealed partial class MainWindow : Window
         AppWindow.Hide();
         ShowWindow(_windowHandle, ShowWindowCommand.Hide);
         _shellResources.ReleaseAfterHideToTray();
-        if (showBalloon)
-        {
-            _trayIcon.ShowBalloon(
-                "E-Detection 仍在运行",
-                "双击托盘图标可恢复工作台。");
-        }
     }
 
     private void ShowFromTray()
@@ -447,7 +414,6 @@ public sealed partial class MainWindow : Window
         }
 
         _taskbarProgress.Update(_windowHandle, TaskbarProgressKind.None, 0);
-        _shellHotkeys.Unregister(_windowHandle);
         _desktopNotifications.Activated -= DesktopNotifications_Activated;
         _desktopNotifications.Unregister();
         _windowMessageMonitor.WindowMessageReceived -= OnWindowMessageReceived;

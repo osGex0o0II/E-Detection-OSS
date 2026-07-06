@@ -98,6 +98,19 @@ public sealed class SettingsService
             }
         }
 
+        if (settings.SettingsVersion < 8)
+        {
+            settings.EnablePoetryStatus = true;
+            settings.PoetryServiceUrl = "https://poetry.palemoky.com/";
+            settings.SelectedPoetryLanguageIndex = 0;
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.PoetryServiceUrl))
+        {
+            settings.PoetryServiceUrl = "https://poetry.palemoky.com/";
+        }
+
+        settings.SelectedPoetryLanguageIndex = Math.Clamp(settings.SelectedPoetryLanguageIndex, 0, 1);
         settings.SettingsVersion = CurrentSettingsVersion;
         return true;
     }
