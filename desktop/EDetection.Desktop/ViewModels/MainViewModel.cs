@@ -13,10 +13,10 @@ namespace EDetection.Desktop.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const int MinWindowWidthDip = 1240;
-    public const int MinWindowHeightDip = 720;
-    public const int DefaultWindowWidthDip = MinWindowWidthDip;
-    public const int DefaultWindowHeightDip = MinWindowHeightDip;
+    public const int MinWindowWidthDip = 960;
+    public const int MinWindowHeightDip = 640;
+    public const int DefaultWindowWidthDip = 1240;
+    public const int DefaultWindowHeightDip = 720;
 
     private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
