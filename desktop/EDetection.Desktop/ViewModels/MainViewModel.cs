@@ -20,6 +20,7 @@ public partial class MainViewModel : ObservableObject
     public const int DefaultWindowHeightDip = 720;
     private const string WindowsNotificationSettingsUri = "ms-settings:notifications";
     private const string WindowsProxySettingsUri = "ms-settings:network-proxy";
+    private const string WindowsStartupAppsSettingsUri = "ms-settings:startupapps";
 
     private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
@@ -1332,6 +1333,14 @@ public partial class MainViewModel : ObservableObject
         OpenUri(WindowsNotificationSettingsUri);
         ShowSettingsFeedback("已打开 Windows 通知设置。", InfoBarSeverity.Informational);
         AddLog("桌面通知", "已打开 Windows 通知设置。");
+    }
+
+    [RelayCommand]
+    private void OpenSystemStartupSettings()
+    {
+        OpenUri(WindowsStartupAppsSettingsUri);
+        ShowSettingsFeedback("已打开 Windows 启动应用设置。", InfoBarSeverity.Informational);
+        AddLog("窗口", "已打开 Windows 启动应用设置。");
     }
 
     private bool CanSendTestNtfyNotification() => !IsSendingTestNtfyNotification;

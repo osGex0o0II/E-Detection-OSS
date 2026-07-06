@@ -428,6 +428,7 @@ try {
     $openWindowsNotificationSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 通知设置" $WaitSeconds
     $startupTrayToggle = Wait-ForAutomationName $mainWindow.Handle "启动时隐藏到托盘" $WaitSeconds
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
+    $openWindowsStartupSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 启动应用设置" $WaitSeconds
     $globalHotkeyToggle = Wait-ForAutomationName $mainWindow.Handle "全局热键" $WaitSeconds
     $quickActionsToggle = Wait-ForAutomationName $mainWindow.Handle "快速操作快捷键" $WaitSeconds
     $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手" $WaitSeconds
@@ -508,6 +509,7 @@ try {
         OpenWindowsNotificationSettingsButton = $openWindowsNotificationSettingsButton
         StartupTrayToggle = $startupTrayToggle
         AutoStartToggle = $autoStartToggle
+        OpenWindowsStartupSettingsButton = $openWindowsStartupSettingsButton
         GlobalHotkeyToggle = $globalHotkeyToggle
         QuickActionsToggle = $quickActionsToggle
         LlmSection = $llmSection
