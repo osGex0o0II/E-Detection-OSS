@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using EDetection.Desktop.Models;
@@ -6,9 +5,12 @@ using EDetection.Desktop.ViewModels;
 
 namespace EDetection.Desktop.Services;
 
-public sealed class NtfyNotificationService(SecureCredentialService credentials)
+public sealed class NtfyNotificationService(
+    SecureCredentialService credentials,
+    NetworkProxyService? networkProxy = null)
 {
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(8);
+    private readonly NetworkProxyService _networkProxy = networkProxy ?? new NetworkProxyService(credentials);
 
     public async Task<bool> TrySendAsync(
         DesktopNotificationRequest request,
@@ -23,7 +25,7 @@ public sealed class NtfyNotificationService(SecureCredentialService credentials)
         }
 
         var endpoint = BuildTopicEndpoint(settings.NtfyServerUrl, settings.NtfyTopic);
-        using var handler = BuildHandler(settings);
+        using var handler = _networkProxy.BuildHandler(settings, settings.UseProxyForNotifications);
         using var client = new HttpClient(handler)
         {
             Timeout = SendTimeout,
@@ -46,30 +48,6 @@ public sealed class NtfyNotificationService(SecureCredentialService credentials)
         using var response = await client.SendAsync(message, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         return true;
-    }
-
-    private HttpClientHandler BuildHandler(MainViewModel settings)
-    {
-        var handler = new HttpClientHandler();
-        if (!settings.EnableNetworkProxy
-            || !settings.UseProxyForNotifications
-            || string.IsNullOrWhiteSpace(settings.ProxyAddress))
-        {
-            return handler;
-        }
-
-        var proxy = new WebProxy(settings.ProxyAddress);
-        if (settings.ProxyRequiresAuthentication
-            && !string.IsNullOrWhiteSpace(settings.ProxyUserName))
-        {
-            proxy.Credentials = new NetworkCredential(
-                settings.ProxyUserName,
-                credentials.GetProxyPassword());
-        }
-
-        handler.UseProxy = true;
-        handler.Proxy = proxy;
-        return handler;
     }
 
     private static Uri BuildTopicEndpoint(string serverUrl, string topic)

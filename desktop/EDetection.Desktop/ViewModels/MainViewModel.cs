@@ -30,6 +30,7 @@ public partial class MainViewModel : ObservableObject
     private readonly SecureCredentialService _credentials;
     private readonly NtfyNotificationService _ntfyNotifications;
     private readonly LlmAssistantService _llmAssistant;
+    private readonly NetworkProxyService _networkProxy;
     private readonly UpdateCheckService _updateCheck;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
@@ -56,6 +57,7 @@ public partial class MainViewModel : ObservableObject
         SecureCredentialService? credentials = null,
         NtfyNotificationService? ntfyNotifications = null,
         LlmAssistantService? llmAssistant = null,
+        NetworkProxyService? networkProxy = null,
         UpdateCheckService? updateCheck = null,
         DesktopHealthService? desktopHealth = null)
     {
@@ -70,6 +72,7 @@ public partial class MainViewModel : ObservableObject
         _credentials = credentials ?? new SecureCredentialService();
         _ntfyNotifications = ntfyNotifications ?? new NtfyNotificationService(_credentials);
         _llmAssistant = llmAssistant ?? new LlmAssistantService(_credentials);
+        _networkProxy = networkProxy ?? new NetworkProxyService(_credentials);
         _updateCheck = updateCheck ?? new UpdateCheckService();
         Diagnostics = new DiagnosticsViewModel();
         RunTelemetry = new RunTelemetryViewModel(runTelemetry);
@@ -660,6 +663,10 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string ProxyPasswordStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(TestNetworkProxyCommand))]
+    public partial bool IsTestingNetworkProxy { get; set; }
 
     [ObservableProperty]
     public partial bool EnableUpdateChecks { get; set; } = true;
@@ -1348,6 +1355,32 @@ public partial class MainViewModel : ObservableObject
     private void ClearProxyPassword()
     {
         ClearSecureSecret(_credentials.ClearProxyPassword, "代理密码已清除。");
+    }
+
+    private bool CanTestNetworkProxy() => !IsTestingNetworkProxy;
+
+    [RelayCommand(CanExecute = nameof(CanTestNetworkProxy))]
+    private async Task TestNetworkProxyAsync()
+    {
+        IsTestingNetworkProxy = true;
+        try
+        {
+            await _networkProxy.TestProxyAsync(this);
+            ShowSettingsFeedback("代理连接测试成功。", InfoBarSeverity.Success);
+            AddLog("网络代理", "代理连接测试成功。");
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or TaskCanceledException
+                                   or UriFormatException)
+        {
+            ShowSettingsFeedback($"代理连接测试失败: {ex.Message}", InfoBarSeverity.Warning);
+            AddLog("网络代理提醒", $"代理连接测试失败: {ex.Message}");
+        }
+        finally
+        {
+            IsTestingNetworkProxy = false;
+        }
     }
 
     private void SaveSecureSecret(

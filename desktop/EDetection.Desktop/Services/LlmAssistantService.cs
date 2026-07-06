@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -6,9 +5,12 @@ using EDetection.Desktop.ViewModels;
 
 namespace EDetection.Desktop.Services;
 
-public sealed class LlmAssistantService(SecureCredentialService credentials)
+public sealed class LlmAssistantService(
+    SecureCredentialService credentials,
+    NetworkProxyService? networkProxy = null)
 {
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+    private readonly NetworkProxyService _networkProxy = networkProxy ?? new NetworkProxyService(credentials);
 
     public async Task<string> TestConnectionAsync(
         MainViewModel settings,
@@ -75,7 +77,7 @@ public sealed class LlmAssistantService(SecureCredentialService credentials)
             throw new InvalidOperationException("请先保存 LLM API Key。");
         }
 
-        using var handler = BuildHandler(settings);
+        using var handler = _networkProxy.BuildHandler(settings, settings.UseProxyForLlm);
         using var client = new HttpClient(handler)
         {
             Timeout = RequestTimeout,
@@ -91,30 +93,6 @@ public sealed class LlmAssistantService(SecureCredentialService credentials)
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
         return ExtractAssistantMessage(document.RootElement);
-    }
-
-    private HttpClientHandler BuildHandler(MainViewModel settings)
-    {
-        var handler = new HttpClientHandler();
-        if (!settings.EnableNetworkProxy
-            || !settings.UseProxyForLlm
-            || string.IsNullOrWhiteSpace(settings.ProxyAddress))
-        {
-            return handler;
-        }
-
-        var proxy = new WebProxy(settings.ProxyAddress);
-        if (settings.ProxyRequiresAuthentication
-            && !string.IsNullOrWhiteSpace(settings.ProxyUserName))
-        {
-            proxy.Credentials = new NetworkCredential(
-                settings.ProxyUserName,
-                credentials.GetProxyPassword());
-        }
-
-        handler.UseProxy = true;
-        handler.Proxy = proxy;
-        return handler;
     }
 
     private static Uri BuildEndpoint(string endpoint)
