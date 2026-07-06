@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using EDetection.Desktop.Models;
 using EDetection.Desktop.Services;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace EDetection.Desktop.ViewModels;
@@ -664,6 +665,15 @@ public partial class MainViewModel : ObservableObject
     public partial int SelectedBackdropIndex { get; set; }
 
     [ObservableProperty]
+    public partial bool IsSettingsFeedbackOpen { get; set; }
+
+    [ObservableProperty]
+    public partial string SettingsFeedbackText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial InfoBarSeverity SettingsFeedbackSeverity { get; set; } = InfoBarSeverity.Informational;
+
+    [ObservableProperty]
     public partial double VoltageMinThreshold { get; set; } = 353.0;
 
     [ObservableProperty]
@@ -910,10 +920,14 @@ public partial class MainViewModel : ObservableObject
     private void SaveSettingsFromPage()
     {
         SaveSettings();
-        SaveDetectionConfig();
+        var thresholdsSaved = SaveDetectionConfig();
         RefreshDesktopHealth();
         RefreshLocalDiagnostics();
-        AddLog("设置", "设置已保存。");
+        if (thresholdsSaved)
+        {
+            ShowSettingsFeedback("设置已保存。", InfoBarSeverity.Success);
+            AddLog("设置", "设置已保存。");
+        }
     }
 
     [RelayCommand]
@@ -921,12 +935,16 @@ public partial class MainViewModel : ObservableObject
     {
         ApplySettingsDefaults(_settings.CreateDefault());
         ApplyDetectionConfig(_detectionConfig.CreateDefault());
-        SaveDetectionConfig();
+        var thresholdsSaved = SaveDetectionConfig();
         SaveSettings();
         RefreshDesktopHealth();
         RefreshLocalDiagnostics();
         AppearanceChanged?.Invoke(this, EventArgs.Empty);
-        AddLog("设置", "设置已恢复默认值。");
+        if (thresholdsSaved)
+        {
+            ShowSettingsFeedback("设置已恢复默认值。", InfoBarSeverity.Success);
+            AddLog("设置", "设置已恢复默认值。");
+        }
     }
 
     private void ReportHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -2079,16 +2097,27 @@ public partial class MainViewModel : ObservableObject
         DetailOutputEnabled = DetailOutputEnabled,
     };
 
-    private void SaveDetectionConfig()
+    private bool SaveDetectionConfig()
     {
         try
         {
             _detectionConfig.Save(ConfigPath, CaptureDetectionConfig());
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            AddLog("设置警告", $"检测阈值保存失败: {ex.Message}");
+            var message = $"检测阈值保存失败: {ex.Message}";
+            ShowSettingsFeedback(message, InfoBarSeverity.Warning);
+            AddLog("设置警告", message);
+            return false;
         }
+    }
+
+    private void ShowSettingsFeedback(string message, InfoBarSeverity severity)
+    {
+        SettingsFeedbackText = message;
+        SettingsFeedbackSeverity = severity;
+        IsSettingsFeedbackOpen = true;
     }
 
     public void SaveWindowPlacement(int left, int top, int width, int height, bool isMaximized)
