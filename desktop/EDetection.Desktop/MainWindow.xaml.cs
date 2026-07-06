@@ -264,6 +264,11 @@ public sealed partial class MainWindow : Window
         DesktopNotificationRequest e)
     {
         _desktopNotifications.Show(e);
+        if (!e.ForwardToRemoteNotifications)
+        {
+            return;
+        }
+
         try
         {
             if (await _ntfyNotifications.TrySendAsync(e, ViewModel))

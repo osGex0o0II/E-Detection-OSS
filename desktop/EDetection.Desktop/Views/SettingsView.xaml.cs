@@ -445,6 +445,7 @@ public sealed partial class SettingsView : UserControl
         new("报告设置", "报告", "报告 excel 历史 清空", "ReportsSection"),
         new("运行记录", "运行记录", "日志 运行记录 保留 清空", "LogsSection"),
         new("窗口设置", "窗口", "窗口 托盘 自启动 通知 热键 快捷键", "WindowSection"),
+        new("桌面通知测试", "窗口", "桌面通知 通知 测试 toast", "WindowSection"),
         new("智能助手", "智能助手", "llm ai 智能助手 模型 api key 代理 测试", "LlmSection"),
         new("LLM 服务地址", "智能助手", "llm endpoint 服务地址 模型 api key", "LlmSection"),
         new("消息推送", "消息推送", "ntfy 通知 推送 主题 token 优先级 代理 测试", "NotificationsSection"),

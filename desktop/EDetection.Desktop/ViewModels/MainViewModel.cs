@@ -1304,6 +1304,26 @@ public partial class MainViewModel : ObservableObject
         ClearSecureSecret(_credentials.ClearNtfyToken, "ntfy Token 已清除。");
     }
 
+    [RelayCommand]
+    private void TestDesktopNotification()
+    {
+        if (!EnableDesktopNotifications)
+        {
+            ShowSettingsFeedback("请先启用桌面通知。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        DesktopNotificationRequested?.Invoke(
+            this,
+            new DesktopNotificationRequest(
+                DesktopNotificationKind.Success,
+                "E-Detection 桌面通知",
+                $"桌面通知可以正常显示 · {DateTimeOffset.Now:HH:mm}",
+                ForwardToRemoteNotifications: false));
+        ShowSettingsFeedback("已发送桌面通知测试。", InfoBarSeverity.Success);
+        AddLog("桌面通知", "已发送桌面通知测试。");
+    }
+
     private bool CanSendTestNtfyNotification() => !IsSendingTestNtfyNotification;
 
     [RelayCommand(CanExecute = nameof(CanSendTestNtfyNotification))]

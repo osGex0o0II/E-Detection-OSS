@@ -5,4 +5,5 @@ public sealed record DesktopNotificationRequest(
     string Title,
     string Message,
     string? ReportPath = null,
-    string? ActionUrl = null);
+    string? ActionUrl = null,
+    bool ForwardToRemoteNotifications = true);
