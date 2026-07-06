@@ -5,6 +5,10 @@ namespace EDetection.Desktop.Services;
 
 public sealed class DetectionConfigService
 {
+    public static readonly string DefaultUserConfigPath = Path.Combine(
+        SettingsService.SettingsDirectory,
+        "detection-config.json");
+
     private const string VoltageMinThresholdKey = "V_MIN_THRESHOLD";
     private const string VoltageMaxThresholdKey = "V_MAX_THRESHOLD";
     private const string CurrentMaxThresholdKey = "I_MAX_THRESHOLD";
@@ -30,17 +34,67 @@ public sealed class DetectionConfigService
 
     public DetectionConfigSettings CreateDefault() => new();
 
-    public DetectionConfigSettings Load(string path)
+    public string EnsureUserConfig(string? preferredPath = null)
     {
-        var settings = CreateDefault();
-        var resolvedPath = ResolveConfigPath(path);
-        if (!File.Exists(resolvedPath))
+        try
         {
-            return settings;
+            var targetPath = ResolveEffectiveConfigPath(preferredPath);
+            if (File.Exists(targetPath))
+            {
+                return targetPath;
+            }
+
+            var bundledConfigPath = Path.Combine(
+                PythonBackendService.ResolveBackendWorkingDirectory(),
+                "config.json");
+            var initialConfig = File.Exists(bundledConfigPath)
+                ? Load(bundledConfigPath)
+                : CreateDefault();
+            Save(targetPath, initialConfig);
+            return targetPath;
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
+        {
+            return DefaultUserConfigPath;
+        }
+    }
+
+    public static string ResolveEffectiveConfigPath(string? preferredPath)
+    {
+        if (string.IsNullOrWhiteSpace(preferredPath))
+        {
+            return DefaultUserConfigPath;
         }
 
         try
         {
+            return IsBundledDefaultConfigPath(preferredPath)
+                ? DefaultUserConfigPath
+                : ResolveConfigPath(preferredPath);
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
+        {
+            return DefaultUserConfigPath;
+        }
+    }
+
+    public DetectionConfigSettings Load(string path)
+    {
+        var settings = CreateDefault();
+        try
+        {
+            var resolvedPath = ResolveConfigPath(path);
+            if (!File.Exists(resolvedPath))
+            {
+                return settings;
+            }
+
             using var document = JsonDocument.Parse(File.ReadAllText(resolvedPath));
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
@@ -72,7 +126,12 @@ public sealed class DetectionConfigService
                 settings.CurrentUnbalanceEnabled = legacyCurrent.GetBoolean();
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or JsonException
+                                   or ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
         {
             return CreateDefault();
         }
@@ -119,6 +178,32 @@ public sealed class DetectionConfigService
     {
         var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
         return DesktopDiagnosticsService.ResolveAgainstBackend(path, backendRoot);
+    }
+
+    public static bool IsBundledDefaultConfigPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return true;
+        }
+
+        try
+        {
+            var resolvedPath = Path.GetFullPath(ResolveConfigPath(path));
+            var bundledConfigPath = Path.GetFullPath(Path.Combine(
+                PythonBackendService.ResolveBackendWorkingDirectory(),
+                "config.json"));
+            return string.Equals(
+                resolvedPath,
+                bundledConfigPath,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     private static DetectionConfigSettings Normalize(DetectionConfigSettings settings) => new()

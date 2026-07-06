@@ -12,7 +12,7 @@ public sealed class SettingsService
         WriteIndented = true,
     };
 
-    private static readonly string SettingsDirectory = Path.Combine(
+    public static readonly string SettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "E-Detection",
         "Desktop");

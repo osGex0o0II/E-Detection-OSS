@@ -8,7 +8,7 @@ public sealed class AppSettings
 
     public string OutputDirectory { get; set; } = "";
 
-    public string ConfigPath { get; set; } = "config.json";
+    public string ConfigPath { get; set; } = "";
 
     public string PythonExecutable { get; set; } = "python";
 

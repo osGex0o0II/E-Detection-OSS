@@ -33,6 +33,7 @@ public partial class MainViewModel : ObservableObject
     private bool _desktopNotificationSent;
     private bool _syncingStartupPreference;
     private bool _isShellShutdownRequested;
+    private bool _suppressConfigPathReload;
     private ShellHotkeySnapshot _globalHotkeySnapshot = ShellHotkeySnapshot.Disabled;
 
     public MainViewModel(
@@ -67,14 +68,10 @@ public partial class MainViewModel : ObservableObject
             _settings,
             () => PythonExecutable,
             BuildHotkeySnapshot);
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        var configPath = Path.Combine(backendRoot, "config.json");
         var saved = _settings.Load();
         InputDirectory = saved.InputDirectory;
         OutputDirectory = saved.OutputDirectory;
-        ConfigPath = string.IsNullOrWhiteSpace(saved.ConfigPath)
-            ? (File.Exists(configPath) ? configPath : "config.json")
-            : saved.ConfigPath;
+        ConfigPath = _detectionConfig.EnsureUserConfig(saved.ConfigPath);
         ApplyDetectionConfig(_detectionConfig.Load(ConfigPath));
         PythonExecutable = string.IsNullOrWhiteSpace(saved.PythonExecutable)
             ? "python"
@@ -883,7 +880,11 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnConfigPathChanged(string value)
     {
-        ApplyDetectionConfig(_detectionConfig.Load(value));
+        if (!_suppressConfigPathReload)
+        {
+            ApplyDetectionConfig(_detectionConfig.Load(value));
+        }
+
         RefreshLocalDiagnostics();
         RefreshFirstRunGuide();
         SavePreferenceSettings();
@@ -1074,12 +1075,13 @@ public partial class MainViewModel : ObservableObject
         }
 
         SaveDetectionConfig();
+        var configPath = EnsureEffectiveConfigPath();
         ResetRunState();
         var request = new DetectionRequest
         {
             InputDirectory = InputDirectory,
             OutputDirectory = string.IsNullOrWhiteSpace(OutputDirectory) ? null : OutputDirectory,
-            ConfigPath = string.IsNullOrWhiteSpace(ConfigPath) ? null : ConfigPath,
+            ConfigPath = configPath,
             PythonExecutable = string.IsNullOrWhiteSpace(PythonExecutable) ? "python" : PythonExecutable,
             WriteReport = WriteReport,
             WorkingDirectory = PythonBackendService.ResolveBackendWorkingDirectory(),
@@ -1770,7 +1772,7 @@ public partial class MainViewModel : ObservableObject
         new(
             InputDirectory,
             OutputDirectory,
-            ConfigPath,
+            DetectionConfigService.ResolveEffectiveConfigPath(ConfigPath),
             PythonExecutable,
             WriteReport);
 
@@ -1815,10 +1817,7 @@ public partial class MainViewModel : ObservableObject
         DesktopDiagnosticsService.IsInputReady(InputDirectory);
 
     private bool IsConfigReady()
-    {
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        return File.Exists(DesktopDiagnosticsService.ResolveAgainstBackend(ConfigPath, backendRoot));
-    }
+        => File.Exists(DetectionConfigService.ResolveEffectiveConfigPath(ConfigPath));
 
     private bool CanCopyPythonSetupCommand() =>
         !string.IsNullOrWhiteSpace(PythonSetupCommandText);
@@ -2027,7 +2026,7 @@ public partial class MainViewModel : ObservableObject
     {
         InputDirectory = defaults.InputDirectory;
         OutputDirectory = defaults.OutputDirectory;
-        ConfigPath = defaults.ConfigPath;
+        ConfigPath = _detectionConfig.EnsureUserConfig(defaults.ConfigPath);
         PythonExecutable = defaults.PythonExecutable;
         WriteReport = defaults.WriteReport;
         CloseToTrayOnClose = defaults.CloseToTrayOnClose;
@@ -2101,7 +2100,8 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            _detectionConfig.Save(ConfigPath, CaptureDetectionConfig());
+            var configPath = EnsureEffectiveConfigPath();
+            _detectionConfig.Save(configPath, CaptureDetectionConfig());
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -2111,6 +2111,25 @@ public partial class MainViewModel : ObservableObject
             AddLog("设置警告", message);
             return false;
         }
+    }
+
+    private string EnsureEffectiveConfigPath()
+    {
+        var configPath = _detectionConfig.EnsureUserConfig(ConfigPath);
+        if (!string.Equals(ConfigPath, configPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _suppressConfigPathReload = true;
+            try
+            {
+                ConfigPath = configPath;
+            }
+            finally
+            {
+                _suppressConfigPathReload = false;
+            }
+        }
+
+        return configPath;
     }
 
     private void ShowSettingsFeedback(string message, InfoBarSeverity severity)
