@@ -22,6 +22,38 @@ public sealed class AppSettings
 
     public bool EnableDesktopNotifications { get; set; } = true;
 
+    public bool EnableLlmAssistant { get; set; }
+
+    public string LlmEndpoint { get; set; } = "";
+
+    public string LlmModel { get; set; } = "";
+
+    public bool UseProxyForLlm { get; set; }
+
+    public bool EnableNtfyNotifications { get; set; }
+
+    public string NtfyServerUrl { get; set; } = "https://ntfy.sh";
+
+    public string NtfyTopic { get; set; } = "";
+
+    public int SelectedNtfyPriorityIndex { get; set; } = 2;
+
+    public bool UseProxyForNotifications { get; set; }
+
+    public bool EnableNetworkProxy { get; set; }
+
+    public string ProxyAddress { get; set; } = "";
+
+    public bool ProxyRequiresAuthentication { get; set; }
+
+    public string ProxyUserName { get; set; } = "";
+
+    public bool EnableUpdateChecks { get; set; } = true;
+
+    public int SelectedUpdateChannelIndex { get; set; }
+
+    public string UpdateFeedUrl { get; set; } = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest";
+
     public bool EnableGlobalHotkeys { get; set; } = true;
 
     public bool EnableQuickActionsShortcut { get; set; }

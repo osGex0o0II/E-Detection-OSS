@@ -275,6 +275,10 @@ public sealed partial class SettingsView : UserControl
         ReportsSection,
         LogsSection,
         WindowSection,
+        LlmSection,
+        NotificationsSection,
+        ProxySection,
+        UpdatesSection,
         AdvancedSection,
     ];
 

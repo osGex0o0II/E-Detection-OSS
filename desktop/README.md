@@ -122,7 +122,7 @@ By default uninstall keeps `%LOCALAPPDATA%\E-Detection\Desktop\settings.json`. U
 ## Runtime Notes
 
 - The app stores settings under `%LOCALAPPDATA%\E-Detection\Desktop\settings.json`.
-- The settings file is versioned (`SettingsVersion=1` currently). Older settings without a version are migrated and written back on load.
+- The settings file is versioned (`SettingsVersion=6` currently). Older settings without a version are migrated and written back on load.
 - The settings page includes a desktop health card covering notification availability, startup provider, settings store, package integrity, Python JSONL bridge mode, install shape, and global hotkey registration.
 - Global hotkeys are enabled by default: `Ctrl+Alt+Shift+E` restores the workbench. If another app owns the gesture, the settings page reports the registration conflict.
 - The tray menu is command-aware: it shows the current run state and can restore the workbench, start/cancel detection when available, and open the latest report or its folder. The tray and window/taskbar icon switch to `running.ico` while detection is active.

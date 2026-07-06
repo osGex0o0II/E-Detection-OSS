@@ -307,6 +307,22 @@ try {
         StartMinimizedToTray = $false
         AutoStartOnSignIn = $false
         EnableDesktopNotifications = $false
+        EnableLlmAssistant = $true
+        LlmEndpoint = "https://api.example.test/v1/chat/completions"
+        LlmModel = "example-model"
+        UseProxyForLlm = $true
+        EnableNtfyNotifications = $true
+        NtfyServerUrl = "https://ntfy.sh"
+        NtfyTopic = "edetection-smoke"
+        SelectedNtfyPriorityIndex = 2
+        UseProxyForNotifications = $true
+        EnableNetworkProxy = $true
+        ProxyAddress = "http://127.0.0.1:7890"
+        ProxyRequiresAuthentication = $false
+        ProxyUserName = ""
+        EnableUpdateChecks = $true
+        SelectedUpdateChannelIndex = 0
+        UpdateFeedUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest"
         EnableGlobalHotkeys = $true
         EnableQuickActionsShortcut = $true
         SelectedQuickActionsShortcutIndex = 1
@@ -358,14 +374,25 @@ try {
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $globalHotkeyToggle = Wait-ForAutomationName $mainWindow.Handle "全局热键" $WaitSeconds
     $quickActionsToggle = Wait-ForAutomationName $mainWindow.Handle "快速操作快捷键" $WaitSeconds
+    $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手" $WaitSeconds
+    $llmEndpointControl = Wait-ForAutomationName $mainWindow.Handle "LLM 服务地址" $WaitSeconds
+    $llmProxyToggle = Wait-ForAutomationName $mainWindow.Handle "LLM 使用网络代理" $WaitSeconds
+    $ntfySection = Wait-ForAutomationName $mainWindow.Handle "消息推送" $WaitSeconds
+    $ntfyServerControl = Wait-ForAutomationName $mainWindow.Handle "ntfy 服务地址" $WaitSeconds
+    $ntfyProxyToggle = Wait-ForAutomationName $mainWindow.Handle "ntfy 使用网络代理" $WaitSeconds
+    $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络代理" $WaitSeconds
+    $proxyAddressControl = Wait-ForAutomationName $mainWindow.Handle "代理地址" $WaitSeconds
+    $updatesSection = Wait-ForAutomationName $mainWindow.Handle "软件更新" $WaitSeconds
+    $openUpdatePageButton = Wait-ForAutomationName $mainWindow.Handle "打开更新页面" $WaitSeconds
+    $updateFeedControl = Wait-ForAutomationName $mainWindow.Handle "更新源" $WaitSeconds
     $recentLimitControl = Wait-ForAutomationName $mainWindow.Handle "报告历史保留" $WaitSeconds
     $logLimitControl = Wait-ForAutomationName $mainWindow.Handle "运行记录保留" $WaitSeconds
     $desktopHealthSection = Wait-ForAutomationName $mainWindow.Handle "应用状态" $WaitSeconds
     $saveSettingsButton = Wait-ForAutomationName $mainWindow.Handle "保存设置" $WaitSeconds
     $resetSettingsButton = Wait-ForAutomationName $mainWindow.Handle "重置设置" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-    if ($settingsJson.SettingsVersion -ne 5) {
-        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '5'."
+    if ($settingsJson.SettingsVersion -ne 6) {
+        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '6'."
     }
 
     if ($settingsJson.SelectedQuickActionsShortcutIndex -ne 1) {
@@ -394,6 +421,17 @@ try {
         AutoStartToggle = $autoStartToggle
         GlobalHotkeyToggle = $globalHotkeyToggle
         QuickActionsToggle = $quickActionsToggle
+        LlmSection = $llmSection
+        LlmEndpointControl = $llmEndpointControl
+        LlmProxyToggle = $llmProxyToggle
+        NtfySection = $ntfySection
+        NtfyServerControl = $ntfyServerControl
+        NtfyProxyToggle = $ntfyProxyToggle
+        ProxySection = $proxySection
+        ProxyAddressControl = $proxyAddressControl
+        UpdatesSection = $updatesSection
+        OpenUpdatePageButton = $openUpdatePageButton
+        UpdateFeedControl = $updateFeedControl
         QuickActionsShortcutIndex = $settingsJson.SelectedQuickActionsShortcutIndex
         SettingsVersion = $settingsJson.SettingsVersion
         DesktopHealthSection = $desktopHealthSection

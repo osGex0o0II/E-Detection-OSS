@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ReportDetailPreviewService _detailPreview;
     private readonly RunStateService _runState;
     private readonly StartupService _startup;
+    private readonly SecureCredentialService _credentials;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _cancelPromptCts;
@@ -48,6 +49,7 @@ public partial class MainViewModel : ObservableObject
         ReportDetailPreviewService detailPreview,
         RunStateService runState,
         StartupService startup,
+        SecureCredentialService? credentials = null,
         DesktopHealthService? desktopHealth = null)
     {
         _backend = backend;
@@ -58,6 +60,7 @@ public partial class MainViewModel : ObservableObject
         _detailPreview = detailPreview;
         _runState = runState;
         _startup = startup;
+        _credentials = credentials ?? new SecureCredentialService();
         Diagnostics = new DiagnosticsViewModel();
         RunTelemetry = new RunTelemetryViewModel(runTelemetry);
         RuntimeLogs = new RuntimeLogViewModel(runtimeLogs);
@@ -83,6 +86,23 @@ public partial class MainViewModel : ObservableObject
         AutoStartOnSignIn = startupStatus.IsEnabled;
         UpdateStartupIntegrationStatus(startupStatus);
         EnableDesktopNotifications = saved.EnableDesktopNotifications;
+        EnableLlmAssistant = saved.EnableLlmAssistant;
+        LlmEndpoint = saved.LlmEndpoint;
+        LlmModel = saved.LlmModel;
+        UseProxyForLlm = saved.UseProxyForLlm;
+        EnableNtfyNotifications = saved.EnableNtfyNotifications;
+        NtfyServerUrl = saved.NtfyServerUrl;
+        NtfyTopic = saved.NtfyTopic;
+        SelectedNtfyPriorityIndex = Math.Clamp(saved.SelectedNtfyPriorityIndex, 0, 4);
+        UseProxyForNotifications = saved.UseProxyForNotifications;
+        EnableNetworkProxy = saved.EnableNetworkProxy;
+        ProxyAddress = saved.ProxyAddress;
+        ProxyRequiresAuthentication = saved.ProxyRequiresAuthentication;
+        ProxyUserName = saved.ProxyUserName;
+        EnableUpdateChecks = saved.EnableUpdateChecks;
+        SelectedUpdateChannelIndex = Math.Clamp(saved.SelectedUpdateChannelIndex, 0, 2);
+        UpdateFeedUrl = saved.UpdateFeedUrl;
+        RefreshSecureCredentialStatus();
         EnableGlobalHotkeys = saved.EnableGlobalHotkeys;
         SelectedQuickActionsShortcutIndex = Math.Clamp(saved.SelectedQuickActionsShortcutIndex, 0, 2);
         EnableQuickActionsShortcut = saved.EnableQuickActionsShortcut && SelectedQuickActionsShortcutIndex != 2;
@@ -566,6 +586,72 @@ public partial class MainViewModel : ObservableObject
     public partial bool EnableDesktopNotifications { get; set; } = true;
 
     [ObservableProperty]
+    public partial bool EnableLlmAssistant { get; set; }
+
+    [ObservableProperty]
+    public partial string LlmEndpoint { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string LlmModel { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool UseProxyForLlm { get; set; }
+
+    [ObservableProperty]
+    public partial string PendingLlmApiKey { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string LlmApiKeyStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool EnableNtfyNotifications { get; set; }
+
+    [ObservableProperty]
+    public partial string NtfyServerUrl { get; set; } = "https://ntfy.sh";
+
+    [ObservableProperty]
+    public partial string NtfyTopic { get; set; } = "";
+
+    [ObservableProperty]
+    public partial int SelectedNtfyPriorityIndex { get; set; } = 2;
+
+    [ObservableProperty]
+    public partial bool UseProxyForNotifications { get; set; }
+
+    [ObservableProperty]
+    public partial string PendingNtfyToken { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string NtfyTokenStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool EnableNetworkProxy { get; set; }
+
+    [ObservableProperty]
+    public partial string ProxyAddress { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool ProxyRequiresAuthentication { get; set; }
+
+    [ObservableProperty]
+    public partial string ProxyUserName { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string PendingProxyPassword { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string ProxyPasswordStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool EnableUpdateChecks { get; set; } = true;
+
+    [ObservableProperty]
+    public partial int SelectedUpdateChannelIndex { get; set; }
+
+    [ObservableProperty]
+    public partial string UpdateFeedUrl { get; set; } = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest";
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyPropertyChangedFor(nameof(CanEditRunConfiguration))]
@@ -915,6 +1001,58 @@ public partial class MainViewModel : ObservableObject
         SavePreferenceSettings();
     }
 
+    partial void OnEnableLlmAssistantChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnLlmEndpointChanged(string value) => SavePreferenceSettings();
+
+    partial void OnLlmModelChanged(string value) => SavePreferenceSettings();
+
+    partial void OnUseProxyForLlmChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnEnableNtfyNotificationsChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnNtfyServerUrlChanged(string value) => SavePreferenceSettings();
+
+    partial void OnNtfyTopicChanged(string value) => SavePreferenceSettings();
+
+    partial void OnSelectedNtfyPriorityIndexChanged(int value)
+    {
+        var normalized = Math.Clamp(value, 0, 4);
+        if (normalized != value)
+        {
+            SelectedNtfyPriorityIndex = normalized;
+            return;
+        }
+
+        SavePreferenceSettings();
+    }
+
+    partial void OnUseProxyForNotificationsChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnEnableNetworkProxyChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnProxyAddressChanged(string value) => SavePreferenceSettings();
+
+    partial void OnProxyRequiresAuthenticationChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnProxyUserNameChanged(string value) => SavePreferenceSettings();
+
+    partial void OnEnableUpdateChecksChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnSelectedUpdateChannelIndexChanged(int value)
+    {
+        var normalized = Math.Clamp(value, 0, 2);
+        if (normalized != value)
+        {
+            SelectedUpdateChannelIndex = normalized;
+            return;
+        }
+
+        SavePreferenceSettings();
+    }
+
+    partial void OnUpdateFeedUrlChanged(string value) => SavePreferenceSettings();
+
     partial void OnEnableGlobalHotkeysChanged(bool value)
     {
         _globalHotkeySnapshot = value
@@ -1044,6 +1182,87 @@ public partial class MainViewModel : ObservableObject
             ShowSettingsFeedback("设置已恢复默认值。", InfoBarSeverity.Success);
             AddLog("设置", "设置已恢复默认值。");
         }
+    }
+
+    [RelayCommand]
+    private void SaveLlmApiKey()
+    {
+        SaveSecureSecret(PendingLlmApiKey, _credentials.SaveLlmApiKey, () => PendingLlmApiKey = "");
+    }
+
+    [RelayCommand]
+    private void ClearLlmApiKey()
+    {
+        ClearSecureSecret(_credentials.ClearLlmApiKey, "LLM API Key 已清除。");
+    }
+
+    [RelayCommand]
+    private void SaveNtfyToken()
+    {
+        SaveSecureSecret(PendingNtfyToken, _credentials.SaveNtfyToken, () => PendingNtfyToken = "");
+    }
+
+    [RelayCommand]
+    private void ClearNtfyToken()
+    {
+        ClearSecureSecret(_credentials.ClearNtfyToken, "ntfy Token 已清除。");
+    }
+
+    [RelayCommand]
+    private void SaveProxyPassword()
+    {
+        SaveSecureSecret(PendingProxyPassword, _credentials.SaveProxyPassword, () => PendingProxyPassword = "");
+    }
+
+    [RelayCommand]
+    private void ClearProxyPassword()
+    {
+        ClearSecureSecret(_credentials.ClearProxyPassword, "代理密码已清除。");
+    }
+
+    private void SaveSecureSecret(
+        string value,
+        Action<string> save,
+        Action clearInput)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            ShowSettingsFeedback("请输入要保存的凭据。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            save(value);
+            clearInput();
+            RefreshSecureCredentialStatus();
+            ShowSettingsFeedback("凭据已保存到 Windows 凭据。", InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowSettingsFeedback($"保存凭据失败: {ex.Message}", InfoBarSeverity.Warning);
+        }
+    }
+
+    private void ClearSecureSecret(Action clear, string successMessage)
+    {
+        try
+        {
+            clear();
+            RefreshSecureCredentialStatus();
+            ShowSettingsFeedback(successMessage, InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowSettingsFeedback($"清除凭据失败: {ex.Message}", InfoBarSeverity.Warning);
+        }
+    }
+
+    private void RefreshSecureCredentialStatus()
+    {
+        LlmApiKeyStatusText = _credentials.LlmApiKeyStatusText;
+        NtfyTokenStatusText = _credentials.NtfyTokenStatusText;
+        ProxyPasswordStatusText = _credentials.ProxyPasswordStatusText;
     }
 
     private void ReportHistory_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -1940,6 +2159,18 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenUpdateFeed()
+    {
+        if (string.IsNullOrWhiteSpace(UpdateFeedUrl))
+        {
+            ShowSettingsFeedback("请先填写更新源。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        OpenUri(UpdateFeedUrl);
+    }
+
+    [RelayCommand]
     private void CopyDiagnostics()
     {
         CopyTextToClipboard(Diagnostics.BuildClipboardText(
@@ -2110,6 +2341,22 @@ public partial class MainViewModel : ObservableObject
             StartMinimizedToTray = StartMinimizedToTray,
             AutoStartOnSignIn = AutoStartOnSignIn,
             EnableDesktopNotifications = EnableDesktopNotifications,
+            EnableLlmAssistant = EnableLlmAssistant,
+            LlmEndpoint = LlmEndpoint,
+            LlmModel = LlmModel,
+            UseProxyForLlm = UseProxyForLlm,
+            EnableNtfyNotifications = EnableNtfyNotifications,
+            NtfyServerUrl = NtfyServerUrl,
+            NtfyTopic = NtfyTopic,
+            SelectedNtfyPriorityIndex = SelectedNtfyPriorityIndex,
+            UseProxyForNotifications = UseProxyForNotifications,
+            EnableNetworkProxy = EnableNetworkProxy,
+            ProxyAddress = ProxyAddress,
+            ProxyRequiresAuthentication = ProxyRequiresAuthentication,
+            ProxyUserName = ProxyUserName,
+            EnableUpdateChecks = EnableUpdateChecks,
+            SelectedUpdateChannelIndex = SelectedUpdateChannelIndex,
+            UpdateFeedUrl = UpdateFeedUrl,
             EnableGlobalHotkeys = EnableGlobalHotkeys,
             EnableQuickActionsShortcut = EnableQuickActionsShortcut,
             SelectedQuickActionsShortcutIndex = SelectedQuickActionsShortcutIndex,
@@ -2136,6 +2383,22 @@ public partial class MainViewModel : ObservableObject
         CloseToTrayOnClose = defaults.CloseToTrayOnClose;
         StartMinimizedToTray = defaults.StartMinimizedToTray;
         EnableDesktopNotifications = defaults.EnableDesktopNotifications;
+        EnableLlmAssistant = defaults.EnableLlmAssistant;
+        LlmEndpoint = defaults.LlmEndpoint;
+        LlmModel = defaults.LlmModel;
+        UseProxyForLlm = defaults.UseProxyForLlm;
+        EnableNtfyNotifications = defaults.EnableNtfyNotifications;
+        NtfyServerUrl = defaults.NtfyServerUrl;
+        NtfyTopic = defaults.NtfyTopic;
+        SelectedNtfyPriorityIndex = defaults.SelectedNtfyPriorityIndex;
+        UseProxyForNotifications = defaults.UseProxyForNotifications;
+        EnableNetworkProxy = defaults.EnableNetworkProxy;
+        ProxyAddress = defaults.ProxyAddress;
+        ProxyRequiresAuthentication = defaults.ProxyRequiresAuthentication;
+        ProxyUserName = defaults.ProxyUserName;
+        EnableUpdateChecks = defaults.EnableUpdateChecks;
+        SelectedUpdateChannelIndex = defaults.SelectedUpdateChannelIndex;
+        UpdateFeedUrl = defaults.UpdateFeedUrl;
         EnableGlobalHotkeys = defaults.EnableGlobalHotkeys;
         SelectedQuickActionsShortcutIndex = defaults.SelectedQuickActionsShortcutIndex;
         EnableQuickActionsShortcut = defaults.EnableQuickActionsShortcut;
@@ -2452,5 +2715,21 @@ public partial class MainViewModel : ObservableObject
             FileName = path,
             UseShellExecute = true,
         });
+    }
+
+    private void OpenUri(string uri)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = uri,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            ShowSettingsFeedback($"打开更新源失败: {ex.Message}", InfoBarSeverity.Warning);
+        }
     }
 }
