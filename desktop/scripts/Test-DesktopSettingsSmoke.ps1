@@ -383,6 +383,8 @@ try {
     $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络代理" $WaitSeconds
     $proxyAddressControl = Wait-ForAutomationName $mainWindow.Handle "代理地址" $WaitSeconds
     $updatesSection = Wait-ForAutomationName $mainWindow.Handle "软件更新" $WaitSeconds
+    $updateStatusText = Wait-ForAutomationNameLike $mainWindow.Handle "*当前版本*" $WaitSeconds
+    $checkUpdatesButton = Wait-ForAutomationName $mainWindow.Handle "检查更新" $WaitSeconds
     $openUpdatePageButton = Wait-ForAutomationName $mainWindow.Handle "打开更新页面" $WaitSeconds
     $updateFeedControl = Wait-ForAutomationName $mainWindow.Handle "更新源" $WaitSeconds
     $recentLimitControl = Wait-ForAutomationName $mainWindow.Handle "报告历史保留" $WaitSeconds
@@ -430,6 +432,8 @@ try {
         ProxySection = $proxySection
         ProxyAddressControl = $proxyAddressControl
         UpdatesSection = $updatesSection
+        UpdateStatusText = $updateStatusText
+        CheckUpdatesButton = $checkUpdatesButton
         OpenUpdatePageButton = $openUpdatePageButton
         UpdateFeedControl = $updateFeedControl
         QuickActionsShortcutIndex = $settingsJson.SelectedQuickActionsShortcutIndex

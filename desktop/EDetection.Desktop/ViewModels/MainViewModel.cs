@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EDetection.Desktop.Models;
@@ -27,6 +28,7 @@ public partial class MainViewModel : ObservableObject
     private readonly RunStateService _runState;
     private readonly StartupService _startup;
     private readonly SecureCredentialService _credentials;
+    private readonly UpdateCheckService _updateCheck;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
     private CancellationTokenSource? _cancelPromptCts;
@@ -50,6 +52,7 @@ public partial class MainViewModel : ObservableObject
         RunStateService runState,
         StartupService startup,
         SecureCredentialService? credentials = null,
+        UpdateCheckService? updateCheck = null,
         DesktopHealthService? desktopHealth = null)
     {
         _backend = backend;
@@ -61,6 +64,7 @@ public partial class MainViewModel : ObservableObject
         _runState = runState;
         _startup = startup;
         _credentials = credentials ?? new SecureCredentialService();
+        _updateCheck = updateCheck ?? new UpdateCheckService();
         Diagnostics = new DiagnosticsViewModel();
         RunTelemetry = new RunTelemetryViewModel(runTelemetry);
         RuntimeLogs = new RuntimeLogViewModel(runtimeLogs);
@@ -102,6 +106,7 @@ public partial class MainViewModel : ObservableObject
         EnableUpdateChecks = saved.EnableUpdateChecks;
         SelectedUpdateChannelIndex = Math.Clamp(saved.SelectedUpdateChannelIndex, 0, 2);
         UpdateFeedUrl = saved.UpdateFeedUrl;
+        UpdateStatusText = $"当前版本 {new AppInfoService().GetInfo().Version}";
         RefreshSecureCredentialStatus();
         EnableGlobalHotkeys = saved.EnableGlobalHotkeys;
         SelectedQuickActionsShortcutIndex = Math.Clamp(saved.SelectedQuickActionsShortcutIndex, 0, 2);
@@ -650,6 +655,16 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string UpdateFeedUrl { get; set; } = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest";
+
+    [ObservableProperty]
+    public partial string UpdateStatusText { get; set; } = "尚未检查更新";
+
+    [ObservableProperty]
+    public partial string LatestReleaseUrl { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CheckForUpdatesCommand))]
+    public partial bool IsCheckingForUpdates { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
@@ -2163,13 +2178,53 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenUpdateFeed()
     {
-        if (string.IsNullOrWhiteSpace(UpdateFeedUrl))
+        var targetUrl = string.IsNullOrWhiteSpace(LatestReleaseUrl)
+            ? UpdateFeedUrl
+            : LatestReleaseUrl;
+        if (string.IsNullOrWhiteSpace(targetUrl))
         {
             ShowSettingsFeedback("请先填写更新源。", InfoBarSeverity.Warning);
             return;
         }
 
-        OpenUri(UpdateFeedUrl);
+        OpenUri(targetUrl);
+    }
+
+    private bool CanCheckForUpdates() => !IsCheckingForUpdates;
+
+    [RelayCommand(CanExecute = nameof(CanCheckForUpdates))]
+    private async Task CheckForUpdatesAsync()
+    {
+        IsCheckingForUpdates = true;
+        UpdateStatusText = "正在检查更新...";
+        try
+        {
+            var currentVersion = new AppInfoService().GetInfo().Version;
+            var result = await _updateCheck.CheckLatestAsync(UpdateFeedUrl, currentVersion);
+            LatestReleaseUrl = result.ReleaseUrl;
+            var publishedText = result.PublishedAt is { } publishedAt
+                ? $" · {publishedAt:yyyy-MM-dd}"
+                : "";
+            UpdateStatusText = result.IsUpdateAvailable
+                ? $"发现新版本 {result.LatestVersion}{publishedText}"
+                : $"已是最新版本 {currentVersion}";
+            AddLog("更新", result.IsUpdateAvailable
+                ? $"发现新版本 {result.LatestVersion}: {result.ReleaseName}"
+                : $"已是最新版本 {currentVersion}");
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or JsonException
+                                   or ArgumentException
+                                   or InvalidOperationException
+                                   or TaskCanceledException)
+        {
+            UpdateStatusText = $"检查更新失败: {ex.Message}";
+            AddLog("更新提醒", UpdateStatusText);
+        }
+        finally
+        {
+            IsCheckingForUpdates = false;
+        }
     }
 
     [RelayCommand]
