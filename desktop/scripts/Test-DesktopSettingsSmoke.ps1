@@ -321,7 +321,7 @@ try {
         ProxyRequiresAuthentication = $false
         ProxyUserName = ""
         EnableUpdateChecks = $true
-        SelectedUpdateChannelIndex = 0
+        SelectedUpdateChannelIndex = 2
         UpdateFeedUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest"
         EnableGlobalHotkeys = $true
         EnableQuickActionsShortcut = $true

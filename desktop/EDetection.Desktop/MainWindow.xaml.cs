@@ -37,6 +37,7 @@ public sealed partial class MainWindow : Window
     private bool _isSessionEnding;
     private bool _shellResourcesCleanedUp;
     private bool _restorePlacementAfterStartupHide;
+    private bool _isClosed;
 
     private const uint WmQueryEndSession = 0x0011;
     private const uint WmEndSession = 0x0016;
@@ -83,6 +84,7 @@ public sealed partial class MainWindow : Window
         _desktopNotifications.Activated += DesktopNotifications_Activated;
         _desktopNotifications.Register();
         Shell.AboutRequested += (_, _) => ShowAboutDialog();
+        Activated += MainWindow_Activated;
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(Shell.TitleBarElement);
@@ -94,12 +96,23 @@ public sealed partial class MainWindow : Window
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
         Closed += (_, _) =>
         {
+            _isClosed = true;
             CleanupShellResources(savePlacement: true);
         };
         ApplyAppearance();
         UpdateShellStatus();
         UpdateTrayCommands();
         RegisterGlobalHotkeys();
+    }
+
+    private async void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
+    {
+        Activated -= MainWindow_Activated;
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        if (!_isClosed)
+        {
+            await ViewModel.CheckForUpdatesInBackgroundAsync();
+        }
     }
 
     private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)

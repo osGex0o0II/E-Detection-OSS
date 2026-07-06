@@ -680,6 +680,9 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CheckForUpdatesCommand))]
     public partial bool IsCheckingForUpdates { get; set; }
 
+    public bool ShouldCheckForUpdatesOnStartup =>
+        EnableUpdateChecks && SelectedUpdateChannelIndex != 2;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
@@ -2307,8 +2310,27 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCheckForUpdates))]
     private async Task CheckForUpdatesAsync()
     {
+        await CheckForUpdatesCoreAsync(showProgress: true);
+    }
+
+    public async Task CheckForUpdatesInBackgroundAsync()
+    {
+        if (!ShouldCheckForUpdatesOnStartup || IsCheckingForUpdates)
+        {
+            return;
+        }
+
+        await CheckForUpdatesCoreAsync(showProgress: false);
+    }
+
+    private async Task CheckForUpdatesCoreAsync(bool showProgress)
+    {
         IsCheckingForUpdates = true;
-        UpdateStatusText = "正在检查更新...";
+        if (showProgress)
+        {
+            UpdateStatusText = "正在检查更新...";
+        }
+
         try
         {
             var currentVersion = new AppInfoService().GetInfo().Version;
@@ -2330,8 +2352,10 @@ public partial class MainViewModel : ObservableObject
                                    or InvalidOperationException
                                    or TaskCanceledException)
         {
-            UpdateStatusText = $"检查更新失败: {ex.Message}";
-            AddLog("更新提醒", UpdateStatusText);
+            UpdateStatusText = showProgress
+                ? $"检查更新失败: {ex.Message}"
+                : "自动检查更新失败";
+            AddLog("更新提醒", showProgress ? UpdateStatusText : $"自动检查更新失败: {ex.Message}");
         }
         finally
         {
