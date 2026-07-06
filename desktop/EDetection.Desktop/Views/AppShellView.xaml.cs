@@ -18,6 +18,7 @@ public sealed partial class AppShellView : UserControl
     private ListView? _quickActionListView;
     private bool? _lastCompactLayout;
     private bool _isSettingsPageVisible;
+    private const double StackedStatusWidth = 1008;
     private const double CompactShellWidth = 1080;
     private const double ComfortableShellWidth = 1100;
 
@@ -186,6 +187,7 @@ public sealed partial class AppShellView : UserControl
 
         var compact = width < CompactShellWidth;
         var reduced = width < ComfortableShellWidth;
+        var stackedStatus = compact && width < StackedStatusWidth;
         var layoutModeChanged = _lastCompactLayout != compact;
         _lastCompactLayout = compact;
 
@@ -193,9 +195,10 @@ public sealed partial class AppShellView : UserControl
             ? CommandBarDefaultLabelPosition.Collapsed
             : CommandBarDefaultLabelPosition.Right;
 
-        StatusLayout.RowDefinitions[1].Height = new GridLength(0);
+        StatusLayout.RowDefinitions[1].Height = stackedStatus ? GridLength.Auto : new GridLength(0);
         StatusLayout.RowDefinitions[2].Height = compact ? GridLength.Auto : new GridLength(0);
-        StatusLayout.ColumnSpacing = compact ? 12 : 18;
+        StatusLayout.ColumnSpacing = stackedStatus ? 0 : compact ? 12 : 18;
+        StatusLayout.RowSpacing = stackedStatus ? 6 : 8;
         StatusBand.Padding = compact
             ? new Thickness(16, 8, 16, 8)
             : new Thickness(24, 8, 24, 8);
@@ -207,17 +210,23 @@ public sealed partial class AppShellView : UserControl
 
         if (compact)
         {
-            StatusCommandColumn.Width = GridLength.Auto;
-            StatusTextColumn.Width = new GridLength(1, GridUnitType.Star);
-            StatusProgressColumn.Width = new GridLength(1, GridUnitType.Star);
+            StatusCommandColumn.Width = stackedStatus
+                ? new GridLength(1, GridUnitType.Star)
+                : GridLength.Auto;
+            StatusTextColumn.Width = stackedStatus
+                ? new GridLength(0)
+                : new GridLength(1, GridUnitType.Star);
+            StatusProgressColumn.Width = stackedStatus
+                ? new GridLength(0)
+                : new GridLength(1, GridUnitType.Star);
             PrimaryCommandBar.MinHeight = 40;
 
             Grid.SetRow(PrimaryCommandBar, 0);
             Grid.SetColumn(PrimaryCommandBar, 0);
-            Grid.SetColumnSpan(PrimaryCommandBar, 1);
-            Grid.SetRow(StatusTextPanel, 0);
-            Grid.SetColumn(StatusTextPanel, 1);
-            Grid.SetColumnSpan(StatusTextPanel, 2);
+            Grid.SetColumnSpan(PrimaryCommandBar, stackedStatus ? 3 : 1);
+            Grid.SetRow(StatusTextPanel, stackedStatus ? 1 : 0);
+            Grid.SetColumn(StatusTextPanel, stackedStatus ? 0 : 1);
+            Grid.SetColumnSpan(StatusTextPanel, stackedStatus ? 3 : 2);
             Grid.SetRow(ProgressPanel, 2);
             Grid.SetColumn(ProgressPanel, 0);
             Grid.SetColumnSpan(ProgressPanel, 3);
