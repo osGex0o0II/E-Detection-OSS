@@ -87,25 +87,95 @@
                     <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="0,1,0,0"
                             Padding="0,10,0,0">
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <FontIcon Glyph="&#xE930;"
-                                      FontSize="14"
-                                      Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                      VerticalAlignment="Top"
-                                      Margin="0,2,0,0" />
-                            <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="{Binding RunSetupReadinessText}"
-                                           FontWeight="SemiBold"
-                                           TextWrapping="WrapWholeWords" />
-                                <TextBlock Text="{Binding RunSetupReadinessDetailText}"
-                                           TextWrapping="WrapWholeWords"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
-                        </Grid>
+                        <StackPanel Spacing="8">
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon Glyph="&#xE930;"
+                                          FontSize="14"
+                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          VerticalAlignment="Top"
+                                          Margin="0,2,0,0" />
+                                <StackPanel Grid.Column="1" Spacing="2">
+                                    <TextBlock Text="{Binding RunSetupReadinessText}"
+                                               FontWeight="SemiBold"
+                                               TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="{Binding RunSetupReadinessDetailText}"
+                                               TextWrapping="WrapWholeWords"
+                                               MaxLines="2"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+                            <Expander Header="运行诊断"
+                                      HorizontalAlignment="Stretch"
+                                      IsExpanded="False">
+                                <StackPanel Spacing="8">
+                                    <Grid ColumnSpacing="10"
+                                          RowSpacing="6">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="输入"
+                                                   Style="{StaticResource TableHeaderTextStyle}" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding InputDiagnosticText}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Grid.Row="1"
+                                                   Text="阈值"
+                                                   Style="{StaticResource TableHeaderTextStyle}" />
+                                        <TextBlock Grid.Row="1"
+                                                   Grid.Column="1"
+                                                   Text="{Binding ConfigDiagnosticText}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Grid.Row="2"
+                                                   Text="检测组件"
+                                                   Style="{StaticResource TableHeaderTextStyle}" />
+                                        <TextBlock Grid.Row="2"
+                                                   Grid.Column="1"
+                                                   Text="{Binding BackendDiagnosticText}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Grid.Row="3"
+                                                   Text="报告"
+                                                   Style="{StaticResource TableHeaderTextStyle}" />
+                                        <TextBlock Grid.Row="3"
+                                                   Grid.Column="1"
+                                                   Text="{Binding OutputDiagnosticText}"
+                                                   TextWrapping="WrapWholeWords"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Button Command="{Binding RefreshDiagnosticsCommand}"
+                                                AutomationProperties.Name="检查状态"
+                                                ToolTipService.ToolTip="检查状态 (F6)">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE895;" FontSize="14" />
+                                                <TextBlock Text="检查状态" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Command="{Binding CopyDiagnosticsCommand}"
+                                                ToolTipService.ToolTip="复制状态详情">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE8C8;" FontSize="14" />
+                                                <TextBlock Text="复制详情" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
 
