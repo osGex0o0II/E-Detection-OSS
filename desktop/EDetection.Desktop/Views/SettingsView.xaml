@@ -170,14 +170,14 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Python" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="检测组件" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                     <Grid Grid.Column="1" ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBox Text="{Binding PythonExecutable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="python" />
-                                        <Button Grid.Column="1" Click="BrowsePythonExecutable_Click" IsEnabled="{Binding CanEditRunConfiguration}" ToolTipService.ToolTip="选择 Python 可执行文件">
+                                        <TextBox Text="{Binding PythonExecutable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="默认检测组件" />
+                                        <Button Grid.Column="1" Click="BrowsePythonExecutable_Click" IsEnabled="{Binding CanEditRunConfiguration}" ToolTipService.ToolTip="选择检测组件运行程序">
                                             <FontIcon Glyph="&#xE756;" FontSize="14" />
                                         </Button>
                                     </Grid>
@@ -515,7 +515,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Python 桥接" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="检测组件" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                     <TextBlock Grid.Column="1" Text="{Binding DesktopHealth.PythonBridgeText}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                 </Grid>
                             </StackPanel>

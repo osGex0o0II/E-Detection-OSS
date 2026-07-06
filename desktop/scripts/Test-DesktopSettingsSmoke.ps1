@@ -356,7 +356,7 @@ try {
     $logLimitText = Wait-ForAutomationName $mainWindow.Handle "保留最近 1000 条" $WaitSeconds
     $desktopHealthSection = Wait-ForAutomationName $mainWindow.Handle "桌面健康" $WaitSeconds
     $packageHealthText = Wait-ForAutomationName $mainWindow.Handle "包完整性可用 · 27/27" $WaitSeconds
-    $pythonBridgeText = Wait-ForAutomationName $mainWindow.Handle "Python JSONL bridge · 源码桥接 · python" $WaitSeconds
+    $pythonBridgeText = Wait-ForAutomationName $mainWindow.Handle "检测组件 · 本地源码 · python" $WaitSeconds
     $installShapeText = Wait-ForAutomationName $mainWindow.Handle "安装形态: 便携/开发版" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
     if ($settingsJson.SettingsVersion -ne 3) {

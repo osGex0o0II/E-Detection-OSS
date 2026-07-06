@@ -119,10 +119,10 @@ public sealed class DesktopHealthService
     {
         var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
         var mode = DesktopDiagnosticsService.HasBackendSource(backendRoot)
-            ? "源码桥接"
-            : "发布版桥接";
+            ? "本地源码"
+            : "已发布组件";
         var python = string.IsNullOrWhiteSpace(pythonExecutable) ? "python" : pythonExecutable;
-        return $"Python JSONL bridge · {mode} · {python}";
+        return $"检测组件 · {mode} · {python}";
     }
 
     private static string BuildInstallText()

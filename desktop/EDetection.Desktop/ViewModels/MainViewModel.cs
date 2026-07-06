@@ -147,7 +147,7 @@ public partial class MainViewModel : ObservableObject
     public string CancelButtonText => IsCancelConfirmationPending ? "确认取消" : "取消";
 
     public string CancelConfirmationText =>
-        "再次按 Esc 或点击“确认取消”停止检测。当前 Python 检测进程会被终止。";
+        "再次按 Esc 或点击“确认取消”停止检测。当前检测任务会被终止。";
 
     public Visibility CompletionActionsVisibility => ShouldShowCompletionActions
         ? Visibility.Visible
@@ -275,7 +275,7 @@ public partial class MainViewModel : ObservableObject
             ? ActiveRunSummaryText
             : !string.IsNullOrWhiteSpace(ReportPath)
                 ? $"最新运行结果 · {Path.GetFileName(ReportPath)}"
-                : "实时读取 Python JSONL 事件";
+                : "等待检测任务";
 
     public string WorkbenchStatusBadgeText => SelectedReport is not null
         ? ReportHistoryStatusText
@@ -1194,7 +1194,7 @@ public partial class MainViewModel : ObservableObject
         StartRunTelemetry();
         IsRunning = true;
         _desktopNotificationSent = false;
-        StatusText = "正在启动 Python 检测核心...";
+        StatusText = "正在准备检测...";
         SetTaskbarProgress(TaskbarProgressKind.Indeterminate, 0);
         _runCts = new CancellationTokenSource();
         SaveSettings();
@@ -1212,7 +1212,7 @@ public partial class MainViewModel : ObservableObject
             {
                 RunTelemetry.ApplyCurrentFile("检测失败");
                 StopRunTelemetry();
-                LastFailureText = $"Python 检测进程退出码: {exitCode}";
+                LastFailureText = $"检测组件退出码: {exitCode}";
                 AddLog("错误", LastFailureText);
                 StatusText = "检测失败";
                 SetTaskbarProgress(TaskbarProgressKind.Error, Math.Max(ProgressPercent, 100));
@@ -1435,9 +1435,7 @@ public partial class MainViewModel : ObservableObject
         var output = string.IsNullOrWhiteSpace(request.OutputDirectory)
             ? "输入目录"
             : FormatPathLeaf(request.OutputDirectory, "报告目录");
-        var config = FormatPathLeaf(request.ConfigPath, "config.json");
-        var python = FormatPathLeaf(request.PythonExecutable, "python");
-        return $"本次运行 · 数据 {input} · 报告 {output} · 配置 {config} · Python {python}";
+        return $"本次运行 · 数据 {input} · 报告 {output}";
     }
 
     private static string FormatPathLeaf(string? path, string fallback)
@@ -1834,7 +1832,7 @@ public partial class MainViewModel : ObservableObject
         if (!result.IsReady)
         {
             BlockStart(
-                "Python 或检测核心未就绪",
+                "检测组件未就绪",
                 result.ActionMessage);
             return false;
         }
@@ -1847,7 +1845,7 @@ public partial class MainViewModel : ObservableObject
     private async Task RefreshDiagnosticsAsync()
     {
         RefreshLocalDiagnostics();
-        Diagnostics.MarkProbeInProgress("正在验证 Python 与检测核心...");
+        Diagnostics.MarkProbeInProgress("正在验证检测组件...");
 
         var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
         var result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
@@ -1932,7 +1930,7 @@ public partial class MainViewModel : ObservableObject
     private void CopyPythonSetup()
     {
         CopyTextToClipboard(PythonSetupCommandText);
-        AddLog("修复", "已复制 Python 环境修复命令。");
+        AddLog("修复", "已复制检测组件修复命令。");
     }
 
     [RelayCommand]
@@ -1947,7 +1945,7 @@ public partial class MainViewModel : ObservableObject
         CopyTextToClipboard(Diagnostics.BuildClipboardText(
             PythonExecutable,
             PythonBackendService.ResolveBackendWorkingDirectory()));
-        AddLog("诊断", "已复制运行环境诊断详情。");
+        AddLog("诊断", "已复制检测组件诊断详情。");
     }
 
     private bool CanCopySelectedDetail() => SelectedDetail is not null;

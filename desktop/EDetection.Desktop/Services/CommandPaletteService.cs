@@ -35,7 +35,7 @@ public sealed class CommandPaletteService
                 context.CancelCommandParameter),
             FromCommand(
                 "运行诊断",
-                "检查输入、配置、Python 与检测核心",
+                "检查输入、检测设置与检测组件",
                 "F6",
                 "\uE895",
                 "诊断",
@@ -43,7 +43,7 @@ public sealed class CommandPaletteService
                 context.DiagnosticsCommandParameter),
             FromCommand(
                 "复制诊断详情",
-                "复制当前输入、配置、Python 与后端诊断摘要",
+                "复制当前输入、检测设置与组件诊断摘要",
                 "",
                 "\uE8C8",
                 "诊断",
@@ -90,14 +90,14 @@ public sealed class CommandPaletteService
                 null),
             new(
                 "选择配置文件",
-                "选择 config.json",
+                "选择检测设置文件",
                 "Ctrl+1",
                 "\uE8A5",
                 "设置",
                 context.BrowseConfigPathAsync),
             new(
-                "选择 Python",
-                "选择 python.exe",
+                "选择检测组件",
+                "选择检测组件运行程序",
                 "Ctrl+2",
                 "\uE756",
                 "设置",

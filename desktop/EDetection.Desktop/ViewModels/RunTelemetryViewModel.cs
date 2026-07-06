@@ -24,7 +24,7 @@ public sealed partial class RunTelemetryViewModel(
 
     public void Start()
     {
-        CurrentFileText = "等待 Python 事件";
+        CurrentFileText = "等待检测进度";
         Apply(telemetry.InitialSnapshot);
     }
 

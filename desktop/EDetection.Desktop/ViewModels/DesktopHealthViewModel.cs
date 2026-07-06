@@ -27,7 +27,7 @@ public sealed partial class DesktopHealthViewModel(
     public partial string PackageText { get; set; } = "包完整性待检查";
 
     [ObservableProperty]
-    public partial string PythonBridgeText { get; set; } = "Python bridge 待检查";
+    public partial string PythonBridgeText { get; set; } = "检测组件待检查";
 
     [ObservableProperty]
     public partial string InstallText { get; set; } = "安装形态待检查";
