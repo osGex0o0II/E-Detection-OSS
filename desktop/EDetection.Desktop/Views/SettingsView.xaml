@@ -34,7 +34,16 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <AutoSuggestBox x:Name="SettingsSearchBox" QueryIcon="Find" PlaceholderText="搜索设置" AutomationProperties.Name="搜索设置" TextChanged="SettingsSearchBox_TextChanged" SuggestionChosen="SettingsSearchBox_SuggestionChosen" QuerySubmitted="SettingsSearchBox_QuerySubmitted" />
+                <AutoSuggestBox x:Name="SettingsSearchBox" QueryIcon="Find" PlaceholderText="搜索设置" AutomationProperties.Name="搜索设置" TextChanged="SettingsSearchBox_TextChanged" SuggestionChosen="SettingsSearchBox_SuggestionChosen" QuerySubmitted="SettingsSearchBox_QuerySubmitted">
+                    <AutoSuggestBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Padding="0,4">
+                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding SectionTitle}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </AutoSuggestBox.ItemTemplate>
+                </AutoSuggestBox>
                 <ListView x:Name="SettingsCategoryList" Grid.Row="1" SelectionMode="Single" HorizontalContentAlignment="Stretch" SelectionChanged="SettingsCategoryList_SelectionChanged">
                     <ListViewItem Tag="AppearanceSection">
                         <StackPanel Orientation="Horizontal" Spacing="10">
