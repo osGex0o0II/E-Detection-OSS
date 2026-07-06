@@ -78,6 +78,29 @@ public sealed class CommandPaletteService
                 "\uE9D5",
                 "设置",
                 context.OpenDetectionRulesAsync),
+            new(
+                "打开软件更新设置",
+                "查看版本、更新通道、更新源与代理设置",
+                "",
+                "\uE895",
+                "更新",
+                context.OpenUpdateSettingsAsync),
+            FromCommand(
+                "检查软件更新",
+                "立即检查 E-Detection 是否有新版本",
+                "",
+                "\uE895",
+                "更新",
+                context.ViewModel?.CheckForUpdatesCommand,
+                null),
+            FromCommand(
+                "打开更新页面",
+                "打开最新版本或配置的更新源页面",
+                "",
+                "\uE8A7",
+                "更新",
+                context.ViewModel?.OpenUpdateFeedCommand,
+                null),
             FromCommand(
                 "打开最新报告",
                 "打开当前检测或选中历史报告的 Excel 文件",
@@ -207,6 +230,7 @@ public sealed class CommandPaletteService
         "历史" => 3,
         "窗口" => 4,
         "设置" => 5,
+        "更新" => 6,
         _ => 99,
     };
 }
@@ -225,4 +249,5 @@ public sealed record CommandPaletteContext(
     Func<Task> OpenSettingsAsync,
     Func<Task> OpenThresholdSettingsAsync,
     Func<Task> OpenDetectionRulesAsync,
+    Func<Task> OpenUpdateSettingsAsync,
     Func<Task> OpenAboutAsync);

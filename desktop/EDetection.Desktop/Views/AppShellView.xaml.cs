@@ -359,6 +359,7 @@ public sealed partial class AppShellView : UserControl
             OpenSettingsAsync,
             OpenThresholdSettingsAsync,
             OpenDetectionRulesAsync,
+            OpenUpdateSettingsAsync,
             OpenAboutAsync);
 
     private Task OpenSettingsAsync()
@@ -376,6 +377,12 @@ public sealed partial class AppShellView : UserControl
     private Task OpenDetectionRulesAsync()
     {
         ShowSettingsPage("DetectionRulesSection");
+        return Task.CompletedTask;
+    }
+
+    private Task OpenUpdateSettingsAsync()
+    {
+        ShowSettingsPage("UpdatesSection");
         return Task.CompletedTask;
     }
 
