@@ -977,14 +977,18 @@
                 </StackPanel>
             </ScrollViewer>
         </Grid>
-        <Border Grid.Row="2" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="24,12">
-            <Grid ColumnSpacing="16">
+        <Border x:Name="SettingsFooter" Grid.Row="2" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0" Padding="24,12">
+            <Grid x:Name="SettingsFooterLayout" ColumnSpacing="16" RowSpacing="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <InfoBar IsOpen="{Binding IsSettingsFeedbackOpen, Mode=TwoWay}" Message="{Binding SettingsFeedbackText}" Severity="{Binding SettingsFeedbackSeverity}" IsIconVisible="True" IsClosable="True" MaxWidth="520" HorizontalAlignment="Left" VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
+                <InfoBar x:Name="SettingsFeedbackBar" IsOpen="{Binding IsSettingsFeedbackOpen, Mode=TwoWay}" Message="{Binding SettingsFeedbackText}" Severity="{Binding SettingsFeedbackSeverity}" IsIconVisible="True" IsClosable="True" MaxWidth="520" HorizontalAlignment="Left" VerticalAlignment="Center" />
+                <StackPanel x:Name="SettingsFooterActions" Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
                     <Button Command="{Binding ResetSettingsToDefaultsCommand}" MinWidth="120" AutomationProperties.Name="重置设置">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE777;" FontSize="14" />

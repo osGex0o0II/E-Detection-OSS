@@ -20,6 +20,7 @@ public sealed partial class SettingsView : UserControl
     private const double CompactBodyBreakpoint = 960;
     private const double CompactContentBreakpoint = 720;
     private const double StackedActionBreakpoint = CompactContentBreakpoint;
+    private const double StackedFooterBreakpoint = 820;
 
     private bool _suppressCategoryScroll;
     private bool _suppressScrollSync;
@@ -319,6 +320,7 @@ public sealed partial class SettingsView : UserControl
             : new Thickness(24, 22, 24, 0);
         SettingsBody.ColumnSpacing = compact ? 18 : 24;
         SettingsNavColumn.Width = new GridLength(compact ? CompactNavigationWidth : ExpandedNavigationWidth);
+        UpdateFooterLayout(availableWidth < StackedFooterBreakpoint);
 
         var contentWidth = SettingsScroll.ActualWidth;
         if (contentWidth <= 0)
@@ -345,6 +347,28 @@ public sealed partial class SettingsView : UserControl
         {
             ApplyActionGridLayout(grid, stackActions);
         }
+    }
+
+    private void UpdateFooterLayout(bool stack)
+    {
+        SettingsFooter.Padding = stack
+            ? new Thickness(18, 10, 18, 10)
+            : new Thickness(24, 12, 24, 12);
+
+        Grid.SetColumn(SettingsFeedbackBar, 0);
+        Grid.SetRow(SettingsFeedbackBar, 0);
+        SettingsFeedbackBar.HorizontalAlignment = stack ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+        SettingsFeedbackBar.MaxWidth = stack ? double.PositiveInfinity : 520;
+
+        Grid.SetColumn(SettingsFooterActions, stack ? 0 : 1);
+        Grid.SetRow(SettingsFooterActions, stack ? 1 : 0);
+        SettingsFooterActions.HorizontalAlignment = HorizontalAlignment.Right;
+
+        SettingsFooterLayout.ColumnSpacing = stack ? 0 : 16;
+        SettingsFooterLayout.RowSpacing = stack ? 10 : 0;
+        SettingsFooterLayout.ColumnDefinitions[1].Width = stack
+            ? new GridLength(0)
+            : GridLength.Auto;
     }
 
     private Grid[] GetResponsiveActionGrids() =>
