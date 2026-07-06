@@ -41,7 +41,17 @@ public sealed partial class SettingsView : UserControl
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
-    public void PrepareForDisplay()
+    public void NavigateToThresholdSettings()
+    {
+        NavigateToSectionByName("ThresholdsSection");
+    }
+
+    public void NavigateToDetectionRules()
+    {
+        NavigateToSectionByName("DetectionRulesSection");
+    }
+
+    public void PrepareForDisplay(string? initialSectionName = null)
     {
         _suppressCategoryScroll = true;
         _suppressScrollSync = true;
@@ -53,7 +63,13 @@ public sealed partial class SettingsView : UserControl
             SettingsScroll.UpdateLayout();
             SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
             _suppressScrollSync = false;
-            UpdateSelectedCategoryFromScroll();
+            if (string.IsNullOrWhiteSpace(initialSectionName))
+            {
+                UpdateSelectedCategoryFromScroll();
+                return;
+            }
+
+            NavigateToSectionByName(initialSectionName);
         });
     }
 
@@ -91,6 +107,12 @@ public sealed partial class SettingsView : UserControl
 
     private void BackButton_Click(object sender, RoutedEventArgs e) =>
         BackRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OpenThresholdSettings_Click(object sender, RoutedEventArgs e) =>
+        NavigateToThresholdSettings();
+
+    private void OpenDetectionRules_Click(object sender, RoutedEventArgs e) =>
+        NavigateToDetectionRules();
 
     private void RegisterKeyboardAccelerators()
     {
@@ -177,8 +199,13 @@ public sealed partial class SettingsView : UserControl
             MoreThresholdsExpander.IsExpanded = true;
         }
 
-        SelectCategoryBySection(entry.SectionName);
-        NavigateToSection(entry.SectionName);
+        NavigateToSectionByName(entry.SectionName);
+    }
+
+    public void NavigateToSectionByName(string sectionName)
+    {
+        SelectCategoryBySection(sectionName);
+        NavigateToSection(sectionName);
     }
 
     private void SettingsCategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -406,6 +433,7 @@ public sealed partial class SettingsView : UserControl
         new("检测目录", "检测", "检测 输入目录 报告目录 csv 路径", "DefaultsSection"),
         new("输入目录", "检测", "检测 输入目录 csv 路径", "DefaultsSection"),
         new("报告目录", "检测", "检测 报告目录 输出目录 路径", "DefaultsSection"),
+        new("检测参数", "检测", "检测 参数 阈值 设置 规则", "DefaultsSection"),
         new("阈值设置", "阈值设置", "阈值 电压 电流 功率 温度 冻结 不平衡", "ThresholdsSection"),
         new("阈值配置文件", "阈值设置", "阈值 配置 文件 json config", "ThresholdsSection"),
         new("电压阈值", "阈值设置", "阈值 电压 下限 上限 不平衡", "ThresholdsSection"),

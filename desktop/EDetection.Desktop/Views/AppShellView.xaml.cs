@@ -109,10 +109,15 @@ public sealed partial class AppShellView : UserControl
     private void Root_SizeChanged(object sender, SizeChangedEventArgs e) =>
         ApplyResponsiveLayout(e.NewSize.Width);
 
-    public void ShowSettingsPage()
+    public void ShowSettingsPage(string? initialSectionName = null)
     {
         if (_isSettingsPageVisible)
         {
+            if (!string.IsNullOrWhiteSpace(initialSectionName))
+            {
+                ShellSettings.NavigateToSectionByName(initialSectionName);
+            }
+
             return;
         }
 
@@ -121,7 +126,7 @@ public sealed partial class AppShellView : UserControl
         WorkbenchLayout.Visibility = Visibility.Collapsed;
         ShellSettings.Visibility = Visibility.Visible;
         SettingsTitleBarButton.Visibility = Visibility.Collapsed;
-        ShellSettings.PrepareForDisplay();
+        ShellSettings.PrepareForDisplay(initialSectionName);
         ShellSettings.PlayEntranceAnimation(forward: true);
         ShellSettings.Focus(FocusState.Programmatic);
     }
@@ -305,11 +310,25 @@ public sealed partial class AppShellView : UserControl
             RunSetup.BrowseConfigPathAsync,
             RunSetup.BrowsePythonExecutableAsync,
             OpenSettingsAsync,
+            OpenThresholdSettingsAsync,
+            OpenDetectionRulesAsync,
             OpenAboutAsync);
 
     private Task OpenSettingsAsync()
     {
         ShowSettingsPage();
+        return Task.CompletedTask;
+    }
+
+    private Task OpenThresholdSettingsAsync()
+    {
+        ShowSettingsPage("ThresholdsSection");
+        return Task.CompletedTask;
+    }
+
+    private Task OpenDetectionRulesAsync()
+    {
+        ShowSettingsPage("DetectionRulesSection");
         return Task.CompletedTask;
     }
 

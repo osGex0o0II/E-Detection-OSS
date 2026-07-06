@@ -64,6 +64,20 @@ public sealed class CommandPaletteService
                 "\uE713",
                 "设置",
                 context.OpenSettingsAsync),
+            new(
+                "打开阈值设置",
+                "调整电压、电流、温度、冻结等检测阈值",
+                "",
+                "\uE9D2",
+                "设置",
+                context.OpenThresholdSettingsAsync),
+            new(
+                "打开检测规则",
+                "启用或关闭电流、功率因数和详细输出规则",
+                "",
+                "\uE9D5",
+                "设置",
+                context.OpenDetectionRulesAsync),
             FromCommand(
                 "打开最新报告",
                 "打开当前检测或选中历史报告的 Excel 文件",
@@ -209,4 +223,6 @@ public sealed record CommandPaletteContext(
     Func<Task> BrowseConfigPathAsync,
     Func<Task> BrowsePythonExecutableAsync,
     Func<Task> OpenSettingsAsync,
+    Func<Task> OpenThresholdSettingsAsync,
+    Func<Task> OpenDetectionRulesAsync,
     Func<Task> OpenAboutAsync);

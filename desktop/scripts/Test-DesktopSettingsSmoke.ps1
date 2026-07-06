@@ -271,6 +271,38 @@ function Invoke-AutomationElement([IntPtr]$RootHandle, [string]$Name, [int]$Time
     return $null
 }
 
+function Expand-AutomationElement([IntPtr]$RootHandle, [string]$Name, [int]$TimeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($RootHandle)
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty,
+        $Name)
+
+    do {
+        $match = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if ($match -ne $null) {
+            try {
+                $pattern = $match.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)
+                $pattern.Expand()
+            }
+            catch {
+                try {
+                    $invoke = $match.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+                    $invoke.Invoke()
+                }
+                catch {
+                }
+            }
+
+            return $match.Current.Name
+        }
+
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Timed out waiting for expandable automation element '$Name'."
+}
+
 function Invoke-SettingsButtonByPosition([IntPtr]$RootHandle) {
     $rect = New-Object DesktopSettingsSmokeNative+RECT
     if (![DesktopSettingsSmokeNative]::GetWindowRect($RootHandle, [ref]$rect)) {
@@ -365,6 +397,8 @@ try {
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
     $inputDirectoryControl = Wait-ForAutomationName $mainWindow.Handle "输入目录" $WaitSeconds
     $browseInputDirectoryButton = Wait-ForAutomationName $mainWindow.Handle "选择输入目录" $WaitSeconds
+    $openThresholdSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开阈值设置" $WaitSeconds
+    $openDetectionRulesButton = Wait-ForAutomationName $mainWindow.Handle "打开检测规则" $WaitSeconds
     $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "阈值设置" $WaitSeconds
     $thresholdConfigControl = Wait-ForAutomationName $mainWindow.Handle "阈值配置文件" $WaitSeconds
     $browseThresholdConfigButton = Wait-ForAutomationName $mainWindow.Handle "选择阈值配置文件" $WaitSeconds
@@ -372,8 +406,23 @@ try {
     $reportsSection = Wait-ForAutomationName $mainWindow.Handle "报告" $WaitSeconds
     $logsSection = Wait-ForAutomationName $mainWindow.Handle "运行记录" $WaitSeconds
     $voltageMinThreshold = Wait-ForAutomationName $mainWindow.Handle "电压下限" $WaitSeconds
+    $voltageMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "电压上限" $WaitSeconds
     $currentMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "电流上限" $WaitSeconds
+    $powerFactorMinThreshold = Wait-ForAutomationName $mainWindow.Handle "功率因数下限" $WaitSeconds
+    $temperatureMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "温度上限" $WaitSeconds
+    $freezeCountThreshold = Wait-ForAutomationName $mainWindow.Handle "冻结持续点数" $WaitSeconds
+    $moreThresholdsExpander = Expand-AutomationElement $mainWindow.Handle "更多阈值" $WaitSeconds
+    Start-Sleep -Milliseconds 300
+    $currentUnbalanceMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "电流不平衡上限" $WaitSeconds
+    $activePowerMinThreshold = Wait-ForAutomationName $mainWindow.Handle "有功功率下限" $WaitSeconds
+    $temperatureMinThreshold = Wait-ForAutomationName $mainWindow.Handle "温度下限" $WaitSeconds
+    $currentActiveMinThreshold = Wait-ForAutomationName $mainWindow.Handle "电流激活下限" $WaitSeconds
+    $freezeStdThreshold = Wait-ForAutomationName $mainWindow.Handle "冻结波动阈值" $WaitSeconds
+    $voltageImbalanceThreshold = Wait-ForAutomationName $mainWindow.Handle "相电压不平衡阈值" $WaitSeconds
     $currentOverloadRule = Wait-ForAutomationName $mainWindow.Handle "电流过载检测" $WaitSeconds
+    $currentUnbalanceRule = Wait-ForAutomationName $mainWindow.Handle "电流不平衡检测" $WaitSeconds
+    $powerFactorRule = Wait-ForAutomationName $mainWindow.Handle "功率因数检测" $WaitSeconds
+    $detailOutputRule = Wait-ForAutomationName $mainWindow.Handle "详细异常输出" $WaitSeconds
     $startupTrayToggle = Wait-ForAutomationName $mainWindow.Handle "启动时隐藏到托盘" $WaitSeconds
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $globalHotkeyToggle = Wait-ForAutomationName $mainWindow.Handle "全局热键" $WaitSeconds
@@ -425,6 +474,8 @@ try {
         DefaultsSection = $defaultsSection
         InputDirectoryControl = $inputDirectoryControl
         BrowseInputDirectoryButton = $browseInputDirectoryButton
+        OpenThresholdSettingsButton = $openThresholdSettingsButton
+        OpenDetectionRulesButton = $openDetectionRulesButton
         ThresholdsSection = $thresholdsSection
         ThresholdConfigControl = $thresholdConfigControl
         BrowseThresholdConfigButton = $browseThresholdConfigButton
@@ -432,8 +483,22 @@ try {
         ReportsSection = $reportsSection
         LogsSection = $logsSection
         VoltageMinThreshold = $voltageMinThreshold
+        VoltageMaxThreshold = $voltageMaxThreshold
         CurrentMaxThreshold = $currentMaxThreshold
+        PowerFactorMinThreshold = $powerFactorMinThreshold
+        TemperatureMaxThreshold = $temperatureMaxThreshold
+        FreezeCountThreshold = $freezeCountThreshold
+        MoreThresholdsExpander = $moreThresholdsExpander
+        CurrentUnbalanceMaxThreshold = $currentUnbalanceMaxThreshold
+        ActivePowerMinThreshold = $activePowerMinThreshold
+        TemperatureMinThreshold = $temperatureMinThreshold
+        CurrentActiveMinThreshold = $currentActiveMinThreshold
+        FreezeStdThreshold = $freezeStdThreshold
+        VoltageImbalanceThreshold = $voltageImbalanceThreshold
         CurrentOverloadRule = $currentOverloadRule
+        CurrentUnbalanceRule = $currentUnbalanceRule
+        PowerFactorRule = $powerFactorRule
+        DetailOutputRule = $detailOutputRule
         StartupTrayToggle = $startupTrayToggle
         AutoStartToggle = $autoStartToggle
         GlobalHotkeyToggle = $globalHotkeyToggle
