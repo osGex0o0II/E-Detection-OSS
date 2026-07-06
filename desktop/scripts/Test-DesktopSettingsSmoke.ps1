@@ -441,6 +441,7 @@ try {
     $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络代理" $WaitSeconds
     $proxyAddressControl = Wait-ForAutomationName $mainWindow.Handle "代理地址" $WaitSeconds
     $proxyTestButton = Wait-ForAutomationName $mainWindow.Handle "测试网络代理" $WaitSeconds
+    $openWindowsProxySettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 代理设置" $WaitSeconds
     $updatesSection = Wait-ForAutomationName $mainWindow.Handle "软件更新" $WaitSeconds
     $updateStatusText = Wait-ForAutomationNameLike $mainWindow.Handle "*当前版本*" $WaitSeconds
     $updateProxyToggle = Wait-ForAutomationName $mainWindow.Handle "更新使用网络代理" $WaitSeconds
@@ -520,6 +521,7 @@ try {
         ProxySection = $proxySection
         ProxyAddressControl = $proxyAddressControl
         ProxyTestButton = $proxyTestButton
+        OpenWindowsProxySettingsButton = $openWindowsProxySettingsButton
         UpdatesSection = $updatesSection
         UpdateStatusText = $updateStatusText
         UpdateProxyToggle = $updateProxyToggle

@@ -19,6 +19,7 @@ public partial class MainViewModel : ObservableObject
     public const int DefaultWindowWidthDip = 1240;
     public const int DefaultWindowHeightDip = 720;
     private const string WindowsNotificationSettingsUri = "ms-settings:notifications";
+    private const string WindowsProxySettingsUri = "ms-settings:network-proxy";
 
     private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
@@ -1391,6 +1392,14 @@ public partial class MainViewModel : ObservableObject
     private void ClearProxyPassword()
     {
         ClearSecureSecret(_credentials.ClearProxyPassword, "代理密码已清除。");
+    }
+
+    [RelayCommand]
+    private void OpenSystemProxySettings()
+    {
+        OpenUri(WindowsProxySettingsUri);
+        ShowSettingsFeedback("已打开 Windows 代理设置。", InfoBarSeverity.Informational);
+        AddLog("网络代理", "已打开 Windows 代理设置。");
     }
 
     private bool CanTestNetworkProxy() => !IsTestingNetworkProxy;
