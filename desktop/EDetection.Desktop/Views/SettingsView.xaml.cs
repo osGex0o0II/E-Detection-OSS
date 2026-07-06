@@ -19,6 +19,7 @@ public sealed partial class SettingsView : UserControl
     private const double SettingsContentMaxWidth = 900;
     private const double CompactBodyBreakpoint = 960;
     private const double CompactContentBreakpoint = 720;
+    private const double StackedActionBreakpoint = CompactContentBreakpoint;
 
     private bool _suppressCategoryScroll;
     private bool _suppressScrollSync;
@@ -338,6 +339,58 @@ public sealed partial class SettingsView : UserControl
                 : new Thickness(18, 10, 18, 10);
             row.ColumnDefinitions[0].Width = new GridLength(labelWidth);
         }
+
+        var stackActions = contentWidth < StackedActionBreakpoint;
+        foreach (var grid in GetResponsiveActionGrids())
+        {
+            ApplyActionGridLayout(grid, stackActions);
+        }
+    }
+
+    private Grid[] GetResponsiveActionGrids() =>
+    [
+        DetectionParametersActionGrid,
+        DesktopNotificationActionGrid,
+        StartupActionGrid,
+        ProxyActionGrid,
+        UpdateActionGrid,
+    ];
+
+    private static void ApplyActionGridLayout(Grid grid, bool stack)
+    {
+        grid.RowDefinitions.Clear();
+        if (grid.ColumnDefinitions.Count < 2 || grid.Children.Count < 2)
+        {
+            return;
+        }
+
+        grid.ColumnSpacing = stack ? 0 : 8;
+        grid.RowSpacing = stack ? 8 : 0;
+        grid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+        grid.ColumnDefinitions[1].Width = stack
+            ? new GridLength(0)
+            : new GridLength(1, GridUnitType.Star);
+
+        var first = grid.Children[0] as FrameworkElement;
+        var second = grid.Children[1] as FrameworkElement;
+        if (first is null || second is null)
+        {
+            return;
+        }
+
+        Grid.SetColumn(first, 0);
+        Grid.SetRow(first, 0);
+        if (stack)
+        {
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(second, 0);
+            Grid.SetRow(second, 1);
+            return;
+        }
+
+        Grid.SetColumn(second, 1);
+        Grid.SetRow(second, 0);
     }
 
     private void SettingsExpander_Expanding(Expander sender, ExpanderExpandingEventArgs args)
