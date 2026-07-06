@@ -50,6 +50,8 @@ public sealed class AppSettings
 
     public bool EnableUpdateChecks { get; set; } = true;
 
+    public bool UseProxyForUpdates { get; set; }
+
     public int SelectedUpdateChannelIndex { get; set; }
 
     public string UpdateFeedUrl { get; set; } = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest";

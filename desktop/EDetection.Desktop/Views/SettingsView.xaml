@@ -773,6 +773,15 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
+                                    <TextBlock Text="使用网络代理" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding UseProxyForUpdates, Mode=TwoWay}" AutomationProperties.Name="更新使用网络代理" />
+                                </Grid>
+                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
+                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="*" MaxWidth="320" />
+                                    </Grid.ColumnDefinitions>
                                     <TextBlock Text="更新通道" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                     <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedUpdateChannelIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="更新通道">
                                         <ComboBoxItem Content="稳定版" />

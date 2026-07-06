@@ -321,6 +321,7 @@ try {
         ProxyRequiresAuthentication = $false
         ProxyUserName = ""
         EnableUpdateChecks = $true
+        UseProxyForUpdates = $true
         SelectedUpdateChannelIndex = 2
         UpdateFeedUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest"
         EnableGlobalHotkeys = $true
@@ -389,6 +390,7 @@ try {
     $proxyTestButton = Wait-ForAutomationName $mainWindow.Handle "测试网络代理" $WaitSeconds
     $updatesSection = Wait-ForAutomationName $mainWindow.Handle "软件更新" $WaitSeconds
     $updateStatusText = Wait-ForAutomationNameLike $mainWindow.Handle "*当前版本*" $WaitSeconds
+    $updateProxyToggle = Wait-ForAutomationName $mainWindow.Handle "更新使用网络代理" $WaitSeconds
     $checkUpdatesButton = Wait-ForAutomationName $mainWindow.Handle "检查更新" $WaitSeconds
     $openUpdatePageButton = Wait-ForAutomationName $mainWindow.Handle "打开更新页面" $WaitSeconds
     $updateFeedControl = Wait-ForAutomationName $mainWindow.Handle "更新源" $WaitSeconds
@@ -398,12 +400,16 @@ try {
     $saveSettingsButton = Wait-ForAutomationName $mainWindow.Handle "保存设置" $WaitSeconds
     $resetSettingsButton = Wait-ForAutomationName $mainWindow.Handle "重置设置" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-    if ($settingsJson.SettingsVersion -ne 6) {
-        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '6'."
+    if ($settingsJson.SettingsVersion -ne 7) {
+        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '7'."
     }
 
     if ($settingsJson.SelectedQuickActionsShortcutIndex -ne 1) {
         throw "Settings smoke failed: SelectedQuickActionsShortcutIndex was '$($settingsJson.SelectedQuickActionsShortcutIndex)', expected '1'."
+    }
+
+    if ($settingsJson.UseProxyForUpdates -ne $true) {
+        throw "Settings smoke failed: UseProxyForUpdates was '$($settingsJson.UseProxyForUpdates)', expected 'True'."
     }
 
     $resultPath = Join-Path $outputFull "settings-smoke-$timestamp.json"
@@ -443,6 +449,7 @@ try {
         ProxyTestButton = $proxyTestButton
         UpdatesSection = $updatesSection
         UpdateStatusText = $updateStatusText
+        UpdateProxyToggle = $updateProxyToggle
         CheckUpdatesButton = $checkUpdatesButton
         OpenUpdatePageButton = $openUpdatePageButton
         UpdateFeedControl = $updateFeedControl

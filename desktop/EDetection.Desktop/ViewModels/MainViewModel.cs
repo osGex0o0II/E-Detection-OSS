@@ -114,6 +114,7 @@ public partial class MainViewModel : ObservableObject
         ProxyRequiresAuthentication = saved.ProxyRequiresAuthentication;
         ProxyUserName = saved.ProxyUserName;
         EnableUpdateChecks = saved.EnableUpdateChecks;
+        UseProxyForUpdates = saved.UseProxyForUpdates;
         SelectedUpdateChannelIndex = Math.Clamp(saved.SelectedUpdateChannelIndex, 0, 2);
         UpdateFeedUrl = saved.UpdateFeedUrl;
         UpdateStatusText = $"当前版本 {new AppInfoService().GetInfo().Version}";
@@ -673,6 +674,9 @@ public partial class MainViewModel : ObservableObject
     public partial bool EnableUpdateChecks { get; set; } = true;
 
     [ObservableProperty]
+    public partial bool UseProxyForUpdates { get; set; }
+
+    [ObservableProperty]
     public partial int SelectedUpdateChannelIndex { get; set; }
 
     [ObservableProperty]
@@ -1090,6 +1094,8 @@ public partial class MainViewModel : ObservableObject
     partial void OnProxyUserNameChanged(string value) => SavePreferenceSettings();
 
     partial void OnEnableUpdateChecksChanged(bool value) => SavePreferenceSettings();
+
+    partial void OnUseProxyForUpdatesChanged(bool value) => SavePreferenceSettings();
 
     partial void OnSelectedUpdateChannelIndexChanged(int value)
     {
@@ -2369,7 +2375,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var currentVersion = new AppInfoService().GetInfo().Version;
-            var result = await _updateCheck.CheckLatestAsync(UpdateFeedUrl, currentVersion);
+            using var handler = _networkProxy.BuildHandler(this, UseProxyForUpdates);
+            var result = await _updateCheck.CheckLatestAsync(UpdateFeedUrl, currentVersion, handler);
             LatestReleaseUrl = result.ReleaseUrl;
             var publishedText = result.PublishedAt is { } publishedAt
                 ? $" · {publishedAt:yyyy-MM-dd}"
@@ -2654,6 +2661,7 @@ public partial class MainViewModel : ObservableObject
             ProxyRequiresAuthentication = ProxyRequiresAuthentication,
             ProxyUserName = ProxyUserName,
             EnableUpdateChecks = EnableUpdateChecks,
+            UseProxyForUpdates = UseProxyForUpdates,
             SelectedUpdateChannelIndex = SelectedUpdateChannelIndex,
             UpdateFeedUrl = UpdateFeedUrl,
             EnableGlobalHotkeys = EnableGlobalHotkeys,
@@ -2696,6 +2704,7 @@ public partial class MainViewModel : ObservableObject
         ProxyRequiresAuthentication = defaults.ProxyRequiresAuthentication;
         ProxyUserName = defaults.ProxyUserName;
         EnableUpdateChecks = defaults.EnableUpdateChecks;
+        UseProxyForUpdates = defaults.UseProxyForUpdates;
         SelectedUpdateChannelIndex = defaults.SelectedUpdateChannelIndex;
         UpdateFeedUrl = defaults.UpdateFeedUrl;
         EnableGlobalHotkeys = defaults.EnableGlobalHotkeys;

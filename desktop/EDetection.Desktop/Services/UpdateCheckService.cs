@@ -10,6 +10,7 @@ public sealed class UpdateCheckService
     public async Task<UpdateCheckResult> CheckLatestAsync(
         string feedUrl,
         string currentVersion,
+        HttpMessageHandler? handler = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(feedUrl))
@@ -17,10 +18,10 @@ public sealed class UpdateCheckService
             throw new ArgumentException("更新源不能为空。", nameof(feedUrl));
         }
 
-        using var client = new HttpClient
-        {
-            Timeout = RequestTimeout,
-        };
+        using var client = handler is null
+            ? new HttpClient()
+            : new HttpClient(handler, disposeHandler: false);
+        client.Timeout = RequestTimeout;
         client.DefaultRequestHeaders.UserAgent.ParseAdd("E-Detection-Desktop");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         var endpoint = ResolveLatestReleaseEndpoint(feedUrl);
