@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using EDetection.Desktop.Models;
 using EDetection.Desktop.Services;
 using EDetection.Desktop.ViewModels;
+using System.ComponentModel;
 using Windows.Foundation;
 using Windows.System;
 
@@ -16,6 +17,7 @@ public sealed partial class AppShellView : UserControl
     private ContentDialog? _quickActionDialog;
     private TextBox? _quickActionSearchBox;
     private ListView? _quickActionListView;
+    private MainViewModel? _subscribedViewModel;
     private bool? _lastCompactLayout;
     private bool _isSettingsPageVisible;
     private const double StackedStatusWidth = 1008;
@@ -27,6 +29,7 @@ public sealed partial class AppShellView : UserControl
         InitializeComponent();
         RegisterKeyboardAccelerators();
         Loaded += AppShellView_Loaded;
+        DataContextChanged += AppShellView_DataContextChanged;
         ShellSettings.BackRequested += (_, _) => ShowWorkbench();
     }
 
@@ -39,8 +42,37 @@ public sealed partial class AppShellView : UserControl
     private void SettingsButton_Click(object sender, RoutedEventArgs e) =>
         ShowSettingsPage();
 
+    private async void QuickActionsButton_Click(object sender, RoutedEventArgs e) =>
+        await ShowQuickActionsAsync();
+
     private void AboutButton_Click(object sender, RoutedEventArgs e) =>
         AboutRequested?.Invoke(this, EventArgs.Empty);
+
+    private void AppShellView_DataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        if (_subscribedViewModel is not null)
+        {
+            _subscribedViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+            _subscribedViewModel = null;
+        }
+
+        if (args.NewValue is MainViewModel newViewModel)
+        {
+            newViewModel.PropertyChanged += ViewModel_PropertyChanged;
+            _subscribedViewModel = newViewModel;
+        }
+
+        UpdateQuickActionsToolTip();
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MainViewModel.SelectedQuickActionsShortcutIndex)
+            or nameof(MainViewModel.EnableQuickActionsShortcut))
+        {
+            UpdateQuickActionsToolTip();
+        }
+    }
 
     private void RegisterKeyboardAccelerators()
     {
@@ -172,6 +204,7 @@ public sealed partial class AppShellView : UserControl
 
     private void AppShellView_Loaded(object sender, RoutedEventArgs e)
     {
+        UpdateQuickActionsToolTip();
         if (Root.ActualWidth < CompactShellWidth)
         {
             QueueCompactScrollReset();
@@ -184,6 +217,8 @@ public sealed partial class AppShellView : UserControl
         {
             return;
         }
+
+        UpdateQuickActionsToolTip();
 
         var compact = width < CompactShellWidth;
         var reduced = width < ComfortableShellWidth;
@@ -397,6 +432,15 @@ public sealed partial class AppShellView : UserControl
         };
 
         await _quickActionDialog.ShowAsync();
+    }
+
+    private void UpdateQuickActionsToolTip()
+    {
+        var shortcutText = ViewModel?.QuickActionsShortcutText ?? "快速操作";
+        var toolTip = shortcutText.Contains("已关闭", StringComparison.Ordinal)
+            ? "快速操作"
+            : shortcutText;
+        ToolTipService.SetToolTip(QuickActionsTitleBarButton, toolTip);
     }
 
     private void QuickActionSearchBox_TextChanged(object sender, TextChangedEventArgs e) =>

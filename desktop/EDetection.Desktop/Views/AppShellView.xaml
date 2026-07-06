@@ -46,6 +46,12 @@
                         Margin="0,0,148,0"
                         Height="44"
                         VerticalAlignment="Top">
+                <Button x:Name="QuickActionsTitleBarButton"
+                        Style="{StaticResource TitleBarIconButtonStyle}"
+                        Click="QuickActionsButton_Click"
+                        AutomationProperties.Name="快速操作">
+                    <FontIcon Glyph="&#xE721;" FontSize="14" />
+                </Button>
                 <Button x:Name="SettingsTitleBarButton"
                         Style="{StaticResource TitleBarIconButtonStyle}"
                         Click="SettingsButton_Click"
