@@ -774,6 +774,7 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CopySelectedDetailCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenSelectedDetailSourceCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopySelectedDetailSourcePathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExplainSelectedDetailCommand))]
     public partial ReportDetailPreview? SelectedDetail { get; set; }
 
     [ObservableProperty]
@@ -865,6 +866,17 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewTotalCount))]
     [NotifyPropertyChangedFor(nameof(WorkbenchDetailPreviewStatusText))]
     public partial int DetailPreviewTotalCount { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LlmDetailExplanationVisibility))]
+    public partial string LlmDetailExplanationText { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ExplainSelectedDetailCommand))]
+    public partial bool IsExplainingSelectedDetail { get; set; }
+
+    public Visibility LlmDetailExplanationVisibility =>
+        string.IsNullOrWhiteSpace(LlmDetailExplanationText) ? Visibility.Collapsed : Visibility.Visible;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ThemeMode))]
@@ -1181,6 +1193,14 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedIssueTypeFilterIndexChanged(int value) => RefreshDetailPreview();
 
     partial void OnSelectedDetailSortKeyChanged(string value) => RefreshDetailPreview();
+
+    partial void OnSelectedDetailChanged(ReportDetailPreview? value)
+    {
+        if (!IsExplainingSelectedDetail)
+        {
+            LlmDetailExplanationText = "";
+        }
+    }
 
     [RelayCommand]
     private void SaveSettingsFromPage()
@@ -2340,6 +2360,45 @@ public partial class MainViewModel : ObservableObject
 
         CopyTextToClipboard(SelectedDetail.ToClipboardText());
         AddLog("复制", "已复制选中的异常明细。");
+    }
+
+    private bool CanExplainSelectedDetail() =>
+        SelectedDetail is not null && !IsExplainingSelectedDetail;
+
+    [RelayCommand(CanExecute = nameof(CanExplainSelectedDetail))]
+    private async Task ExplainSelectedDetailAsync()
+    {
+        if (SelectedDetail is not { } detail)
+        {
+            return;
+        }
+
+        IsExplainingSelectedDetail = true;
+        LlmDetailExplanationText = "正在生成智能解读...";
+        try
+        {
+            var response = await _llmAssistant.ExplainDetailAsync(this, detail.ToClipboardText());
+            if (ReferenceEquals(SelectedDetail, detail))
+            {
+                LlmDetailExplanationText = string.IsNullOrWhiteSpace(response)
+                    ? "智能助手已响应，但未返回可显示的解读。"
+                    : response;
+            }
+            AddLog("智能助手", "已生成选中异常明细解读。");
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or TaskCanceledException
+                                   or UriFormatException
+                                   or JsonException)
+        {
+            LlmDetailExplanationText = $"智能解读失败: {ex.Message}";
+            AddLog("智能助手提醒", $"异常明细解读失败: {ex.Message}");
+        }
+        finally
+        {
+            IsExplainingSelectedDetail = false;
+        }
     }
 
     private bool CanOpenSelectedDetailSource() =>

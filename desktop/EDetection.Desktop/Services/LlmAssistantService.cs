@@ -14,6 +14,46 @@ public sealed class LlmAssistantService(SecureCredentialService credentials)
         MainViewModel settings,
         CancellationToken cancellationToken = default)
     {
+        return await SendUserPromptAsync(
+            settings,
+            "Reply with OK for an E-Detection connection test.",
+            maxTokens: 8,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<string> ExplainDetailAsync(
+        MainViewModel settings,
+        string detailText,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(detailText))
+        {
+            throw new InvalidOperationException("请选择一条异常明细。");
+        }
+
+        var prompt = string.Join(
+            Environment.NewLine,
+            "你是电气异常检测软件 E-Detection 的助手。请用中文解释下面这条异常明细。",
+            "要求：",
+            "1. 用 3-5 条短句说明可能含义、风险和下一步排查建议。",
+            "2. 不要编造未提供的数据。",
+            "3. 如果证据不足，明确说明需要结合现场和原始数据确认。",
+            "",
+            detailText);
+
+        return await SendUserPromptAsync(
+            settings,
+            prompt,
+            maxTokens: 260,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> SendUserPromptAsync(
+        MainViewModel settings,
+        string prompt,
+        int maxTokens,
+        CancellationToken cancellationToken)
+    {
         if (!settings.EnableLlmAssistant)
         {
             throw new InvalidOperationException("请先启用智能助手。");
@@ -43,7 +83,7 @@ public sealed class LlmAssistantService(SecureCredentialService credentials)
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildEndpoint(settings.LlmEndpoint));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         request.Headers.Accept.ParseAdd("application/json");
-        request.Content = new StringContent(BuildChatCompletionsPayload(settings.LlmModel), Encoding.UTF8, "application/json");
+        request.Content = new StringContent(BuildChatCompletionsPayload(settings.LlmModel, prompt, maxTokens), Encoding.UTF8, "application/json");
 
         using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -101,7 +141,7 @@ public sealed class LlmAssistantService(SecureCredentialService credentials)
         return builder.Uri;
     }
 
-    private static string BuildChatCompletionsPayload(string model) =>
+    private static string BuildChatCompletionsPayload(string model, string prompt, int maxTokens) =>
         JsonSerializer.Serialize(new
         {
             model = model.Trim(),
@@ -110,10 +150,10 @@ public sealed class LlmAssistantService(SecureCredentialService credentials)
                 new
                 {
                     role = "user",
-                    content = "Reply with OK for an E-Detection connection test.",
+                    content = prompt,
                 },
             },
-            max_tokens = 8,
+            max_tokens = maxTokens,
             temperature = 0,
         });
 

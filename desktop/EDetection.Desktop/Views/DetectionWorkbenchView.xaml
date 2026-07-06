@@ -497,6 +497,7 @@
                                 <ColumnDefinition x:Name="DetailCopyPathColumn" Width="Auto" />
                                 <ColumnDefinition x:Name="DetailCopySelectedColumn" Width="Auto" />
                                 <ColumnDefinition x:Name="DetailCopyFilteredColumn" Width="Auto" />
+                                <ColumnDefinition x:Name="DetailExplainColumn" Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="DetailSearchBox"
                                      Text="{Binding DetailSearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -545,113 +546,141 @@
                                     ToolTipService.ToolTip="复制当前结果">
                                 <FontIcon Glyph="&#xE8A5;" FontSize="14" />
                             </Button>
+                            <Button x:Name="ExplainSelectedDetailButton"
+                                    Grid.Column="8"
+                                    Command="{Binding ExplainSelectedDetailCommand}"
+                                    ToolTipService.ToolTip="智能解读选中异常"
+                                    AutomationProperties.Name="智能解读选中异常">
+                                <FontIcon Glyph="&#xE950;" FontSize="14" />
+                            </Button>
                         </Grid>
 
-                        <Border Grid.Row="2"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="0,0,0,1"
-                                Padding="12,0,12,6">
-                            <Grid x:Name="DetailHeaderGrid"
-                                  ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition x:Name="DetailHeaderSeverityColumn" Width="46" />
-                                    <ColumnDefinition x:Name="DetailHeaderDeviceColumn" Width="1.2*" />
-                                    <ColumnDefinition x:Name="DetailHeaderIssueColumn" Width="1.8*" />
-                                    <ColumnDefinition x:Name="DetailHeaderValueColumn" Width="86" />
-                                    <ColumnDefinition x:Name="DetailHeaderActionColumn" Width="1.4*" />
-                                </Grid.ColumnDefinitions>
-                                <Button Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        HorizontalAlignment="Left"
-                                        Command="{Binding SortDetailsCommand}"
-                                        CommandParameter="severity">
-                                    <TextBlock Text="等级" Style="{StaticResource TableHeaderTextStyle}" />
-                                </Button>
-                                <Button Grid.Column="1"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        HorizontalAlignment="Left"
-                                        Command="{Binding SortDetailsCommand}"
-                                        CommandParameter="device">
-                                    <TextBlock Text="设备" Style="{StaticResource TableHeaderTextStyle}" />
-                                </Button>
-                                <Button Grid.Column="2"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        HorizontalAlignment="Left"
-                                        Command="{Binding SortDetailsCommand}"
-                                        CommandParameter="issue">
-                                    <TextBlock Text="异常" Style="{StaticResource TableHeaderTextStyle}" />
-                                </Button>
-                                <Button Grid.Column="3"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        HorizontalAlignment="Left"
-                                        Command="{Binding SortDetailsCommand}"
-                                        CommandParameter="value">
-                                    <TextBlock Text="异常值" Style="{StaticResource TableHeaderTextStyle}" />
-                                </Button>
-                                <Button Grid.Column="4"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        HorizontalAlignment="Left"
-                                        Command="{Binding SortDetailsCommand}"
-                                        CommandParameter="time">
-                                    <TextBlock Text="建议" Style="{StaticResource TableHeaderTextStyle}" />
-                                </Button>
-                            </Grid>
-                        </Border>
-
-                        <ListView Grid.Row="3"
-                                  ItemsSource="{Binding WorkbenchFilteredDetailPreview}"
-                                  SelectedItem="{Binding SelectedDetail, Mode=TwoWay}"
-                                  SelectionMode="Single"
-                                  ItemContainerStyle="{StaticResource DenseListViewItemStyle}">
-                            <ListView.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid ColumnSpacing="12" Padding="12,6">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="46" />
-                                            <ColumnDefinition Width="1.2*" />
-                                            <ColumnDefinition Width="1.8*" />
-                                            <ColumnDefinition Width="86" />
-                                            <ColumnDefinition Width="1.4*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Severity}"
-                                                   FontWeight="SemiBold"
-                                                   VerticalAlignment="Top" />
-                                        <StackPanel Grid.Column="1" Spacing="1">
-                                            <TextBlock Text="{Binding LocationText}"
+                        <Grid Grid.Row="3"
+                              RowSpacing="8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="12,0,12,6">
+                                <Grid x:Name="DetailHeaderGrid"
+                                      ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition x:Name="DetailHeaderSeverityColumn" Width="46" />
+                                        <ColumnDefinition x:Name="DetailHeaderDeviceColumn" Width="1.2*" />
+                                        <ColumnDefinition x:Name="DetailHeaderIssueColumn" Width="1.8*" />
+                                        <ColumnDefinition x:Name="DetailHeaderValueColumn" Width="86" />
+                                        <ColumnDefinition x:Name="DetailHeaderActionColumn" Width="1.4*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding SortDetailsCommand}"
+                                            CommandParameter="severity">
+                                        <TextBlock Text="等级" Style="{StaticResource TableHeaderTextStyle}" />
+                                    </Button>
+                                    <Button Grid.Column="1"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding SortDetailsCommand}"
+                                            CommandParameter="device">
+                                        <TextBlock Text="设备" Style="{StaticResource TableHeaderTextStyle}" />
+                                    </Button>
+                                    <Button Grid.Column="2"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding SortDetailsCommand}"
+                                            CommandParameter="issue">
+                                        <TextBlock Text="异常" Style="{StaticResource TableHeaderTextStyle}" />
+                                    </Button>
+                                    <Button Grid.Column="3"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding SortDetailsCommand}"
+                                            CommandParameter="value">
+                                        <TextBlock Text="异常值" Style="{StaticResource TableHeaderTextStyle}" />
+                                    </Button>
+                                    <Button Grid.Column="4"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalAlignment="Left"
+                                            Command="{Binding SortDetailsCommand}"
+                                            CommandParameter="time">
+                                        <TextBlock Text="建议" Style="{StaticResource TableHeaderTextStyle}" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            <Border Grid.Row="1"
+                                    Visibility="{Binding LlmDetailExplanationVisibility}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12"
+                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="智能解读"
+                                               Style="{StaticResource TableHeaderTextStyle}" />
+                                    <TextBlock Text="{Binding LlmDetailExplanationText}"
+                                               TextWrapping="WrapWholeWords"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </Border>
+                            <ListView Grid.Row="2"
+                                      ItemsSource="{Binding WorkbenchFilteredDetailPreview}"
+                                      SelectedItem="{Binding SelectedDetail, Mode=TwoWay}"
+                                      SelectionMode="Single"
+                                      ItemContainerStyle="{StaticResource DenseListViewItemStyle}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnSpacing="12" Padding="12,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="46" />
+                                                <ColumnDefinition Width="1.2*" />
+                                                <ColumnDefinition Width="1.8*" />
+                                                <ColumnDefinition Width="86" />
+                                                <ColumnDefinition Width="1.4*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Severity}"
                                                        FontWeight="SemiBold"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding TimeText}"
-                                                       FontSize="12"
-                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding IssueText}"
-                                                   TextWrapping="WrapWholeWords"
-                                                   MaxLines="2"
-                                                   FontSize="13" />
-                                        <TextBlock Grid.Column="3"
-                                                   Text="{Binding ValueText}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   FontSize="13" />
-                                        <TextBlock Grid.Column="4"
-                                                   Text="{Binding RecommendedAction}"
-                                                   TextWrapping="WrapWholeWords"
-                                                   MaxLines="2"
-                                                   FontSize="13" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                                                       VerticalAlignment="Top" />
+                                            <StackPanel Grid.Column="1" Spacing="1">
+                                                <TextBlock Text="{Binding LocationText}"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding TimeText}"
+                                                           FontSize="12"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding IssueText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       MaxLines="2"
+                                                       FontSize="13" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding ValueText}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       FontSize="13" />
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding RecommendedAction}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       MaxLines="2"
+                                                       FontSize="13" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
                     </Grid>
                 </TabViewItem>
 

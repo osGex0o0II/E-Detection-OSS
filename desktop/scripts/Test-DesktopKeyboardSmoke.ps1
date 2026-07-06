@@ -294,6 +294,7 @@ try {
     $eventLogTab = Wait-ForAutomationName $mainWindow.Handle "运行记录" $WaitSeconds
     $inputPanel = Wait-ForAutomationName $mainWindow.Handle "检测输入" $WaitSeconds
     $detailTab = Wait-ForAutomationName $mainWindow.Handle "异常明细" $WaitSeconds
+    $explainDetailButton = Wait-ForAutomationName $mainWindow.Handle "智能解读选中异常" $WaitSeconds
     $highRiskSection = Wait-ForAutomationName $mainWindow.Handle "高风险设备" $WaitSeconds
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -306,6 +307,7 @@ try {
         EventLogTab = $eventLogTab
         InputPanel = $inputPanel
         DetailTab = $detailTab
+        ExplainDetailButton = $explainDetailButton
         HighRiskSection = $highRiskSection
         Dpi = $dpi
         RequestedDipWidth = $Width
@@ -313,7 +315,7 @@ try {
         TargetWidth = $targetWidth
         TargetHeight = $targetHeight
         ResponsiveMode = if ($Width -le 920) { "compact" } else { "comfortable" }
-        CheckedActions = @("高级检查", "运行记录", "检测输入", "异常明细", "高风险设备")
+        CheckedActions = @("高级检查", "运行记录", "检测输入", "异常明细", "智能解读选中异常", "高风险设备")
         Passed = $true
         CapturedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json | Set-Content -Path $resultPath -Encoding UTF8

@@ -97,7 +97,7 @@ public sealed partial class DetectionWorkbenchView : UserControl
             DetailSearchColumn.Width = new GridLength(132);
             DetailSeverityColumn.Width = new GridLength(180);
             DetailIssueColumn.Width = new GridLength(1, GridUnitType.Star);
-            Place(DetailSearchBox, 0, 0, 8);
+            Place(DetailSearchBox, 0, 0, 9);
             Place(SeverityFilter, 1, 0);
             Place(IssueTypeFilter, 1, 1);
             Place(ClearDetailFiltersButton, 1, 3);
@@ -105,6 +105,7 @@ public sealed partial class DetectionWorkbenchView : UserControl
             Place(CopySelectedDetailSourcePathButton, 1, 5);
             Place(CopySelectedDetailButton, 1, 6);
             Place(CopyFilteredDetailsButton, 1, 7);
+            Place(ExplainSelectedDetailButton, 1, 8);
             return;
         }
 
@@ -119,6 +120,7 @@ public sealed partial class DetectionWorkbenchView : UserControl
         Place(CopySelectedDetailSourcePathButton, 0, 5);
         Place(CopySelectedDetailButton, 0, 6);
         Place(CopyFilteredDetailsButton, 0, 7);
+        Place(ExplainSelectedDetailButton, 0, 8);
     }
 
     private static void SetFourColumnGrid(
