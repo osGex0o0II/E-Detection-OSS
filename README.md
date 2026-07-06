@@ -88,17 +88,13 @@ python -m e_detection --json-events --config config.json --output-dir ".\reports
 ```powershell
 .\desktop\scripts\Publish-Desktop.ps1 -RuntimeIdentifier win-x64
 .\desktop\scripts\Test-DesktopVisualSmoke.ps1
-.\desktop\scripts\Test-DesktopKeyboardSmoke.ps1
-.\desktop\scripts\Test-DesktopGlobalHotkeySmoke.ps1
 .\desktop\scripts\Test-DesktopSingleInstanceSmoke.ps1
 .\desktop\scripts\Test-DesktopSessionEndingSmoke.ps1
 .\desktop\scripts\Test-DesktopStartupIntegrationSmoke.ps1
 .\artifacts\desktop\win-x64\publish\Test-DesktopInstallSmoke.ps1
-cd .\artifacts\desktop\win-x64\publish
-powershell -ExecutionPolicy Bypass -File .\Install-Desktop.ps1
 ```
 
-发布产物包含 WinUI 3 自包含桌面壳、安装/卸载脚本、包健康检查和 `INSTALL.txt`。视觉冒烟脚本会启动发布版主窗口，截图到 `artifacts\desktop\visual-smoke` 并输出 JSON 验收结果；键盘冒烟脚本会验证 `F5`、`Esc`、`F6`、`Ctrl+O`、`Ctrl+S`、`Ctrl+I` 等主流程快捷键；global-hotkey 冒烟脚本会验证 `Ctrl+Alt+Shift+E` 恢复工作台；单实例冒烟脚本会验证 `--startup-minimized` 托盘启动和重复启动唤醒既有窗口；session-ending 冒烟脚本会验证 Windows 注销/关机消息的 query、取消和真实退出路径；startup-integration 冒烟脚本会从设置页切换登录自启动，并验证任务计划程序项或回退启动项指向发布版应用；设置文件带 `SettingsVersion` 并会把旧 schema 写回到当前版本；设置页支持登录后自动启动，当前默认提供者是当前用户的 Task Scheduler 登录任务，旧 Windows Run 启动项会作为回退识别；设置页还提供桌面健康卡，汇总通知权限、启动 provider、settings store、包完整性、Python JSONL bridge、安装形态和全局热键注册状态；托盘菜单会随运行状态启用开始/取消检测，并能打开最新报告或报告目录；运行期间托盘和窗口/任务栏图标会切换到 `running.ico`；运行完成或失败时，系统通知可恢复工作台，带报告路径的完成通知还可直接打开报告；任务栏进度会跟随启动、运行、取消确认、取消和错误状态变化。快速操作入口可在设置中选择启用，并集中执行运行、诊断、桌面健康、报告打开/复制路径和最近报告操作。安装冒烟脚本会安装到临时 smoke 目录、验证 App Paths 注册、卸载并恢复已有用户快捷方式/注册项。桌面壳仍需要配置一个可以导入 `e_detection` 的 Python 环境；运行面板中的诊断区可以验证 Python、检测核心、配置文件和输入/输出目录，并复制修复命令或诊断详情。开始检测前会自动执行同一套就绪检查，避免把缺配置、无 CSV、Python 不可用等问题拖到后端进程失败后才暴露。
+发布产物包含 WinUI 3 自包含桌面壳、标准 Windows 安装器、便携 zip、安装/卸载脚本、包健康检查和 `INSTALL.txt`。普通用户优先下载 `E-Detection.Desktop-Setup-win-x64.exe`，安装向导支持选择安装位置、开始菜单入口、可选桌面快捷方式和 Windows 已安装应用卸载入口。视觉冒烟脚本会启动发布版主窗口，截图到 `artifacts\desktop\visual-smoke` 并输出 JSON 验收结果；单实例冒烟脚本会验证 `--startup-minimized` 托盘启动和重复启动唤醒既有窗口；session-ending 冒烟脚本会验证 Windows 注销/关机消息的 query、取消和真实退出路径；startup-integration 冒烟脚本会从设置页切换登录自启动，并验证任务计划程序项或回退启动项指向发布版应用；设置文件带 `SettingsVersion` 并会把旧 schema 写回到当前版本；设置页支持登录后自动启动，当前默认提供者是当前用户的 Task Scheduler 登录任务，旧 Windows Run 启动项会作为回退识别；设置页还提供桌面健康卡，汇总通知权限、启动 provider、settings store、包完整性、Python JSONL bridge 和安装形态；托盘菜单会随运行状态启用开始/取消检测，并能打开最新报告或报告目录；运行期间托盘和窗口/任务栏图标会切换到 `running.ico`；运行完成或失败时，系统通知可恢复工作台，带报告路径的完成通知还可直接打开报告；任务栏进度会跟随启动、运行、取消确认、取消和错误状态变化。安装冒烟脚本会安装到临时 smoke 目录、验证 App Paths 注册、卸载并恢复已有用户快捷方式/注册项。桌面壳仍需要配置一个可以导入 `e_detection` 的 Python 环境；运行面板中的诊断区可以验证 Python、检测核心、配置文件和输入/输出目录，并复制修复命令或诊断详情。开始检测前会自动执行同一套就绪检查，避免把缺配置、无 CSV、Python 不可用等问题拖到后端进程失败后才暴露。
 
 使用兼容脚本：
 

@@ -60,11 +60,25 @@ jobs:
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress --yes
+
+      - name: Build setup installer
+        shell: pwsh
+        run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64
+
+      - name: Installer smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v6
         with:
           name: E-Detection.Desktop-win-x64
-          path: artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip
+          path: |
+            artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip
+            artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
           if-no-files-found: error
 
       - name: Publish GitHub release
@@ -87,18 +101,27 @@ jobs:
           }
 
           $zipPath = "artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip"
+          $setupPath = "artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe"
           if (!(Test-Path $zipPath)) {
               throw "Release asset was not found: $zipPath"
+          }
+
+          if (!(Test-Path $setupPath)) {
+              throw "Release asset was not found: $setupPath"
           }
 
           $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
           @(
               "Windows x64 desktop build generated from commit $env:GITHUB_SHA."
               ""
+              "Recommended download for most users: E-Detection.Desktop-Setup-win-x64.exe"
+              "Portable package: E-Detection.Desktop-win-x64.zip"
+              ""
               "Included checks:"
               "- dotnet restore/build"
               "- publish package health"
               "- install/uninstall smoke"
+              "- setup installer smoke"
           ) | Set-Content -Path $notesPath -Encoding UTF8
 
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
@@ -106,7 +129,7 @@ jobs:
           $global:LASTEXITCODE = 0
 
           if ($releaseExists) {
-              gh release upload $tag $zipPath --repo $env:GITHUB_REPOSITORY --clobber
+              gh release upload $tag $setupPath $zipPath --repo $env:GITHUB_REPOSITORY --clobber
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to upload release asset for $tag."
               }
@@ -117,7 +140,7 @@ jobs:
               }
           }
           else {
-              gh release create $tag $zipPath --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "E-Detection Desktop $tag" --notes-file $notesPath
+              gh release create $tag $setupPath $zipPath --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "E-Detection Desktop $tag" --notes-file $notesPath
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to create release $tag."
               }

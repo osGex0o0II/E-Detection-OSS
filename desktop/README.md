@@ -48,7 +48,16 @@ For release packaging, prefer the repo script:
 
 The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
 
-GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.1.0`, or run the `desktop` workflow manually with a `release_tag`, to upload `E-Detection.Desktop-win-x64.zip` to GitHub Releases.
+GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.1.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Most users should download the setup wizard.
+
+To build the setup wizard locally, install Inno Setup 6 and run:
+
+```powershell
+.\desktop\scripts\Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64
+.\desktop\scripts\Test-DesktopInstallerSmoke.ps1
+```
+
+The installer defaults to `%LOCALAPPDATA%\Programs\E-Detection Desktop`, does not require administrator privileges, creates Start Menu integration, offers an optional Desktop shortcut, appears in Windows installed apps, and lets the user choose another install directory from the setup wizard.
 
 Useful options:
 
