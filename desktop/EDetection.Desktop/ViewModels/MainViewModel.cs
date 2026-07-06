@@ -18,6 +18,7 @@ public partial class MainViewModel : ObservableObject
     public const int MinWindowHeightDip = 640;
     public const int DefaultWindowWidthDip = 1240;
     public const int DefaultWindowHeightDip = 720;
+    private const string WindowsNotificationSettingsUri = "ms-settings:notifications";
 
     private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
@@ -1322,6 +1323,14 @@ public partial class MainViewModel : ObservableObject
                 ForwardToRemoteNotifications: false));
         ShowSettingsFeedback("已发送桌面通知测试。", InfoBarSeverity.Success);
         AddLog("桌面通知", "已发送桌面通知测试。");
+    }
+
+    [RelayCommand]
+    private void OpenSystemNotificationSettings()
+    {
+        OpenUri(WindowsNotificationSettingsUri);
+        ShowSettingsFeedback("已打开 Windows 通知设置。", InfoBarSeverity.Informational);
+        AddLog("桌面通知", "已打开 Windows 通知设置。");
     }
 
     private bool CanSendTestNtfyNotification() => !IsSendingTestNtfyNotification;
@@ -3057,7 +3066,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            ShowSettingsFeedback($"打开更新源失败: {ex.Message}", InfoBarSeverity.Warning);
+            ShowSettingsFeedback($"打开外部链接失败: {ex.Message}", InfoBarSeverity.Warning);
         }
     }
 }

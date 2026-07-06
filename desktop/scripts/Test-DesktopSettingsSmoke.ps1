@@ -425,6 +425,7 @@ try {
     $detailOutputRule = Wait-ForAutomationName $mainWindow.Handle "详细异常输出" $WaitSeconds
     $desktopNotificationToggle = Wait-ForAutomationName $mainWindow.Handle "桌面通知" $WaitSeconds
     $desktopNotificationTestButton = Wait-ForAutomationName $mainWindow.Handle "测试桌面通知" $WaitSeconds
+    $openWindowsNotificationSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 通知设置" $WaitSeconds
     $startupTrayToggle = Wait-ForAutomationName $mainWindow.Handle "启动时隐藏到托盘" $WaitSeconds
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $globalHotkeyToggle = Wait-ForAutomationName $mainWindow.Handle "全局热键" $WaitSeconds
@@ -503,6 +504,7 @@ try {
         DetailOutputRule = $detailOutputRule
         DesktopNotificationToggle = $desktopNotificationToggle
         DesktopNotificationTestButton = $desktopNotificationTestButton
+        OpenWindowsNotificationSettingsButton = $openWindowsNotificationSettingsButton
         StartupTrayToggle = $startupTrayToggle
         AutoStartToggle = $autoStartToggle
         GlobalHotkeyToggle = $globalHotkeyToggle
