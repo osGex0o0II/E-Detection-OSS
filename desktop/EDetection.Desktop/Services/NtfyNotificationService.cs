@@ -30,9 +30,12 @@ public sealed class NtfyNotificationService(
         {
             Timeout = SendTimeout,
         };
+        var body = string.IsNullOrWhiteSpace(request.ActionUrl)
+            ? request.Message
+            : $"{request.Message}{Environment.NewLine}{request.ActionUrl}";
         using var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
-            Content = new StringContent(request.Message, Encoding.UTF8, "text/plain"),
+            Content = new StringContent(body, Encoding.UTF8, "text/plain"),
         };
 
         message.Headers.TryAddWithoutValidation("Title", request.Title);
@@ -72,6 +75,7 @@ public sealed class NtfyNotificationService(
         DesktopNotificationKind.Success => "white_check_mark",
         DesktopNotificationKind.Warning => "warning",
         DesktopNotificationKind.Error => "rotating_light",
+        DesktopNotificationKind.Update => "arrow_up",
         _ => "information_source",
     };
 }

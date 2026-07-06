@@ -233,6 +233,30 @@ public sealed partial class MainWindow : Window
                 UseShellExecute = true,
             });
         }
+
+        if (activation.Action == DesktopNotificationActivation.OpenUpdateAction
+            && !string.IsNullOrWhiteSpace(activation.ActionUrl))
+        {
+            TryOpenExternalUri(activation.ActionUrl);
+        }
+    }
+
+    private static void TryOpenExternalUri(string uri)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = uri,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException
+                                   or Win32Exception
+                                   or ArgumentException
+                                   or NotSupportedException)
+        {
+        }
     }
 
     private async void ViewModel_DesktopNotificationRequested(

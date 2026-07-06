@@ -5,4 +5,5 @@ public enum DesktopNotificationKind
     Success,
     Warning,
     Error,
+    Update,
 }

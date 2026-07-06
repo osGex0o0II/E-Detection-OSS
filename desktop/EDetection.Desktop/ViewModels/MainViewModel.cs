@@ -40,6 +40,7 @@ public partial class MainViewModel : ObservableObject
     private bool _syncingStartupPreference;
     private bool _isShellShutdownRequested;
     private bool _suppressConfigPathReload;
+    private string _lastNotifiedUpdateVersion = "";
     private ShellHotkeySnapshot _globalHotkeySnapshot = ShellHotkeySnapshot.Disabled;
 
     public MainViewModel(
@@ -2353,10 +2354,11 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        await CheckForUpdatesCoreAsync(showProgress: false);
+        var result = await CheckForUpdatesCoreAsync(showProgress: false);
+        NotifyUpdateAvailableIfNeeded(result);
     }
 
-    private async Task CheckForUpdatesCoreAsync(bool showProgress)
+    private async Task<UpdateCheckResult?> CheckForUpdatesCoreAsync(bool showProgress)
     {
         IsCheckingForUpdates = true;
         if (showProgress)
@@ -2378,6 +2380,7 @@ public partial class MainViewModel : ObservableObject
             AddLog("更新", result.IsUpdateAvailable
                 ? $"发现新版本 {result.LatestVersion}: {result.ReleaseName}"
                 : $"已是最新版本 {currentVersion}");
+            return result;
         }
         catch (Exception ex) when (ex is HttpRequestException
                                    or JsonException
@@ -2389,11 +2392,42 @@ public partial class MainViewModel : ObservableObject
                 ? $"检查更新失败: {ex.Message}"
                 : "自动检查更新失败";
             AddLog("更新提醒", showProgress ? UpdateStatusText : $"自动检查更新失败: {ex.Message}");
+            return null;
         }
         finally
         {
             IsCheckingForUpdates = false;
         }
+    }
+
+    private void NotifyUpdateAvailableIfNeeded(UpdateCheckResult? result)
+    {
+        if (result is not { IsUpdateAvailable: true })
+        {
+            return;
+        }
+
+        if (string.Equals(_lastNotifiedUpdateVersion, result.LatestVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!EnableDesktopNotifications)
+        {
+            return;
+        }
+
+        _lastNotifiedUpdateVersion = result.LatestVersion;
+        var targetUrl = string.IsNullOrWhiteSpace(result.ReleaseUrl)
+            ? UpdateFeedUrl
+            : result.ReleaseUrl;
+        DesktopNotificationRequested?.Invoke(
+            this,
+            new DesktopNotificationRequest(
+                DesktopNotificationKind.Update,
+                "发现 E-Detection 新版本",
+                $"可更新到 {result.LatestVersion} · {result.ReleaseName}",
+                ActionUrl: targetUrl));
     }
 
     [RelayCommand]

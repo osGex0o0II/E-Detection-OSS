@@ -8,6 +8,7 @@ public sealed class DesktopNotificationService
 {
     private const string ActionKey = "action";
     private const string ReportPathKey = "reportPath";
+    private const string ActionUrlKey = "actionUrl";
 
     private bool _registered;
 
@@ -87,13 +88,27 @@ public sealed class DesktopNotificationService
                 return false;
             }
 
+            var defaultAction = string.IsNullOrWhiteSpace(request.ActionUrl)
+                ? DesktopNotificationActivation.OpenWorkbenchAction
+                : DesktopNotificationActivation.OpenUpdateAction;
             var builder = new AppNotificationBuilder()
-                .AddArgument(ActionKey, DesktopNotificationActivation.OpenWorkbenchAction)
+                .AddArgument(ActionKey, defaultAction)
                 .AddText(request.Title)
                 .AddText(request.Message)
-                .SetAttributionText("E-Detection")
-                .AddButton(new AppNotificationButton("打开工作台")
+                .SetAttributionText("E-Detection");
+
+            if (!string.IsNullOrWhiteSpace(request.ActionUrl))
+            {
+                builder.AddArgument(ActionUrlKey, request.ActionUrl)
+                    .AddButton(new AppNotificationButton("打开更新页面")
+                        .AddArgument(ActionKey, DesktopNotificationActivation.OpenUpdateAction)
+                        .AddArgument(ActionUrlKey, request.ActionUrl));
+            }
+            else
+            {
+                builder.AddButton(new AppNotificationButton("打开工作台")
                     .AddArgument(ActionKey, DesktopNotificationActivation.OpenWorkbenchAction));
+            }
 
             if (!string.IsNullOrWhiteSpace(request.ReportPath))
             {
@@ -108,8 +123,8 @@ public sealed class DesktopNotificationService
             }
 
             var notification = builder.BuildNotification();
-            notification.Tag = "detection";
-            notification.Group = "runs";
+            notification.Tag = request.Kind is DesktopNotificationKind.Update ? "update" : "detection";
+            notification.Group = request.Kind is DesktopNotificationKind.Update ? "updates" : "runs";
             notification.ExpiresOnReboot = true;
             AppNotificationManager.Default.Show(notification);
             return true;
@@ -130,10 +145,13 @@ public sealed class DesktopNotificationService
             var reportPath = args.Arguments.TryGetValue(ReportPathKey, out var reportPathValue)
                 ? reportPathValue
                 : null;
+            var actionUrl = args.Arguments.TryGetValue(ActionUrlKey, out var actionUrlValue)
+                ? actionUrlValue
+                : null;
 
             Activated?.Invoke(
                 this,
-                new DesktopNotificationActivation(action, reportPath));
+                new DesktopNotificationActivation(action, reportPath, actionUrl));
         }
         catch
         {
