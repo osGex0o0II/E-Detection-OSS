@@ -285,6 +285,81 @@ public partial class MainViewModel : ObservableObject
                 ? "报告已生成"
                 : "待开始";
 
+    public string RunSetupReadinessText
+    {
+        get
+        {
+            if (IsRunning)
+            {
+                return "正在检测";
+            }
+
+            if (StatusText == "无法开始检测")
+            {
+                return "需要处理后再开始";
+            }
+
+            if (StatusText == "检测失败")
+            {
+                return "检测未完成";
+            }
+
+            if (!string.IsNullOrWhiteSpace(ReportPath))
+            {
+                return "检测完成";
+            }
+
+            if (!IsLocalInputReady())
+            {
+                return "选择检测数据";
+            }
+
+            if (!IsConfigReady())
+            {
+                return "确认检测设置";
+            }
+
+            return "准备开始检测";
+        }
+    }
+
+    public string RunSetupReadinessDetailText
+    {
+        get
+        {
+            if (IsRunning)
+            {
+                return string.IsNullOrWhiteSpace(CurrentFileText)
+                    ? "检测正在运行，完成后可在右侧查看结果。"
+                    : CurrentFileText;
+            }
+
+            if (StatusText == "无法开始检测" || StatusText == "检测失败")
+            {
+                return LastFailureText == "暂无失败"
+                    ? DiagnosticActionText
+                    : LastFailureText;
+            }
+
+            if (!string.IsNullOrWhiteSpace(ReportPath))
+            {
+                return $"最新报告已生成: {Path.GetFileName(ReportPath)}";
+            }
+
+            if (!IsLocalInputReady())
+            {
+                return "选择包含 CSV 文件的目录后即可开始。";
+            }
+
+            if (!IsConfigReady())
+            {
+                return "请在设置中确认检测阈值和规则。";
+            }
+
+            return "选择完成后可直接开始，必要检查会自动执行。";
+        }
+    }
+
     public ShellStatusSnapshot ShellStatus => new(
         StatusText,
         IsRunning,
@@ -452,14 +527,19 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     public partial string InputDirectory { get; set; } = "";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     public partial string OutputDirectory { get; set; } = "";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     public partial string ConfigPath { get; set; } = "config.json";
 
     [ObservableProperty]
@@ -495,6 +575,8 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FailureActionsVisibility))]
     [NotifyPropertyChangedFor(nameof(WorkbenchContextText))]
     [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     [NotifyCanExecuteChangedFor(nameof(UseSelectedReportDirectoriesCommand))]
@@ -513,6 +595,8 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CompletionActionsVisibility))]
     [NotifyPropertyChangedFor(nameof(CompletionActionTitleText))]
     [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     [NotifyCanExecuteChangedFor(nameof(CopyCompletionSummaryCommand))]
     public partial string StatusText { get; set; } = "就绪";
 
@@ -563,6 +647,8 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
     [NotifyPropertyChangedFor(nameof(CompletionActionBodyText))]
     [NotifyPropertyChangedFor(nameof(FirstRunGuideVisibility))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportCommand))]
     [NotifyCanExecuteChangedFor(nameof(OpenCurrentReportFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyCurrentReportPathCommand))]
@@ -991,6 +1077,8 @@ public partial class MainViewModel : ObservableObject
             case nameof(DiagnosticsViewModel.SummaryText):
                 OnPropertyChanged(nameof(DiagnosticSummaryText));
                 OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
+                OnPropertyChanged(nameof(RunSetupReadinessText));
+                OnPropertyChanged(nameof(RunSetupReadinessDetailText));
                 break;
             case nameof(DiagnosticsViewModel.PythonText):
                 OnPropertyChanged(nameof(PythonDiagnosticText));
@@ -1019,6 +1107,7 @@ public partial class MainViewModel : ObservableObject
             case nameof(DiagnosticsViewModel.ActionText):
                 OnPropertyChanged(nameof(DiagnosticActionText));
                 OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
+                OnPropertyChanged(nameof(RunSetupReadinessDetailText));
                 break;
             case nameof(DiagnosticsViewModel.PythonSetupCommandText):
                 OnPropertyChanged(nameof(PythonSetupCommandText));
@@ -1034,6 +1123,7 @@ public partial class MainViewModel : ObservableObject
             case nameof(RunTelemetryViewModel.CurrentFileText):
                 OnPropertyChanged(nameof(CurrentFileText));
                 OnPropertyChanged(nameof(WorkbenchStatusBadgeText));
+                OnPropertyChanged(nameof(RunSetupReadinessDetailText));
                 OnPropertyChanged(nameof(RunTelemetryVisibility));
                 break;
             case nameof(RunTelemetryViewModel.ElapsedText):
@@ -1809,6 +1899,8 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(FirstRunConfigStepText));
         OnPropertyChanged(nameof(FirstRunPythonStepText));
         OnPropertyChanged(nameof(FirstRunOutputStepText));
+        OnPropertyChanged(nameof(RunSetupReadinessText));
+        OnPropertyChanged(nameof(RunSetupReadinessDetailText));
     }
 
     private void BlockStart(IReadOnlyList<string> issues)

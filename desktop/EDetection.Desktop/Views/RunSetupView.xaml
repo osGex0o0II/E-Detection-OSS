@@ -98,10 +98,10 @@
                                       VerticalAlignment="Top"
                                       Margin="0,2,0,0" />
                             <StackPanel Grid.Column="1" Spacing="2">
-                                <TextBlock Text="{Binding Diagnostics.SummaryText}"
+                                <TextBlock Text="{Binding RunSetupReadinessText}"
                                            FontWeight="SemiBold"
                                            TextWrapping="WrapWholeWords" />
-                                <TextBlock Text="开始检测前会自动检查；配置文件和 Python 路径在设置中调整。"
+                                <TextBlock Text="{Binding RunSetupReadinessDetailText}"
                                            TextWrapping="WrapWholeWords"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
