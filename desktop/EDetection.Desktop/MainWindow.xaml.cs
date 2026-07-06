@@ -21,6 +21,8 @@ public sealed partial class MainWindow : Window
     private readonly TaskbarProgressService _taskbarProgress = new();
     private readonly AppInfoService _appInfo = new();
     private readonly DesktopNotificationService _desktopNotifications = new();
+    private readonly SecureCredentialService _credentials = new();
+    private readonly NtfyNotificationService _ntfyNotifications;
     private readonly ShellResourceService _shellResources = new();
     private readonly ShellHotkeyService _shellHotkeys = new();
     private readonly TrayIconService _trayIcon;
@@ -43,6 +45,7 @@ public sealed partial class MainWindow : Window
 
     public MainWindow()
     {
+        _ntfyNotifications = new NtfyNotificationService(_credentials);
         ViewModel = new MainViewModel(
             new PythonBackendService(),
             new SettingsService(),
@@ -54,7 +57,8 @@ public sealed partial class MainWindow : Window
             new RunEventService(),
             new ReportDetailPreviewService(),
             new RunStateService(),
-            new StartupService());
+            new StartupService(),
+            _credentials);
         InitializeComponent();
         Shell.DataContext = ViewModel;
         _windowHandle = WindowNative.GetWindowHandle(this);
@@ -211,10 +215,23 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void ViewModel_DesktopNotificationRequested(
+    private async void ViewModel_DesktopNotificationRequested(
         object? sender,
-        DesktopNotificationRequest e) =>
+        DesktopNotificationRequest e)
+    {
         _desktopNotifications.Show(e);
+        try
+        {
+            if (await _ntfyNotifications.TrySendAsync(e, ViewModel))
+            {
+                ViewModel.AddRuntimeLog("消息推送", "已发送 ntfy 推送。");
+            }
+        }
+        catch (Exception ex)
+        {
+            ViewModel.AddRuntimeLog("推送提醒", $"ntfy 推送失败: {ex.Message}");
+        }
+    }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

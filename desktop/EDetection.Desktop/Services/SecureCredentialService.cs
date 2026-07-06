@@ -30,6 +30,10 @@ public sealed class SecureCredentialService
 
     public void ClearProxyPassword() => ClearSecret(ProxyPasswordResource);
 
+    public string GetNtfyToken() => GetSecret(NtfyTokenResource);
+
+    public string GetProxyPassword() => GetSecret(ProxyPasswordResource);
+
     private string BuildStatusText(string resource, string label) =>
         HasSecret(resource)
             ? $"{label} 已保存到 Windows 凭据"
@@ -57,6 +61,20 @@ public sealed class SecureCredentialService
 
         ClearSecret(resource);
         _vault.Add(new PasswordCredential(resource, DefaultUserName, secret));
+    }
+
+    private string GetSecret(string resource)
+    {
+        try
+        {
+            var credential = _vault.Retrieve(resource, DefaultUserName);
+            credential.RetrievePassword();
+            return credential.Password;
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private void ClearSecret(string resource)

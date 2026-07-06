@@ -1995,6 +1995,8 @@ public partial class MainViewModel : ObservableObject
         RuntimeLogs.Add(kind, message);
     }
 
+    public void AddRuntimeLog(string kind, string message) => AddLog(kind, message);
+
     public string BuildLogExportText()
     {
         return RuntimeLogs.BuildExportText();
