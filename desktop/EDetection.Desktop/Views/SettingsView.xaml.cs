@@ -10,9 +10,18 @@ namespace EDetection.Desktop.Views;
 
 public sealed partial class SettingsView : UserControl
 {
+    private const double ExpandedNavigationWidth = 184;
+    private const double CompactNavigationWidth = 152;
+    private const double ExpandedLabelWidth = 200;
+    private const double CompactLabelWidth = 168;
+    private const double SettingsContentMaxWidth = 900;
+    private const double CompactBodyBreakpoint = 960;
+    private const double CompactContentBreakpoint = 720;
+
     private bool _suppressCategoryScroll;
     private bool _suppressScrollSync;
     private int _navigationScrollVersion;
+    private readonly List<Grid> _settingRows = [];
 
     public SettingsView()
     {
@@ -20,6 +29,7 @@ public sealed partial class SettingsView : UserControl
         _suppressCategoryScroll = true;
         SettingsCategoryList.SelectedIndex = 0;
         _suppressCategoryScroll = false;
+        Loaded += SettingsView_Loaded;
     }
 
     public event EventHandler? BackRequested;
@@ -113,7 +123,81 @@ public sealed partial class SettingsView : UserControl
 
     private void SettingsScroll_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        SettingsContentStack.MaxWidth = e.NewSize.Width < 760 ? double.PositiveInfinity : 900;
+        UpdateResponsiveLayout();
+    }
+
+    private void SettingsBody_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateResponsiveLayout();
+    }
+
+    private void SettingsView_Loaded(object sender, RoutedEventArgs e)
+    {
+        CacheSettingRows();
+        UpdateResponsiveLayout();
+    }
+
+    private void CacheSettingRows()
+    {
+        if (_settingRows.Count > 0)
+        {
+            return;
+        }
+
+        CollectSettingRows(SettingsContentStack);
+    }
+
+    private void CollectSettingRows(DependencyObject root)
+    {
+        var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < childCount; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is Grid grid
+                && grid.MinHeight >= 64
+                && grid.ColumnDefinitions.Count == 2)
+            {
+                _settingRows.Add(grid);
+            }
+
+            CollectSettingRows(child);
+        }
+    }
+
+    private void UpdateResponsiveLayout()
+    {
+        var availableWidth = SettingsBody.ActualWidth;
+        if (availableWidth <= 0)
+        {
+            return;
+        }
+
+        var compact = availableWidth < CompactBodyBreakpoint;
+        SettingsBody.Padding = compact
+            ? new Thickness(18, 18, 18, 0)
+            : new Thickness(24, 22, 24, 0);
+        SettingsBody.ColumnSpacing = compact ? 18 : 24;
+        SettingsNavColumn.Width = new GridLength(compact ? CompactNavigationWidth : ExpandedNavigationWidth);
+
+        var contentWidth = SettingsScroll.ActualWidth;
+        if (contentWidth <= 0)
+        {
+            return;
+        }
+
+        SettingsContentStack.Width = Math.Min(contentWidth, SettingsContentMaxWidth);
+        SettingsContentStack.MaxWidth = SettingsContentMaxWidth;
+
+        var labelWidth = contentWidth < CompactContentBreakpoint ? CompactLabelWidth : ExpandedLabelWidth;
+        foreach (var row in _settingRows)
+        {
+            var compactRow = contentWidth < CompactContentBreakpoint;
+            row.ColumnSpacing = compactRow ? 14 : 20;
+            row.Padding = compactRow
+                ? new Thickness(16, 10, 16, 10)
+                : new Thickness(18, 10, 18, 10);
+            row.ColumnDefinitions[0].Width = new GridLength(labelWidth);
+        }
     }
 
     private async Task ResumeScrollSyncAfterNavigationAsync(int navigationVersion)

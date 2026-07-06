@@ -5,12 +5,12 @@
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-            <SolidColorBrush x:Key="SettingsCardFillBrush" Color="#99FFFFFF" />
+            <StaticResource x:Key="SettingsCardFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
             <SolidColorBrush x:Key="SettingsCardStrokeBrush" Color="#12000000" />
             <SolidColorBrush x:Key="SettingsRowDividerBrush" Color="#0F000000" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-            <SolidColorBrush x:Key="SettingsCardFillBrush" Color="#26FFFFFF" />
+            <StaticResource x:Key="SettingsCardFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
             <SolidColorBrush x:Key="SettingsCardStrokeBrush" Color="#18FFFFFF" />
             <SolidColorBrush x:Key="SettingsRowDividerBrush" Color="#14FFFFFF" />
         </ResourceDictionary>
@@ -25,7 +25,7 @@
     <SolidColorBrush x:Key="SuccessBrush" Color="#178A43" />
     <SolidColorBrush x:Key="WarningBrush" Color="#B45309" />
     <SolidColorBrush x:Key="ErrorBrush" Color="#C2410C" />
-    <SolidColorBrush x:Key="SettingsCardFillBrush" Color="#99FFFFFF" />
+    <StaticResource x:Key="SettingsCardFillBrush" ResourceKey="LayerFillColorDefaultBrush" />
     <SolidColorBrush x:Key="SettingsCardStrokeBrush" Color="#12000000" />
     <SolidColorBrush x:Key="SettingsRowDividerBrush" Color="#0F000000" />
 
