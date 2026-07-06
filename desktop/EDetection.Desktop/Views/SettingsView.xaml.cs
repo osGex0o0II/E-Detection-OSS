@@ -139,11 +139,7 @@ public sealed partial class SettingsView : UserControl
 
     private void CacheSettingRows()
     {
-        if (_settingRows.Count > 0)
-        {
-            return;
-        }
-
+        _settingRows.Clear();
         CollectSettingRows(SettingsContentStack);
     }
 
@@ -166,6 +162,7 @@ public sealed partial class SettingsView : UserControl
 
     private void UpdateResponsiveLayout()
     {
+        CacheSettingRows();
         var availableWidth = SettingsBody.ActualWidth;
         if (availableWidth <= 0)
         {
@@ -198,6 +195,11 @@ public sealed partial class SettingsView : UserControl
                 : new Thickness(18, 10, 18, 10);
             row.ColumnDefinitions[0].Width = new GridLength(labelWidth);
         }
+    }
+
+    private void SettingsExpander_Expanding(Expander sender, ExpanderExpandingEventArgs args)
+    {
+        DispatcherQueue.TryEnqueue(UpdateResponsiveLayout);
     }
 
     private async Task ResumeScrollSyncAfterNavigationAsync(int navigationVersion)
