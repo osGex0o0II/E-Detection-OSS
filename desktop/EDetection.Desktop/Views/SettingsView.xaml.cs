@@ -271,6 +271,7 @@ public sealed partial class SettingsView : UserControl
         AppearanceSection,
         DefaultsSection,
         ThresholdsSection,
+        DetectionRulesSection,
         ReportsSection,
         LogsSection,
         WindowSection,

@@ -61,8 +61,8 @@ public sealed class DesktopHealthService
 
         return new DesktopHealthSnapshot(
             attentionCount == 0
-                ? "桌面健康正常"
-                : $"桌面健康有 {attentionCount} 项需要关注",
+                ? "应用状态正常"
+                : $"应用状态有 {attentionCount} 项需要关注",
             notificationText,
             startupText,
             settingsText,

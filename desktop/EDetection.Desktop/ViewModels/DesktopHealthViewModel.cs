@@ -12,7 +12,7 @@ public sealed partial class DesktopHealthViewModel(
     Func<ShellHotkeySnapshot> hotkeys) : ObservableObject
 {
     [ObservableProperty]
-    public partial string SummaryText { get; set; } = "桌面健康待检查";
+    public partial string SummaryText { get; set; } = "应用状态待检查";
 
     [ObservableProperty]
     public partial string NotificationText { get; set; } = "系统通知待检查";

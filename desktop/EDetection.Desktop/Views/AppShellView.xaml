@@ -105,9 +105,9 @@
                     </AppBarButton>
                     <CommandBar.SecondaryCommands>
                         <AppBarButton x:Name="DiagnosticsButton"
-                                      Label="运行诊断"
-                                      AutomationProperties.Name="运行诊断"
-                                      ToolTipService.ToolTip="运行诊断 (F6)"
+                                      Label="检查状态"
+                                      AutomationProperties.Name="检查状态"
+                                      ToolTipService.ToolTip="检查状态 (F6)"
                                       Command="{Binding RefreshDiagnosticsCommand}">
                             <AppBarButton.Icon>
                                 <FontIcon Glyph="&#xE895;" FontSize="14" />

@@ -120,21 +120,21 @@
                 <Expander x:Name="FirstRunDiagnosticsExpander"
                           Grid.Row="1"
                           Grid.ColumnSpan="2"
-                          Header="高级诊断"
+                          Header="高级检查"
                           HorizontalAlignment="Stretch"
                           IsExpanded="False">
                     <StackPanel x:Name="FirstRunDiagnosticsPanel"
                                 Orientation="Horizontal"
                                 Spacing="8">
                         <Button Command="{Binding RefreshDiagnosticsCommand}"
-                                ToolTipService.ToolTip="运行诊断 (F6)">
+                                ToolTipService.ToolTip="检查状态 (F6)">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE895;" FontSize="14" />
-                                <TextBlock Text="运行诊断" />
+                                <TextBlock Text="检查状态" />
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding CopyDiagnosticsCommand}"
-                                ToolTipService.ToolTip="复制诊断详情">
+                                ToolTipService.ToolTip="复制状态详情">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                                 <TextBlock Text="复制详情" />
@@ -344,10 +344,10 @@
                                     Spacing="8"
                                     VerticalAlignment="Center">
                             <Button Command="{Binding RefreshDiagnosticsCommand}"
-                                    ToolTipService.ToolTip="运行诊断 (F6)">
+                                    ToolTipService.ToolTip="检查状态 (F6)">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon Glyph="&#xE895;" FontSize="14" />
-                                    <TextBlock Text="运行诊断" />
+                                    <TextBlock Text="检查状态" />
                                 </StackPanel>
                             </Button>
                             <Button Command="{Binding CopyPythonSetupCommand}"
@@ -355,7 +355,7 @@
                                 <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                             </Button>
                             <Button Command="{Binding CopyDiagnosticsCommand}"
-                                    ToolTipService.ToolTip="复制诊断详情">
+                                    ToolTipService.ToolTip="复制状态详情">
                                 <FontIcon Glyph="&#xE8A5;" FontSize="14" />
                             </Button>
                         </StackPanel>
@@ -655,7 +655,7 @@
                     </Grid>
                 </TabViewItem>
 
-                <TabViewItem Header="事件日志"
+                <TabViewItem Header="运行记录"
                              IsClosable="False">
                     <Grid RowSpacing="10">
                         <Grid.RowDefinitions>
@@ -667,7 +667,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="事件日志预览"
+                            <TextBlock Text="运行记录"
                                        Style="{StaticResource SectionTitleTextStyle}" />
                             <TextBlock Grid.Column="1"
                                        Text="{Binding RuntimeLogs.StatusText}"

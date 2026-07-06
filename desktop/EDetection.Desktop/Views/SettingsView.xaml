@@ -48,6 +48,12 @@
                         <TextBlock Text="检测阈值" />
                     </StackPanel>
                 </ListViewItem>
+                <ListViewItem Tag="DetectionRulesSection">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE9D5;" FontSize="15" />
+                        <TextBlock Text="检测规则" />
+                    </StackPanel>
+                </ListViewItem>
                 <ListViewItem Tag="ReportsSection">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <FontIcon Glyph="&#xE9F9;" FontSize="15" />
@@ -57,7 +63,7 @@
                 <ListViewItem Tag="LogsSection">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <FontIcon Glyph="&#xE8A5;" FontSize="15" />
-                        <TextBlock Text="日志" />
+                        <TextBlock Text="运行记录" />
                     </StackPanel>
                 </ListViewItem>
                 <ListViewItem Tag="WindowSection">
@@ -266,6 +272,8 @@
                                 </Expander>
                             </StackPanel>
                         </Border>
+                    </StackPanel>
+                    <StackPanel x:Name="DetectionRulesSection" Spacing="8">
                         <TextBlock Text="检测规则" Style="{StaticResource SectionTitleTextStyle}" />
                         <Border Style="{StaticResource SettingsGroupStyle}">
                             <StackPanel>
@@ -350,7 +358,7 @@
                         </Border>
                     </StackPanel>
                     <StackPanel x:Name="LogsSection" Spacing="8">
-                        <TextBlock Text="日志" Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock Text="运行记录" Style="{StaticResource SectionTitleTextStyle}" />
                         <Border Style="{StaticResource SettingsGroupStyle}">
                             <StackPanel>
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -358,7 +366,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="运行日志保留" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="运行记录保留" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                     <ComboBox Grid.Column="1" SelectedIndex="{Binding RuntimeLogs.SelectedRetentionIndex, Mode=TwoWay}" HorizontalAlignment="Stretch">
                                         <ComboBoxItem Content="200 条" />
                                         <ComboBoxItem Content="500 条" />
@@ -372,7 +380,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="清空运行日志" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="清空运行记录" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                     <Button Grid.Column="1" Command="{Binding ClearRuntimeLogsCommand}" HorizontalAlignment="Stretch">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
@@ -456,7 +464,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="桌面健康" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="应用状态" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                     <Button Grid.Column="1" Command="{Binding RefreshDesktopHealthCommand}" HorizontalAlignment="Stretch">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE72C;" FontSize="14" />

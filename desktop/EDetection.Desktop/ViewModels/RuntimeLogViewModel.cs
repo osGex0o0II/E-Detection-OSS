@@ -25,8 +25,8 @@ public sealed partial class RuntimeLogViewModel(
     public string RetentionText => $"保留最近 {RetentionLimit} 条";
 
     public string StatusText => LogItems.Count > 0
-        ? $"{FilteredLogItems.Count}/{LogItems.Count} 条日志"
-        : "暂无日志";
+        ? $"{FilteredLogItems.Count}/{LogItems.Count} 条记录"
+        : "暂无记录";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RetentionLimit))]

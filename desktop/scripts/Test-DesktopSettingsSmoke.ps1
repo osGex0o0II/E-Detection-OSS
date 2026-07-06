@@ -342,25 +342,24 @@ try {
     }
 
     $settingsTitle = Wait-ForAutomationName $mainWindow.Handle "设置" $WaitSeconds
-    $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测默认值" $WaitSeconds
-    $reportsSection = Wait-ForAutomationName $mainWindow.Handle "报告与历史" $WaitSeconds
-    $logsSection = Wait-ForAutomationName $mainWindow.Handle "日志" $WaitSeconds
+    $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
+    $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "检测阈值" $WaitSeconds
+    $rulesSection = Wait-ForAutomationName $mainWindow.Handle "检测规则" $WaitSeconds
+    $reportsSection = Wait-ForAutomationName $mainWindow.Handle "报告" $WaitSeconds
+    $logsSection = Wait-ForAutomationName $mainWindow.Handle "运行记录" $WaitSeconds
+    $voltageMinThreshold = Wait-ForAutomationName $mainWindow.Handle "电压下限" $WaitSeconds
+    $currentMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "电流上限" $WaitSeconds
+    $currentOverloadRule = Wait-ForAutomationName $mainWindow.Handle "电流过载检测" $WaitSeconds
     $startupTrayToggle = Wait-ForAutomationName $mainWindow.Handle "启动时隐藏到托盘" $WaitSeconds
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $globalHotkeyToggle = Wait-ForAutomationName $mainWindow.Handle "全局热键" $WaitSeconds
-    $globalHotkeyText = Wait-ForAutomationName $mainWindow.Handle "全局热键已启用 · Ctrl+Alt+Shift+E 恢复工作台" $WaitSeconds
     $quickActionsToggle = Wait-ForAutomationName $mainWindow.Handle "快速操作快捷键" $WaitSeconds
-    $quickActionsText = Wait-ForAutomationNameLike $mainWindow.Handle "*Ctrl+Shift+P*" $WaitSeconds
-    $startupIntegrationText = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动未启用 · Task Scheduler" $WaitSeconds
-    $recentLimitText = Wait-ForAutomationName $mainWindow.Handle "保留最近 50 个" $WaitSeconds
-    $logLimitText = Wait-ForAutomationName $mainWindow.Handle "保留最近 1000 条" $WaitSeconds
-    $desktopHealthSection = Wait-ForAutomationName $mainWindow.Handle "桌面健康" $WaitSeconds
-    $packageHealthText = Wait-ForAutomationName $mainWindow.Handle "包完整性可用 · 27/27" $WaitSeconds
-    $pythonBridgeText = Wait-ForAutomationName $mainWindow.Handle "检测组件 · 本地源码 · python" $WaitSeconds
-    $installShapeText = Wait-ForAutomationName $mainWindow.Handle "安装形态: 便携/开发版" $WaitSeconds
+    $recentLimitControl = Wait-ForAutomationName $mainWindow.Handle "报告历史保留" $WaitSeconds
+    $logLimitControl = Wait-ForAutomationName $mainWindow.Handle "运行记录保留" $WaitSeconds
+    $desktopHealthSection = Wait-ForAutomationName $mainWindow.Handle "应用状态" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-    if ($settingsJson.SettingsVersion -ne 3) {
-        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '3'."
+    if ($settingsJson.SettingsVersion -ne 5) {
+        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '5'."
     }
 
     if ($settingsJson.SelectedQuickActionsShortcutIndex -ne 1) {
@@ -374,23 +373,22 @@ try {
         MainWindowTitle = $mainWindow.Title
         SettingsTitle = $settingsTitle
         DefaultsSection = $defaultsSection
+        ThresholdsSection = $thresholdsSection
+        RulesSection = $rulesSection
         ReportsSection = $reportsSection
         LogsSection = $logsSection
+        VoltageMinThreshold = $voltageMinThreshold
+        CurrentMaxThreshold = $currentMaxThreshold
+        CurrentOverloadRule = $currentOverloadRule
         StartupTrayToggle = $startupTrayToggle
         AutoStartToggle = $autoStartToggle
         GlobalHotkeyToggle = $globalHotkeyToggle
-        GlobalHotkeyText = $globalHotkeyText
         QuickActionsToggle = $quickActionsToggle
-        QuickActionsText = $quickActionsText
         QuickActionsShortcutIndex = $settingsJson.SelectedQuickActionsShortcutIndex
-        StartupIntegrationText = $startupIntegrationText
         SettingsVersion = $settingsJson.SettingsVersion
         DesktopHealthSection = $desktopHealthSection
-        PackageHealthText = $packageHealthText
-        PythonBridgeText = $pythonBridgeText
-        InstallShapeText = $installShapeText
-        RecentLimitText = $recentLimitText
-        LogLimitText = $logLimitText
+        RecentLimitControl = $recentLimitControl
+        LogLimitControl = $logLimitControl
         Dpi = $dpi
         RequestedDipWidth = $Width
         RequestedDipHeight = $Height

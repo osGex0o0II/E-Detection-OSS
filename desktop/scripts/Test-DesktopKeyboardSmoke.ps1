@@ -290,8 +290,8 @@ try {
     [DesktopKeyboardSmokeNative]::SetForegroundWindow($mainWindow.Handle) | Out-Null
     Start-Sleep -Milliseconds 500
 
-    $diagnosticsAction = Wait-ForAutomationName $mainWindow.Handle "运行诊断" $WaitSeconds
-    $eventLogTab = Wait-ForAutomationName $mainWindow.Handle "事件日志" $WaitSeconds
+    $diagnosticsAction = Wait-ForAutomationName $mainWindow.Handle "高级检查" $WaitSeconds
+    $eventLogTab = Wait-ForAutomationName $mainWindow.Handle "运行记录" $WaitSeconds
     $inputPanel = Wait-ForAutomationName $mainWindow.Handle "检测输入" $WaitSeconds
     $detailTab = Wait-ForAutomationName $mainWindow.Handle "异常明细" $WaitSeconds
     $highRiskSection = Wait-ForAutomationName $mainWindow.Handle "高风险设备" $WaitSeconds
@@ -313,7 +313,7 @@ try {
         TargetWidth = $targetWidth
         TargetHeight = $targetHeight
         ResponsiveMode = if ($Width -le 920) { "compact" } else { "comfortable" }
-        CheckedActions = @("运行诊断", "事件日志", "检测输入", "异常明细", "高风险设备")
+        CheckedActions = @("高级检查", "运行记录", "检测输入", "异常明细", "高风险设备")
         Passed = $true
         CapturedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json | Set-Content -Path $resultPath -Encoding UTF8

@@ -182,7 +182,7 @@ public sealed class DesktopDiagnosticsService
                 false,
                 "Python 检查超时",
                 "检测核心未检查",
-                "请确认该 Python 可执行文件可以正常启动，然后重新运行诊断。");
+                "请确认该 Python 可执行文件可以正常启动，然后重新检查状态。");
         }
         catch (Exception ex)
         {

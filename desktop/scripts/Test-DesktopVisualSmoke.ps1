@@ -227,8 +227,8 @@ try {
     }
 
     $startAction = Wait-ForAutomationName $handle "开始检测" $WaitSeconds
-    $diagnosticsAction = Wait-ForAutomationName $handle "运行诊断" $WaitSeconds
-    $eventLogTab = Wait-ForAutomationName $handle "事件日志" $WaitSeconds
+    $diagnosticsAction = Wait-ForAutomationName $handle "高级检查" $WaitSeconds
+    $eventLogTab = Wait-ForAutomationName $handle "运行记录" $WaitSeconds
 
     $rect = Get-VisibleWindowRect $handle
 

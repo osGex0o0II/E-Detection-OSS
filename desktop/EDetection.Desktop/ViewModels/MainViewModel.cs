@@ -414,7 +414,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!IsConfigReady())
             {
-                return "确认配置文件后运行诊断。";
+                return "确认检测设置后检查状态。";
             }
 
             if (BackendDiagnosticText.Contains("可导入", StringComparison.Ordinal))
@@ -1850,7 +1850,7 @@ public partial class MainViewModel : ObservableObject
         var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
         var result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
         ApplyPythonProbeResult(result);
-        AddLog(result.IsReady ? "诊断" : "诊断警告", $"{result.PythonMessage}；{result.BackendMessage}");
+        AddLog(result.IsReady ? "状态检查" : "状态提醒", $"{result.PythonMessage}；{result.BackendMessage}");
     }
 
     [RelayCommand]
@@ -1945,7 +1945,7 @@ public partial class MainViewModel : ObservableObject
         CopyTextToClipboard(Diagnostics.BuildClipboardText(
             PythonExecutable,
             PythonBackendService.ResolveBackendWorkingDirectory()));
-        AddLog("诊断", "已复制检测组件诊断详情。");
+        AddLog("状态检查", "已复制检测组件状态详情。");
     }
 
     private bool CanCopySelectedDetail() => SelectedDetail is not null;

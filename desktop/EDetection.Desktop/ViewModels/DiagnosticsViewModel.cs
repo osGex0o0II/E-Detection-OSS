@@ -24,10 +24,10 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     public partial string OutputText { get; set; } = "待检查";
 
     [ObservableProperty]
-    public partial string CheckedAtText { get; set; } = "尚未运行诊断";
+    public partial string CheckedAtText { get; set; } = "尚未检查状态";
 
     [ObservableProperty]
-    public partial string ActionText { get; set; } = "运行诊断后显示修复建议";
+    public partial string ActionText { get; set; } = "检查状态后显示修复建议";
 
     [ObservableProperty]
     public partial string PythonSetupCommandText { get; set; } = "";
@@ -78,7 +78,7 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     {
         var lines = new List<string>
         {
-            $"诊断摘要: {SummaryText}",
+            $"状态摘要: {SummaryText}",
             $"检查时间: {CheckedAtText}",
             $"Python: {PythonText}",
             $"检测核心: {BackendText}",
