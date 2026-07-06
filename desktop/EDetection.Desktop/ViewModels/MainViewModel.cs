@@ -350,7 +350,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!IsConfigReady())
             {
-                return "确认检测设置";
+                return "确认阈值设置";
             }
 
             return "准备开始检测";
@@ -387,7 +387,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!IsConfigReady())
             {
-                return "请在设置中确认检测阈值和规则。";
+                return "请在设置中确认阈值设置和检测规则。";
             }
 
             return "选择完成后可直接开始，必要检查会自动执行。";
@@ -448,7 +448,7 @@ public partial class MainViewModel : ObservableObject
 
             if (!IsConfigReady())
             {
-                return "确认检测设置后检查状态。";
+                return "确认阈值设置和检测规则后检查状态。";
             }
 
             if (BackendDiagnosticText.Contains("可导入", StringComparison.Ordinal))

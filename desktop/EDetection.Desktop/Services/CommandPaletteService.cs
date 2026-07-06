@@ -35,7 +35,7 @@ public sealed class CommandPaletteService
                 context.CancelCommandParameter),
             FromCommand(
                 "检查状态",
-                "检查输入、检测设置与检测组件",
+                "检查输入、阈值设置与检测组件",
                 "F6",
                 "\uE895",
                 "检查",
@@ -43,7 +43,7 @@ public sealed class CommandPaletteService
                 context.DiagnosticsCommandParameter),
             FromCommand(
                 "复制状态详情",
-                "复制当前输入、检测设置与组件状态摘要",
+                "复制当前输入、阈值设置与组件状态摘要",
                 "",
                 "\uE8C8",
                 "检查",
@@ -89,8 +89,8 @@ public sealed class CommandPaletteService
                 context.ViewModel?.CopyCurrentReportPathCommand,
                 null),
             new(
-                "选择配置文件",
-                "选择检测设置文件",
+                "选择阈值配置文件",
+                "选择检测阈值和规则配置文件",
                 "Ctrl+1",
                 "\uE8A5",
                 "设置",

@@ -66,7 +66,7 @@ public sealed class DesktopDiagnosticsService
         var resolvedConfig = ResolveAgainstBackend(request.ConfigPath, backendRoot);
         if (!File.Exists(resolvedConfig))
         {
-            issues.Add($"配置文件不存在: {resolvedConfig}");
+            issues.Add($"阈值配置文件不存在: {resolvedConfig}");
         }
 
         if (string.IsNullOrWhiteSpace(request.PythonExecutable))
@@ -221,7 +221,7 @@ public sealed class DesktopDiagnosticsService
                             || issue.Contains("输入", StringComparison.OrdinalIgnoreCase))
             ? "请选择包含 CSV 文件的输入目录。"
             : issues.Any(issue => issue.Contains("配置", StringComparison.OrdinalIgnoreCase))
-                ? "请选择有效的 config.json，或将配置路径留空使用核心目录下的默认配置。"
+                ? "请在设置中选择有效的阈值配置文件，或留空使用默认阈值配置。"
                 : issues.Any(issue => issue.Contains("报告", StringComparison.OrdinalIgnoreCase))
                     ? "请选择可写的报告目录，或留空写入输入目录。"
                     : "请先修复运行环境后再开始检测。";

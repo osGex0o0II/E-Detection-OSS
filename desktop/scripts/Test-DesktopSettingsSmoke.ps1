@@ -363,7 +363,9 @@ try {
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
     $inputDirectoryControl = Wait-ForAutomationName $mainWindow.Handle "输入目录" $WaitSeconds
     $browseInputDirectoryButton = Wait-ForAutomationName $mainWindow.Handle "选择输入目录" $WaitSeconds
-    $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "检测阈值" $WaitSeconds
+    $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "阈值设置" $WaitSeconds
+    $thresholdConfigControl = Wait-ForAutomationName $mainWindow.Handle "阈值配置文件" $WaitSeconds
+    $browseThresholdConfigButton = Wait-ForAutomationName $mainWindow.Handle "选择阈值配置文件" $WaitSeconds
     $rulesSection = Wait-ForAutomationName $mainWindow.Handle "检测规则" $WaitSeconds
     $reportsSection = Wait-ForAutomationName $mainWindow.Handle "报告" $WaitSeconds
     $logsSection = Wait-ForAutomationName $mainWindow.Handle "运行记录" $WaitSeconds
@@ -416,6 +418,8 @@ try {
         InputDirectoryControl = $inputDirectoryControl
         BrowseInputDirectoryButton = $browseInputDirectoryButton
         ThresholdsSection = $thresholdsSection
+        ThresholdConfigControl = $thresholdConfigControl
+        BrowseThresholdConfigButton = $browseThresholdConfigButton
         RulesSection = $rulesSection
         ReportsSection = $reportsSection
         LogsSection = $logsSection
