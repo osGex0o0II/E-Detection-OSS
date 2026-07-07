@@ -70,12 +70,13 @@ public sealed class RuntimeLogService
         var lines = new List<string>
         {
             "时间\t类型\t消息",
+            "说明\t诊断信息\t已脱敏本机路径和凭据",
         };
         lines.AddRange(items.Select(item => string.Join(
             "\t",
             TabularExportSanitizer.Cell(item.TimeText),
             TabularExportSanitizer.Cell(item.Kind),
-            TabularExportSanitizer.Cell(item.Message))));
+            TabularExportSanitizer.Cell(DiagnosticsRedactor.Redact(item.Message)))));
         return string.Join(Environment.NewLine, lines);
     }
 

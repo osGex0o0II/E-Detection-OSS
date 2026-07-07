@@ -6,6 +6,8 @@ param(
 
     [string]$OutputDirectory = "",
 
+    [string]$UnsafeInstallRootOverride = "",
+
     [string]$IsccPath = ""
 )
 
@@ -114,12 +116,25 @@ if ([string]::IsNullOrWhiteSpace($appVersion)) {
 Write-Host "Using Inno Setup compiler: $isccFull"
 Write-Host "Building installer for $RuntimeIdentifier..."
 
-& $isccFull `
-    "/DSourceDir=$sourceFull" `
-    "/DOutputDir=$outputFull" `
-    "/DAppVersion=$appVersion" `
-    "/DRuntimeIdentifier=$RuntimeIdentifier" `
-    $installerScript
+$compilerArguments = @(
+    "/DSourceDir=$sourceFull",
+    "/DOutputDir=$outputFull",
+    "/DAppVersion=$appVersion",
+    "/DRuntimeIdentifier=$RuntimeIdentifier"
+)
+
+if (![string]::IsNullOrWhiteSpace($UnsafeInstallRootOverride)) {
+    $unsafeInstallRootFull = [System.IO.Path]::GetFullPath($UnsafeInstallRootOverride)
+    if ($unsafeInstallRootFull.IndexOf("E-Detection-Desktop-InstallerSmoke", [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "Refusing to compile installer with unsafe root override outside installer smoke: $unsafeInstallRootFull"
+    }
+
+    $compilerArguments += "/DUnsafeInstallRootOverride=$unsafeInstallRootFull"
+}
+
+$compilerArguments += $installerScript
+
+& $isccFull @compilerArguments
 
 if ($LASTEXITCODE -ne 0) {
     throw "Installer build failed with exit code $LASTEXITCODE."

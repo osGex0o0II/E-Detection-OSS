@@ -12,6 +12,9 @@
 #ifndef OutputDir
 #define OutputDir "..\..\artifacts\desktop\win-x64\installer"
 #endif
+#ifndef UnsafeInstallRootOverride
+#define UnsafeInstallRootOverride ""
+#endif
 
 [Setup]
 AppId={{0EAA42D9-6459-480D-9EB8-5FA69C9BADBB}
@@ -106,6 +109,7 @@ begin
     IsSamePath(ExpandedDir, DriveRoot) or
     ((UserProfile <> '') and IsSamePath(ExpandedDir, UserProfile)) or
     IsSamePath(ExpandedDir, ExpandConstant('{userdesktop}')) or
+    (('{#UnsafeInstallRootOverride}' <> '') and IsPathInside(ExpandedDir, '{#UnsafeInstallRootOverride}')) or
     IsPathInside(ExpandedDir, ExpandConstant('{autopf}')) or
     IsPathInside(ExpandedDir, ExpandConstant('{commonpf}')) or
     IsPathInside(ExpandedDir, ExpandConstant('{commonpf32}'));
@@ -118,10 +122,13 @@ begin
   begin
     if IsUnsafeInstallDirectory(WizardDirValue) then
     begin
-      MsgBox(
-        '当前安装向导按普通用户权限安装。请选择用户目录下的应用文件夹，例如默认位置，避免安装到 Program Files、桌面、用户根目录或磁盘根目录。',
-        mbError,
-        MB_OK);
+      if not WizardSilent then
+      begin
+        MsgBox(
+          '当前安装向导按普通用户权限安装。请选择用户目录下的应用文件夹，例如默认位置，避免安装到 Program Files、桌面、用户根目录或磁盘根目录。',
+          mbError,
+          MB_OK);
+      end;
       Result := False;
     end;
   end;

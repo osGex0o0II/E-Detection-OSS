@@ -3060,7 +3060,7 @@ public partial class MainViewModel : ObservableObject
         CopyTextToClipboard(Diagnostics.BuildClipboardText(
             PythonExecutable,
             PythonBackendService.ResolveBackendWorkingDirectory()));
-        AddLog("状态检查", "已复制检测组件状态详情。");
+        AddLog("状态检查", "已复制脱敏诊断信息。");
     }
 
     private bool CanCopySelectedDetail() => SelectedDetail is not null;

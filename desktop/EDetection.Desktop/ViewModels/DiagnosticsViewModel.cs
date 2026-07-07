@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using EDetection.Desktop.Models;
+using EDetection.Desktop.Services;
 
 namespace EDetection.Desktop.ViewModels;
 
@@ -104,6 +105,7 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     {
         var lines = new List<string>
         {
+            "诊断信息: 已脱敏本机路径和凭据",
             $"状态摘要: {SummaryText}",
             $"检查时间: {CheckedAtText}",
             $"Python: {PythonText}",
@@ -129,6 +131,9 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
             lines.Add(RepairOutputText);
         }
 
-        return string.Join(Environment.NewLine, lines);
+        return DiagnosticsRedactor.Redact(
+            string.Join(Environment.NewLine, lines),
+            pythonExecutable,
+            backendRoot);
     }
 }

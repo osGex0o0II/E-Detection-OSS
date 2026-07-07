@@ -77,6 +77,10 @@ jobs:
       - name: Build
         run: dotnet build desktop/EDetection.Desktop.slnx -c Debug --no-restore
 
+      - name: Diagnostics redaction smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopDiagnosticsRedactionSmoke.ps1
+
       - name: Publish
         shell: pwsh
         run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64
@@ -118,11 +122,11 @@ jobs:
 
       - name: Build setup installer
         shell: pwsh
-        run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64
+        run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64 -UnsafeInstallRootOverride "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
 
       - name: Installer smoke
         shell: pwsh
-        run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+        run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe -UnsafeInstallDirectory "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v6

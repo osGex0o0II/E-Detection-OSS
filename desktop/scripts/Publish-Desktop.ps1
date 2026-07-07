@@ -91,7 +91,8 @@ $deliveryScripts = @(
     "Test-DesktopStartupIntegrationSmoke.ps1",
     "Test-DesktopEnvironmentRepairSmoke.ps1",
     "Test-DesktopBundledPythonSmoke.ps1",
-    "Test-DesktopInstallSmoke.ps1"
+    "Test-DesktopInstallSmoke.ps1",
+    "Test-DesktopDiagnosticsRedactionSmoke.ps1"
 )
 
 foreach ($scriptName in $deliveryScripts) {
