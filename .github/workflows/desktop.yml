@@ -7,11 +7,27 @@ on:
         description: "Optional release tag to publish, for example v0.1.0. Leave empty to only build."
         required: false
         type: string
+      replace_existing_assets:
+        description: "Replace assets on an existing Release. Leave false for normal releases."
+        required: false
+        default: false
+        type: boolean
+      run_desktop_ui_smoke:
+        description: "Run interactive desktop UI smoke tests. Use only on a runner with an interactive desktop."
+        required: false
+        default: false
+        type: boolean
   pull_request:
     paths:
       - "desktop/**"
       - "desktop/scripts/**"
+      - "core/**"
+      - "e_detection/**"
       - "NuGet.Config"
+      - "global.json"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "desktop/requirements-runtime.lock"
       - ".github/workflows/desktop.yml"
   push:
     branches:
@@ -21,17 +37,25 @@ on:
     paths:
       - "desktop/**"
       - "desktop/scripts/**"
+      - "core/**"
+      - "e_detection/**"
       - "NuGet.Config"
+      - "global.json"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "desktop/requirements-runtime.lock"
       - ".github/workflows/desktop.yml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   winui-build:
     name: build WinUI shell
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -41,6 +65,11 @@ jobs:
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
 
       - name: Restore
         run: dotnet restore desktop/EDetection.Desktop.slnx
@@ -59,6 +88,25 @@ jobs:
       - name: Environment repair smoke
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopEnvironmentRepairSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
+
+      - name: Bundled Python smoke
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopBundledPythonSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
+
+      - name: Settings page smoke
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_desktop_ui_smoke == true }}
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopSettingsSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish -OutputDirectory ./artifacts/desktop/settings-smoke
+
+      - name: Visual smoke
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_desktop_ui_smoke == true }}
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopVisualSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish -OutputDirectory ./artifacts/desktop/visual-smoke
+
+      - name: Package health after UI smoke
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_desktop_ui_smoke == true }}
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
 
       - name: Install smoke
         shell: pwsh
@@ -85,14 +133,52 @@ jobs:
             artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
           if-no-files-found: error
 
+      - name: Explain build-only run
+        if: ${{ !(startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) }}
+        shell: pwsh
+        run: |
+          @(
+              "## Desktop build completed"
+              ""
+              "This run uploaded workflow artifacts but did not publish a GitHub Release."
+              ""
+              "Release publishing only runs for:"
+              "- pushed tags matching `v*`"
+              "- manual workflow runs with `release_tag` set"
+          ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+
+  release:
+    name: publish GitHub release
+    runs-on: windows-latest
+    needs: winui-build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download desktop artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: E-Detection.Desktop-win-x64
+          path: release-artifacts
+
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RELEASE_TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || '' }}
+          REPLACE_EXISTING_ASSETS: ${{ github.event_name == 'workflow_dispatch' && inputs.replace_existing_assets == true && 'true' || 'false' }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
+          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch" -and $env:GITHUB_REF -ne "refs/heads/main") {
+              throw "Manual Release publishing must be dispatched from main. Current ref: $env:GITHUB_REF."
+          }
+
           $tag = if ($env:GITHUB_REF_TYPE -eq "tag") {
               $env:GITHUB_REF_NAME
           }
@@ -104,15 +190,62 @@ jobs:
               throw "Release tag is required for publishing a GitHub Release."
           }
 
-          $zipPath = "artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip"
-          $setupPath = "artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe"
-          if (!(Test-Path $zipPath)) {
-              throw "Release asset was not found: $zipPath"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+              throw "Release tag '$tag' must look like v1.2.3."
           }
 
-          if (!(Test-Path $setupPath)) {
-              throw "Release asset was not found: $setupPath"
+          git fetch --tags --force
+          $tagSha = (& git rev-list -n 1 $tag 2>$null).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tagSha)) {
+              throw "Release tag $tag does not exist. Create and push the tag first, then rerun the workflow."
           }
+
+          $global:LASTEXITCODE = 0
+          if ($tagSha -ne $env:GITHUB_SHA) {
+              throw "release_tag $tag points to $tagSha, but this workflow built $env:GITHUB_SHA. Dispatch the workflow from the tag or from main at the tagged commit."
+          }
+
+          git fetch origin main --force
+          & git merge-base --is-ancestor $tagSha origin/main
+          if ($LASTEXITCODE -ne 0) {
+              throw "Release tag $tag points to $tagSha, which is not contained in origin/main."
+          }
+
+          [xml]$desktopProject = Get-Content -Path "desktop/EDetection.Desktop/EDetection.Desktop.csproj"
+          $desktopVersion = ($desktopProject.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+          $assemblyVersion = ($desktopProject.Project.PropertyGroup.AssemblyVersion | Select-Object -First 1).Trim()
+          $fileVersion = ($desktopProject.Project.PropertyGroup.FileVersion | Select-Object -First 1).Trim()
+          $pyprojectText = Get-Content -Path "pyproject.toml" -Raw
+          $pythonVersionMatch = [regex]::Match($pyprojectText, '(?m)^version\s*=\s*"([^"]+)"')
+          if (!$pythonVersionMatch.Success) {
+              throw "Could not read Python project version from pyproject.toml."
+          }
+
+          $tagVersion = $tag.TrimStart("v")
+          $pythonVersion = $pythonVersionMatch.Groups[1].Value
+          if ($desktopVersion -ne $tagVersion -or $pythonVersion -ne $tagVersion) {
+              throw "Release version mismatch. tag=$tagVersion desktop=$desktopVersion python=$pythonVersion."
+          }
+
+          if ($assemblyVersion -ne "$tagVersion.0" -or $fileVersion -ne "$tagVersion.0") {
+              throw "Desktop assembly/file versions must match $tagVersion.0. AssemblyVersion=$assemblyVersion FileVersion=$fileVersion."
+          }
+
+          $zipPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "E-Detection.Desktop-win-x64.zip" | Select-Object -First 1
+          $setupPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "E-Detection.Desktop-Setup-win-x64.exe" | Select-Object -First 1
+          if ($null -eq $zipPath) {
+              throw "Release asset was not found: E-Detection.Desktop-win-x64.zip"
+          }
+
+          if ($null -eq $setupPath) {
+              throw "Release asset was not found: E-Detection.Desktop-Setup-win-x64.exe"
+          }
+
+          $shaPath = Join-Path $env:RUNNER_TEMP "E-Detection.Desktop-win-x64.sha256.txt"
+          @(
+              "$(Get-FileHash -Algorithm SHA256 -LiteralPath $setupPath.FullName | Select-Object -ExpandProperty Hash)  $($setupPath.Name)"
+              "$(Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath.FullName | Select-Object -ExpandProperty Hash)  $($zipPath.Name)"
+          ) | Set-Content -Path $shaPath -Encoding ASCII
 
           $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
           @(
@@ -126,16 +259,32 @@ jobs:
               "- dotnet restore/build"
               "- publish package health"
               "- environment repair smoke"
+              "- bundled Python smoke"
               "- install/uninstall smoke"
               "- setup installer smoke"
+              ""
+              "SHA-256 checksums are attached as E-Detection.Desktop-win-x64.sha256.txt."
           ) | Set-Content -Path $notesPath -Encoding UTF8
 
-          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
-          $releaseExists = $LASTEXITCODE -eq 0
+          $releaseViewOutput = & gh release view $tag --repo $env:GITHUB_REPOSITORY --json id,tagName 2>&1
+          $releaseExitCode = $LASTEXITCODE
           $global:LASTEXITCODE = 0
+          if ($releaseExitCode -eq 0) {
+              $releaseExists = $true
+          }
+          elseif (($releaseViewOutput -join "`n") -match '(?i)(not found|could not resolve to a release)') {
+              $releaseExists = $false
+          }
+          else {
+              throw "Failed to query release $tag. gh output: $($releaseViewOutput -join ' ')"
+          }
 
           if ($releaseExists) {
-              gh release upload $tag $setupPath $zipPath --repo $env:GITHUB_REPOSITORY --clobber
+              if ($env:REPLACE_EXISTING_ASSETS -ne "true") {
+                  throw "Release $tag already exists. Set replace_existing_assets=true only when intentionally replacing assets."
+              }
+
+              gh release upload $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --clobber
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to upload release asset for $tag."
               }
@@ -146,7 +295,7 @@ jobs:
               }
           }
           else {
-              gh release create $tag $setupPath $zipPath --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "E-Detection Desktop $tag" --notes-file $notesPath
+              gh release create $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --verify-tag --title "E-Detection Desktop $tag" --notes-file $notesPath
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to create release $tag."
               }

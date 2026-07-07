@@ -74,12 +74,12 @@ public sealed class ReportDetailPreviewService
         };
         lines.AddRange(rows.Select(detail => string.Join(
             "\t",
-            detail.Severity ?? "",
-            detail.LocationText,
-            detail.TimeText,
-            detail.IssueText,
-            detail.ValueText,
-            detail.RecommendedAction ?? "")));
+            TabularExportSanitizer.Cell(detail.Severity),
+            TabularExportSanitizer.Cell(detail.LocationText),
+            TabularExportSanitizer.Cell(detail.TimeText),
+            TabularExportSanitizer.Cell(detail.IssueText),
+            TabularExportSanitizer.Cell(detail.ValueText),
+            TabularExportSanitizer.Cell(detail.RecommendedAction))));
         return string.Join(Environment.NewLine, lines);
     }
 

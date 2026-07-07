@@ -5,4 +5,5 @@ public sealed record DetectionEnvironmentRepairResult(
     int? ExitCode,
     string SummaryMessage,
     string ActionMessage,
-    string OutputTail);
+    string OutputTail,
+    string RepairedPythonExecutable = "");

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,13 +15,14 @@ namespace EDetection.Desktop.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const int MinWindowWidthDip = 1100;
-    public const int MinWindowHeightDip = 740;
+    public const int MinWindowWidthDip = 960;
+    public const int MinWindowHeightDip = 700;
     public const int DefaultWindowWidthDip = 1240;
     public const int DefaultWindowHeightDip = 760;
     private const string WindowsNotificationSettingsUri = "ms-settings:notifications";
     private const string WindowsProxySettingsUri = "ms-settings:network-proxy";
     private const string WindowsStartupAppsSettingsUri = "ms-settings:startupapps";
+    private const string OfficialReleaseBaseUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/";
 
     private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
@@ -98,9 +100,7 @@ public partial class MainViewModel : ObservableObject
         OutputDirectory = saved.OutputDirectory;
         ConfigPath = _detectionConfig.EnsureUserConfig(saved.ConfigPath);
         ApplyDetectionConfig(_detectionConfig.Load(ConfigPath));
-        PythonExecutable = string.IsNullOrWhiteSpace(saved.PythonExecutable)
-            ? "python"
-            : saved.PythonExecutable;
+        PythonExecutable = PythonBackendService.ResolvePythonExecutable(saved.PythonExecutable);
         WriteReport = saved.WriteReport;
         CloseToTrayOnClose = saved.CloseToTrayOnClose;
         StartMinimizedToTray = saved.StartMinimizedToTray;
@@ -326,7 +326,7 @@ public partial class MainViewModel : ObservableObject
 
     public string WorkbenchReportFolderButtonText => IsShowingReportSnapshot ? "选中报告目录" : "打开所在目录";
 
-    public Visibility ReportActionsVisibility => string.IsNullOrWhiteSpace(WorkbenchReportPath)
+    public Visibility ReportActionsVisibility => string.IsNullOrWhiteSpace(WorkbenchReportPath) || ShouldShowCompletionActions
         ? Visibility.Collapsed
         : Visibility.Visible;
 
@@ -1510,8 +1510,28 @@ public partial class MainViewModel : ObservableObject
                 "E-Detection 桌面通知",
                 $"桌面通知可以正常显示 · {DateTimeOffset.Now:HH:mm}",
                 ForwardToRemoteNotifications: false));
-        ShowSettingsFeedback("已发送桌面通知测试。", InfoBarSeverity.Success);
-        AddLog("桌面通知", "已发送桌面通知测试。");
+    }
+
+    public void ReportDesktopNotificationResult(DesktopNotificationRequest request, bool shown)
+    {
+        if (shown)
+        {
+            AddLog("桌面通知", $"已发送桌面通知: {request.Title}");
+            if (request.Kind is DesktopNotificationKind.Success
+                && !request.ForwardToRemoteNotifications
+                && string.Equals(request.Title, "E-Detection 桌面通知", StringComparison.Ordinal))
+            {
+                ShowSettingsFeedback("已发送桌面通知测试。", InfoBarSeverity.Success);
+            }
+
+            return;
+        }
+
+        AddLog("桌面通知提醒", $"Windows 未显示桌面通知: {request.Title}");
+        if (request.Kind is DesktopNotificationKind.Success && !request.ForwardToRemoteNotifications)
+        {
+            ShowSettingsFeedback("Windows 未显示桌面通知，请检查系统通知设置。", InfoBarSeverity.Warning);
+        }
     }
 
     [RelayCommand]
@@ -2465,6 +2485,18 @@ public partial class MainViewModel : ObservableObject
         ApplyPythonProbeResult(result);
         if (!result.IsReady)
         {
+            if (result.CanRepairDetectionEnvironment
+                && await TryAutoRepairDetectionEnvironmentAsync(backendRoot))
+            {
+                result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
+                ApplyPythonProbeResult(result);
+                if (result.IsReady)
+                {
+                    LastFailureText = "暂无失败";
+                    return true;
+                }
+            }
+
             BlockStart(
                 "检测组件未就绪",
                 result.ActionMessage);
@@ -2515,6 +2547,45 @@ public partial class MainViewModel : ObservableObject
             IsConfigReady(),
             DateTime.Now);
         RefreshFirstRunGuide();
+    }
+
+    private async Task<bool> TryAutoRepairDetectionEnvironmentAsync(string backendRoot)
+    {
+        var request = new DetectionEnvironmentRepairRequest(PythonExecutable, backendRoot);
+        if (!_environmentRepair.CanRepair(request))
+        {
+            return false;
+        }
+
+        IsRepairingDetectionEnvironment = true;
+        StatusText = "正在自动修复检测组件";
+        LastFailureText = "运行前检查发现检测组件未就绪，正在自动修复...";
+        Diagnostics.MarkRepairInProgress();
+        SetTaskbarProgress(TaskbarProgressKind.Indeterminate, 0);
+        AddLog("修复", "运行前检查发现检测组件未就绪，正在自动修复。");
+
+        try
+        {
+            var repairResult = await _environmentRepair.RepairAsync(request);
+            Diagnostics.ApplyRepairResult(repairResult);
+            AddLog(repairResult.Succeeded ? "修复" : "修复提醒", repairResult.SummaryMessage);
+            if (!string.IsNullOrWhiteSpace(repairResult.OutputTail))
+            {
+                AddLog("修复详情", repairResult.OutputTail);
+            }
+
+            ApplyRepairedPythonExecutable(repairResult);
+
+            return repairResult.Succeeded;
+        }
+        finally
+        {
+            IsRepairingDetectionEnvironment = false;
+            SetTaskbarProgress(TaskbarProgressKind.None, 0);
+            RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
+            StartCommand.NotifyCanExecuteChanged();
+            RefreshDiagnosticsCommand.NotifyCanExecuteChanged();
+        }
     }
 
     private void RefreshFirstRunGuide()
@@ -2608,6 +2679,8 @@ public partial class MainViewModel : ObservableObject
                 AddLog("修复详情", repairResult.OutputTail);
             }
 
+            ApplyRepairedPythonExecutable(repairResult);
+
             Diagnostics.MarkProbeInProgress("修复完成，正在重新检查运行环境...");
             var probeResult = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
             ApplyPythonProbeResult(probeResult);
@@ -2651,6 +2724,20 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private void ApplyRepairedPythonExecutable(DetectionEnvironmentRepairResult repairResult)
+    {
+        if (!repairResult.Succeeded
+            || string.IsNullOrWhiteSpace(repairResult.RepairedPythonExecutable)
+            || !File.Exists(repairResult.RepairedPythonExecutable))
+        {
+            return;
+        }
+
+        PythonExecutable = repairResult.RepairedPythonExecutable;
+        SaveSettings();
+        AddLog("修复", $"已切换到应用私有检测环境: {repairResult.RepairedPythonExecutable}");
+    }
+
     [RelayCommand]
     private void OpenBackendDirectory()
     {
@@ -2675,10 +2762,16 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (result is { IsUpdateAvailable: true, HasInstallerDownload: true })
+        if (result is { IsUpdateAvailable: true, HasInstallerDownload: true }
+            && IsOfficialReleaseUrl(result.ReleaseUrl))
         {
             await DownloadAndLaunchUpdateInstallerAsync(result);
             return;
+        }
+
+        if (result is { IsUpdateAvailable: true } && !IsOfficialReleaseUrl(result.ReleaseUrl))
+        {
+            ShowSettingsFeedback("检测到非官方更新源返回新版本。为安全起见，请手动确认发布页面。", InfoBarSeverity.Warning);
         }
 
         var targetUrl = result?.PreferredActionUrl;
@@ -2690,6 +2783,13 @@ public partial class MainViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(targetUrl))
         {
             ShowSettingsFeedback("未找到可用的更新地址。", InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (!IsOfficialReleaseUrl(targetUrl))
+        {
+            ShowSettingsFeedback("非官方更新地址不会自动打开，请确认更新源后手动访问。", InfoBarSeverity.Warning);
+            AddLog("更新提醒", $"已阻止自动打开非官方更新地址: {targetUrl}");
             return;
         }
 
@@ -2780,12 +2880,18 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        if (!IsOfficialReleaseUrl(result.ReleaseUrl))
+        {
+            AddLog("更新提醒", $"非官方更新源发现版本 {result.LatestVersion}，已跳过桌面通知跳转。");
+            return;
+        }
+
         _lastNotifiedUpdateVersion = result.LatestVersion;
-        var targetUrl = string.IsNullOrWhiteSpace(result.PreferredActionUrl)
+        var targetUrl = string.IsNullOrWhiteSpace(result.ReleaseUrl)
             ? UpdateFeedUrl
-            : result.PreferredActionUrl;
+            : result.ReleaseUrl;
         var message = result.HasInstallerDownload
-            ? $"可更新到 {result.LatestVersion} · 点击下载安装向导"
+            ? $"可更新到 {result.LatestVersion} · 打开发布页面获取安装向导"
             : $"可更新到 {result.LatestVersion} · 打开发布页面获取安装包";
         DesktopNotificationRequested?.Invoke(
             this,
@@ -2859,6 +2965,8 @@ public partial class MainViewModel : ObservableObject
             throw new InvalidOperationException("更新源未提供安装向导下载地址。");
         }
 
+        EnsureTrustedUpdateInstallerSource(result);
+
         var fileName = BuildUpdateInstallerFileName(result.InstallerName, result.LatestVersion);
         var updatesDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -2899,6 +3007,8 @@ public partial class MainViewModel : ObservableObject
             throw new InvalidOperationException("安装向导下载为空。");
         }
 
+        VerifyUpdateInstallerDigest(partialPath, result.InstallerDigest);
+
         if (File.Exists(installerPath))
         {
             File.Delete(installerPath);
@@ -2906,6 +3016,58 @@ public partial class MainViewModel : ObservableObject
 
         File.Move(partialPath, installerPath);
         return installerPath;
+    }
+
+    private static void EnsureTrustedUpdateInstallerSource(UpdateCheckResult result)
+    {
+        if (!Uri.TryCreate(result.ReleaseUrl, UriKind.Absolute, out var releaseUri)
+            || !Uri.TryCreate(result.InstallerDownloadUrl, UriKind.Absolute, out var installerUri)
+            || releaseUri.Scheme != Uri.UriSchemeHttps
+            || installerUri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException("更新安装向导必须来自 HTTPS 官方发布页。");
+        }
+
+        var releaseUrl = releaseUri.ToString();
+        var installerUrl = installerUri.ToString();
+        if (!releaseUrl.StartsWith(OfficialReleaseBaseUrl, StringComparison.OrdinalIgnoreCase)
+            || !installerUrl.StartsWith(OfficialReleaseBaseUrl, StringComparison.OrdinalIgnoreCase)
+            || !installerUri.AbsolutePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("为安全起见，只会自动运行官方 GitHub Release 中的安装向导。");
+        }
+    }
+
+    private static bool IsOfficialReleaseUrl(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && uri.ToString().StartsWith(OfficialReleaseBaseUrl, StringComparison.OrdinalIgnoreCase);
+
+    private static void VerifyUpdateInstallerDigest(string installerPath, string digest)
+    {
+        if (string.IsNullOrWhiteSpace(digest))
+        {
+            throw new InvalidOperationException("更新源未提供安装包 SHA-256 摘要，已改为打开发布页面。");
+        }
+
+        const string prefix = "sha256:";
+        if (!digest.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("更新源返回了无法识别的安装包摘要。");
+        }
+
+        var expected = digest[prefix.Length..].Trim();
+        if (expected.Length != 64)
+        {
+            throw new InvalidOperationException("更新源返回的 SHA-256 摘要格式不正确。");
+        }
+
+        using var stream = File.OpenRead(installerPath);
+        var actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        if (!string.Equals(actual, expected.ToLowerInvariant(), StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("安装向导摘要校验失败，已阻止启动该更新。");
+        }
     }
 
     private static string BuildUpdateInstallerFileName(string assetName, string latestVersion)
@@ -3051,13 +3213,32 @@ public partial class MainViewModel : ObservableObject
 
         if (Path.IsPathRooted(rawPath))
         {
-            return rawPath;
+            return "";
         }
 
         var inputRoot = SelectedReport?.InputDirectory ?? InputDirectory;
-        return string.IsNullOrWhiteSpace(inputRoot)
-            ? rawPath
-            : Path.Combine(inputRoot, rawPath);
+        if (string.IsNullOrWhiteSpace(inputRoot))
+        {
+            return "";
+        }
+
+        try
+        {
+            var rootFullPath = Path.GetFullPath(inputRoot);
+            var candidatePath = Path.GetFullPath(Path.Combine(rootFullPath, rawPath));
+            var normalizedRoot = rootFullPath.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return candidatePath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+                ? candidatePath
+                : "";
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
+        {
+            return "";
+        }
     }
 
     private bool CanCopyFilteredDetails() => WorkbenchFilteredDetailPreview.Any();
@@ -3186,7 +3367,7 @@ public partial class MainViewModel : ObservableObject
         InputDirectory = defaults.InputDirectory;
         OutputDirectory = defaults.OutputDirectory;
         ConfigPath = _detectionConfig.EnsureUserConfig(defaults.ConfigPath);
-        PythonExecutable = defaults.PythonExecutable;
+        PythonExecutable = PythonBackendService.ResolvePythonExecutable(defaults.PythonExecutable);
         WriteReport = defaults.WriteReport;
         CloseToTrayOnClose = defaults.CloseToTrayOnClose;
         StartMinimizedToTray = defaults.StartMinimizedToTray;

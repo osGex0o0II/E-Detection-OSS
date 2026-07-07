@@ -6,6 +6,7 @@ public sealed record UpdateCheckResult(
     string ReleaseUrl,
     string InstallerName,
     string InstallerDownloadUrl,
+    string InstallerDigest,
     DateTimeOffset? PublishedAt,
     bool IsUpdateAvailable)
 {

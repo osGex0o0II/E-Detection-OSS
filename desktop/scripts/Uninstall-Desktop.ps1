@@ -4,6 +4,8 @@ param(
 
     [switch]$RemoveSettings,
 
+    [switch]$CleanupOnly,
+
     [switch]$Quiet
 )
 
@@ -12,9 +14,101 @@ $ErrorActionPreference = "Stop"
 $productName = "E-Detection Desktop"
 $entryPoint = "EDetection.Desktop.exe"
 $shortcutName = "$productName.lnk"
+$installManifestName = "install-manifest.json"
 
 function Resolve-FullPath([string]$Path) {
     return [System.IO.Path]::GetFullPath($Path)
+}
+
+function Test-PathInsideDirectory([string]$CandidatePath, [string]$RootPath) {
+    $candidateFull = Resolve-FullPath $CandidatePath
+    $rootFull = Resolve-FullPath $RootPath
+    $rootTrimmed = $rootFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $rootWithSeparator = $rootTrimmed + [System.IO.Path]::DirectorySeparatorChar
+    return [string]::Equals($candidateFull, $rootTrimmed, [System.StringComparison]::OrdinalIgnoreCase) `
+        -or $candidateFull.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-SafeInstallDirectory([string]$Path) {
+    $full = Resolve-FullPath $Path
+    $root = [System.IO.Path]::GetPathRoot($full)
+    $blocked = @(
+        $root,
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile),
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory),
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments),
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs),
+        $env:LOCALAPPDATA,
+        $env:APPDATA,
+        $env:TEMP
+    ) | Where-Object { ![string]::IsNullOrWhiteSpace($_) } | ForEach-Object { Resolve-FullPath $_ }
+
+    foreach ($blockedPath in $blocked) {
+        if ([string]::Equals($full.TrimEnd('\'), $blockedPath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Uninstall failed: refusing to use unsafe install directory '$full'."
+        }
+    }
+}
+
+function Test-ProductDirectory([string]$Path) {
+    return (Test-Path (Join-Path $Path $entryPoint)) -or (Test-Path (Join-Path $Path "release-info.txt"))
+}
+
+function Remove-EmptyDirectories([string]$Path) {
+    if (!(Test-Path $Path)) {
+        return
+    }
+
+    Get-ChildItem -LiteralPath $Path -Directory -Recurse -Force |
+        Sort-Object FullName -Descending |
+        ForEach-Object {
+            if (-not (Get-ChildItem -LiteralPath $_.FullName -Force | Select-Object -First 1)) {
+                Remove-Item -LiteralPath $_.FullName -Force
+            }
+        }
+
+    if (-not (Get-ChildItem -LiteralPath $Path -Force | Select-Object -First 1)) {
+        Remove-Item -LiteralPath $Path -Force
+    }
+}
+
+function Remove-InstalledFiles([string]$Path) {
+    if (!(Test-Path $Path)) {
+        return
+    }
+
+    if (!(Test-ProductDirectory $Path)) {
+        throw "Uninstall failed: '$Path' does not look like an E-Detection Desktop install directory."
+    }
+
+    $rootFull = Resolve-FullPath $Path
+    $manifestPath = Join-Path $Path $installManifestName
+    if (!(Test-Path $manifestPath)) {
+        throw "Uninstall failed: install manifest was not found at $manifestPath. Refusing to delete the whole directory."
+    }
+
+    $manifest = Get-Content -Path $manifestPath -Raw | ConvertFrom-Json
+    foreach ($relativePath in @($manifest.Files)) {
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            continue
+        }
+
+        if ([System.IO.Path]::IsPathRooted($relativePath)) {
+            throw "Uninstall failed: manifest entry must be relative: $relativePath"
+        }
+
+        $target = Resolve-FullPath (Join-Path $Path $relativePath)
+        if (!(Test-PathInsideDirectory $target $rootFull)) {
+            throw "Uninstall failed: manifest entry escapes install directory: $relativePath"
+        }
+
+        if (Test-Path $target) {
+            Remove-Item -LiteralPath $target -Force
+        }
+    }
+
+    Remove-Item -LiteralPath $manifestPath -Force -ErrorAction SilentlyContinue
+    Remove-EmptyDirectories $Path
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
@@ -30,6 +124,7 @@ $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $startupEntryName = "E-Detection Desktop"
 $startupTaskName = "E-Detection Desktop Autostart"
 $settingsDirectory = Join-Path $env:LOCALAPPDATA "E-Detection\Desktop"
+Assert-SafeInstallDirectory $installFull
 
 function Get-StartupTaskXml {
     $output = & schtasks.exe /Query /TN $startupTaskName /XML 2>$null
@@ -46,6 +141,64 @@ function Test-StartupTaskTargetsInstall {
         -and $xml.IndexOf($installFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
 }
 
+function Test-AppPathsTargetsInstall {
+    $key = Get-Item -Path $appPathsKey -ErrorAction SilentlyContinue
+    if ($null -eq $key) {
+        return $false
+    }
+
+    $registeredExe = $key.GetValue("")
+    $registeredPath = (Get-ItemProperty -Path $appPathsKey -Name "Path" -ErrorAction SilentlyContinue).Path
+    $installedExe = Join-Path $installFull $entryPoint
+    $exeMatches = $registeredExe -is [string] `
+        -and [string]::Equals(
+            (Resolve-FullPath $registeredExe),
+            (Resolve-FullPath $installedExe),
+            [System.StringComparison]::OrdinalIgnoreCase)
+    $pathMatches = $registeredPath -is [string] `
+        -and [string]::Equals(
+            (Resolve-FullPath $registeredPath),
+            $installFull,
+            [System.StringComparison]::OrdinalIgnoreCase)
+    return $exeMatches -or $pathMatches
+}
+
+function Invoke-InnoUninstallerIfAvailable {
+    if ($CleanupOnly) {
+        return $false
+    }
+
+    $manifestPath = Join-Path $installFull $installManifestName
+    if (Test-Path $manifestPath) {
+        return $false
+    }
+
+    $innoUninstaller = Join-Path $installFull "unins000.exe"
+    if (!(Test-Path $innoUninstaller)) {
+        return $false
+    }
+
+    if (!$Quiet) {
+        Write-Host "Delegating uninstall to Windows setup uninstaller at $innoUninstaller"
+    }
+
+    $arguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+    $process = Start-Process `
+        -FilePath $innoUninstaller `
+        -ArgumentList $arguments `
+        -Wait `
+        -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "Uninstall failed: Windows setup uninstaller exited with code $($process.ExitCode)."
+    }
+
+    return $true
+}
+
+if (Invoke-InnoUninstallerIfAvailable) {
+    return
+}
+
 foreach ($shortcut in @($desktopShortcut, $startMenuShortcut)) {
     if (Test-Path $shortcut) {
         if ($PSCmdlet.ShouldProcess($shortcut, "Remove shortcut")) {
@@ -60,7 +213,7 @@ if ((Test-Path $startMenuFolder) -and -not (Get-ChildItem -LiteralPath $startMen
     }
 }
 
-if (Test-Path $appPathsKey) {
+if (Test-AppPathsTargetsInstall) {
     if ($PSCmdlet.ShouldProcess($appPathsKey, "Remove App Paths entry")) {
         Remove-Item -Path $appPathsKey -Recurse -Force
     }
@@ -90,14 +243,14 @@ if (Test-StartupTaskTargetsInstall) {
     }
 }
 
-if (Test-Path $installFull) {
+if (!$CleanupOnly -and (Test-Path $installFull)) {
     $currentLocation = Resolve-FullPath (Get-Location).Path
-    if ($currentLocation.StartsWith($installFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (Test-PathInsideDirectory $currentLocation $installFull) {
         Set-Location $env:TEMP
     }
 
     if ($PSCmdlet.ShouldProcess($installFull, "Remove installed application files")) {
-        Remove-Item -LiteralPath $installFull -Recurse -Force
+        Remove-InstalledFiles $installFull
     }
 }
 
@@ -109,13 +262,18 @@ if ($RemoveSettings -and (Test-Path $settingsDirectory)) {
 
 if (!$WhatIfPreference) {
     $remaining = @()
-    foreach ($path in @($desktopShortcut, $startMenuShortcut, $installFull)) {
+    foreach ($path in @($desktopShortcut, $startMenuShortcut)) {
         if (Test-Path $path) {
             $remaining += $path
         }
     }
 
-    if (Test-Path $appPathsKey) {
+    $installedExe = Join-Path $installFull $entryPoint
+    if (Test-Path $installedExe) {
+        $remaining += $installedExe
+    }
+
+    if (Test-AppPathsTargetsInstall) {
         $remaining += $appPathsKey
     }
 
@@ -152,7 +310,12 @@ if ($WhatIfPreference) {
 }
 else {
     if (!$Quiet) {
-        Write-Host "$productName uninstalled from $installFull"
+        if ($CleanupOnly) {
+            Write-Host "$productName cleanup completed for $installFull"
+        }
+        else {
+            Write-Host "$productName uninstalled from $installFull"
+        }
     }
 }
 

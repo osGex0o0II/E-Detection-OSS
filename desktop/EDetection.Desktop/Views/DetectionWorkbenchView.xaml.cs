@@ -76,24 +76,26 @@ public sealed partial class DetectionWorkbenchView : UserControl
     private void ApplyDetailFilterLayout(bool compact)
     {
         DetailFilterGrid.RowDefinitions[1].Height = compact ? GridLength.Auto : new GridLength(0);
+        DetailFilterGrid.RowDefinitions[2].Height = compact ? GridLength.Auto : new GridLength(0);
 
         if (compact)
         {
-            DetailSearchColumn.Width = new GridLength(132);
-            DetailSeverityColumn.Width = new GridLength(180);
-            DetailIssueColumn.Width = new GridLength(1, GridUnitType.Star);
+            DetailSearchColumn.Width = new GridLength(156);
+            DetailSeverityColumn.Width = new GridLength(1, GridUnitType.Star);
+            DetailIssueColumn.Width = new GridLength(0);
             Place(DetailSearchBox, 0, 0, 9);
             Place(SeverityFilter, 1, 0);
-            Place(IssueTypeFilter, 1, 1);
-            Place(ClearDetailFiltersButton, 1, 3);
-            Place(OpenSelectedDetailSourceButton, 1, 4);
-            Place(CopySelectedDetailSourcePathButton, 1, 5);
-            Place(CopySelectedDetailButton, 1, 6);
-            Place(CopyFilteredDetailsButton, 1, 7);
-            Place(ExplainSelectedDetailButton, 1, 8);
+            Place(IssueTypeFilter, 1, 1, 8);
+            Place(ClearDetailFiltersButton, 2, 0);
+            Place(OpenSelectedDetailSourceButton, 2, 1);
+            Place(CopySelectedDetailSourcePathButton, 2, 2);
+            Place(CopySelectedDetailButton, 2, 3);
+            Place(CopyFilteredDetailsButton, 2, 4);
+            Place(ExplainSelectedDetailButton, 2, 5);
             return;
         }
 
+        DetailFilterGrid.RowDefinitions[2].Height = new GridLength(0);
         DetailSearchColumn.Width = new GridLength(1, GridUnitType.Star);
         DetailSeverityColumn.Width = new GridLength(132);
         DetailIssueColumn.Width = new GridLength(150);

@@ -77,3 +77,61 @@ def test_enrich_anomalies_adds_location_columns():
     assert list(enriched.columns[:3]) == ["建筑", "相对路径", "变压器"]
     assert enriched.loc[0, "建筑"] == "建筑A"
     assert enriched.loc[0, "变压器"] == "1TM1"
+
+
+def test_write_excel_report_escapes_formula_like_text(tmp_path: Path):
+    anomalies = pd.DataFrame(
+        [
+            {
+                "来源文件": "=cmd|' /C calc'!A0.csv",
+                "日期": "2025-09-06",
+                "异常类型": "@SUM(1,1)",
+                "异常详情": "+malicious",
+                "异常值": "-10",
+                "时间": "\t=HYPERLINK(\"https://example.com\")",
+            }
+        ]
+    )
+    report_path = tmp_path / "formula-safe.xlsx"
+
+    write_excel_report(
+        report_path,
+        enrich_anomalies(anomalies, "=建筑", "+变压器", "-相对路径"),
+        summary={
+            "input_dir": "=input",
+            "output_dir": "+output",
+            "total_files": 1,
+            "processed_files": 1,
+            "normal_files": 0,
+            "anomaly_files": 1,
+            "anomaly_records": 1,
+            "skipped_files": 0,
+            "generated_at": "@now",
+        },
+        config=DEFAULT_CONFIG,
+        messages=["=message"],
+    )
+
+    workbook = load_workbook(report_path, data_only=False)
+    overview_sheet = workbook["检测概览"]
+    detail_sheet = workbook["异常明细"]
+
+    assert overview_sheet["B2"].value == "'=input"
+    assert overview_sheet["B3"].value == "'+output"
+    assert overview_sheet["B10"].value == "'@now"
+    assert overview_sheet["A15"].value == "'=message"
+
+    detail_values = [cell.value for cell in detail_sheet[2]]
+    assert "'=建筑" in detail_values
+    assert "'-相对路径" in detail_values
+    assert "'+变压器" in detail_values
+    assert "'=cmd|' /C calc'!A0.csv" in detail_values
+    assert "'@SUM(1,1)" in detail_values
+    assert "'+malicious" in detail_values
+    assert "'-10" in detail_values
+    assert "'\t=HYPERLINK(\"https://example.com\")" in detail_values
+
+    for worksheet in workbook.worksheets:
+        for row in worksheet.iter_rows():
+            for cell in row:
+                assert cell.data_type != "f"

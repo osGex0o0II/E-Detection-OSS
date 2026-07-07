@@ -40,6 +40,82 @@ function Invoke-Native {
     }
 }
 
+function Get-RegistryValueSnapshot([string]$KeyPath, [string]$Name) {
+    $key = Get-Item -Path $KeyPath -ErrorAction SilentlyContinue
+    if ($null -eq $key) {
+        return [pscustomobject]@{
+            Exists = $false
+            KeyExists = $false
+            Name = $Name
+            Value = $null
+        }
+    }
+
+    $value = $key.GetValue($Name)
+    return [pscustomobject]@{
+        Exists = ($null -ne $value)
+        KeyExists = $true
+        Name = $Name
+        Value = $value
+    }
+}
+
+function Restore-RegistryValueSnapshot($Snapshot, [string]$KeyPath) {
+    if ($Snapshot.Exists) {
+        New-Item -Path $KeyPath -Force | Out-Null
+        New-ItemProperty -Path $KeyPath -Name $Snapshot.Name -Value $Snapshot.Value -PropertyType String -Force | Out-Null
+    }
+    elseif (Test-Path $KeyPath) {
+        Remove-ItemProperty -Path $KeyPath -Name $Snapshot.Name -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-ScheduledTaskXml([string]$TaskName) {
+    $output = & schtasks.exe /Query /TN $TaskName /XML 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
+        return $null
+    }
+
+    return ($output -join [Environment]::NewLine)
+}
+
+function Remove-ScheduledTaskIfExists([string]$TaskName) {
+    & schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
+    }
+}
+
+function Restore-ScheduledTaskXml([string]$TaskName, [string]$TaskXml) {
+    if ([string]::IsNullOrWhiteSpace($TaskXml)) {
+        return
+    }
+
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) "EDetectionDesktopTaskRestore-$([Guid]::NewGuid().ToString('N')).xml"
+    try {
+        Set-Content -Path $tempPath -Value $TaskXml -Encoding Unicode
+        & schtasks.exe /Create /TN $TaskName /XML $tempPath /F | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to restore scheduled task '$TaskName'."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function New-SmokeScheduledStartupTask([string]$TaskName, [string]$ExecutablePath) {
+    $taskCommand = "`"$ExecutablePath`" --startup-minimized"
+    & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR $taskCommand /F 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        $global:LASTEXITCODE = 0
+        return $false
+    }
+
+    return $true
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 
@@ -60,9 +136,25 @@ $smokeRoot = Split-Path -Parent $installFull
 New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
 
 $installLog = Join-Path $smokeRoot "install.log"
+$updateLog = Join-Path $smokeRoot "update.log"
 $uninstallLog = Join-Path $smokeRoot "uninstall.log"
 $entryPoint = "EDetection.Desktop.exe"
 $installedExe = Join-Path $installFull $entryPoint
+$appPathsKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\$entryPoint"
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$startupEntryName = "E-Detection Desktop"
+$startupTaskName = "E-Detection Desktop Autostart"
+$startupSnapshot = Get-RegistryValueSnapshot $runKey $startupEntryName
+$startupTaskSnapshot = Get-ScheduledTaskXml $startupTaskName
+$settingsDirectory = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "E-Detection\Desktop"
+$settingsPath = Join-Path $settingsDirectory "settings.json"
+$settingsExisted = Test-Path $settingsPath
+$settingsBackup = if ($settingsExisted) {
+    Get-Content -Path $settingsPath -Raw
+}
+else {
+    $null
+}
 
 try {
     if (Test-Path $installFull) {
@@ -85,12 +177,47 @@ try {
         throw "Installer smoke failed: installed executable was not found at $installedExe"
     }
 
+    if (!(Test-Path $appPathsKey)) {
+        throw "Installer smoke failed: App Paths entry was not created at $appPathsKey"
+    }
+
     $healthScript = Join-Path $installFull "Test-DesktopPackageHealth.ps1"
     if (!(Test-Path $healthScript)) {
         throw "Installer smoke failed: package health script was not installed at $healthScript"
     }
 
     & $healthScript -PackagePath $installFull
+
+    New-Item -ItemType Directory -Force -Path $settingsDirectory | Out-Null
+    $settingsMarker = "installer-update-smoke-$([Guid]::NewGuid().ToString('N'))"
+    [pscustomobject]@{
+        SettingsVersion = 8
+        InstallerUpdateSmokeMarker = $settingsMarker
+    } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
+
+    Set-Content -Path $installedExe -Value "corrupted by installer update smoke" -Encoding ASCII
+    Invoke-Native `
+        -FilePath $installerFull `
+        -Arguments @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$installFull",
+            "/LOG=$updateLog"
+        ) `
+        -FailureMessage "Installer smoke failed: update/repair setup did not complete successfully."
+
+    & $healthScript -PackagePath $installFull
+    $settingsAfterUpdate = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
+    if ($settingsAfterUpdate.InstallerUpdateSmokeMarker -ne $settingsMarker) {
+        throw "Installer smoke failed: user settings were not preserved during update/repair install."
+    }
+
+    New-Item -Path $runKey -Force | Out-Null
+    New-ItemProperty -Path $runKey -Name $startupEntryName -Value "`"$installedExe`" --startup-minimized" -PropertyType String -Force | Out-Null
+    Remove-ScheduledTaskIfExists $startupTaskName
+    $startupTaskCreated = New-SmokeScheduledStartupTask $startupTaskName $installedExe
 
     $uninstaller = Join-Path $installFull "unins000.exe"
     if (!(Test-Path $uninstaller)) {
@@ -110,8 +237,46 @@ try {
     if (Test-Path $installedExe) {
         throw "Installer smoke failed: installed executable still exists after uninstall: $installedExe"
     }
+
+    if (Test-Path $appPathsKey) {
+        throw "Installer smoke failed: App Paths entry still exists after uninstall: $appPathsKey"
+    }
+
+    $runKeyAfterUninstall = Get-Item -Path $runKey -ErrorAction SilentlyContinue
+    $startupAfterUninstall = if ($null -ne $runKeyAfterUninstall) {
+        $runKeyAfterUninstall.GetValue($startupEntryName)
+    }
+    else {
+        $null
+    }
+    $startupEntryTargetsInstall = $startupAfterUninstall -is [string] `
+        -and $startupAfterUninstall.IndexOf($installedExe, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    if ($startupEntryTargetsInstall) {
+        throw "Installer smoke failed: startup entry still points at installed executable: $startupAfterUninstall"
+    }
+
+    if ($startupTaskCreated) {
+        $taskAfterUninstall = Get-ScheduledTaskXml $startupTaskName
+        $startupTaskTargetsInstall = ![string]::IsNullOrWhiteSpace($taskAfterUninstall) `
+            -and $taskAfterUninstall.IndexOf($installedExe, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        if ($startupTaskTargetsInstall) {
+            throw "Installer smoke failed: scheduled startup task still points at installed executable."
+        }
+    }
 }
 finally {
+    Restore-RegistryValueSnapshot $startupSnapshot $runKey
+    Remove-ScheduledTaskIfExists $startupTaskName
+    Restore-ScheduledTaskXml $startupTaskName $startupTaskSnapshot
+
+    if ($settingsExisted) {
+        New-Item -ItemType Directory -Force -Path $settingsDirectory | Out-Null
+        Set-Content -Path $settingsPath -Value $settingsBackup -Encoding UTF8
+    }
+    else {
+        Remove-Item -LiteralPath $settingsPath -Force -ErrorAction SilentlyContinue
+    }
+
     if (!$KeepInstallDirectory -and (Test-Path $smokeRoot)) {
         Assert-SmokeInstallPath $smokeRoot
         Remove-Item -LiteralPath $smokeRoot -Recurse -Force -ErrorAction SilentlyContinue

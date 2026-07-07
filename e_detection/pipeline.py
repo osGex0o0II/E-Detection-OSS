@@ -107,7 +107,8 @@ def _merge_duplicate_named_columns(df: Any) -> Any:
         if block.shape[1] == 1:
             merged[name] = block.iloc[:, 0]
         else:
-            merged[name] = block.mean(axis=1, skipna=True)
+            numeric_block = block.apply(pd.to_numeric, errors="coerce")
+            merged[name] = numeric_block.mean(axis=1, skipna=True)
     out = pd.DataFrame(merged, index=df.index)
     return out
 
@@ -165,9 +166,10 @@ def clean_and_rename_columns(df) -> Tuple[Any, List[str]]:
             unmapped.append(col)
     
     # 只保留成功重命名的列和时间列
-    final_df = df.rename(columns=new_cols)
-    keep_cols = [c for c in new_cols.values() if c in final_df.columns]
-    return final_df[keep_cols], unmapped
+    keep_indices = [index for index, column in enumerate(current_cols) if column in new_cols]
+    final_df = df.iloc[:, keep_indices].copy()
+    final_df.columns = [new_cols[current_cols[index]] for index in keep_indices]
+    return _merge_duplicate_named_columns(final_df), unmapped
 
 def _load_and_clean_data(file_path: str) -> Tuple[Any, str, Dict[str, Dict[str, int]]]:
     """Load raw CSV data and clean it into a normalized electrical data frame.

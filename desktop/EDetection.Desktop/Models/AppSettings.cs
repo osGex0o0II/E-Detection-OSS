@@ -10,7 +10,7 @@ public sealed class AppSettings
 
     public string ConfigPath { get; set; } = "";
 
-    public string PythonExecutable { get; set; } = "python";
+    public string PythonExecutable { get; set; } = "";
 
     public bool WriteReport { get; set; } = true;
 

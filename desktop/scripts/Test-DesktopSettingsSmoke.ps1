@@ -230,6 +230,37 @@ function Wait-ForAutomationName([IntPtr]$RootHandle, [string]$Name, [int]$Timeou
     throw "Timed out waiting for automation element '$Name'."
 }
 
+function Bring-AutomationElementIntoView([IntPtr]$RootHandle, [string]$Name, [int]$TimeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($RootHandle)
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty,
+        $Name)
+
+    do {
+        $match = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if ($match -ne $null) {
+            try {
+                $pattern = $match.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
+                $pattern.ScrollIntoView()
+            }
+            catch {
+                try {
+                    $match.SetFocus()
+                }
+                catch {
+                }
+            }
+
+            return $match.Current.Name
+        }
+
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Timed out waiting to bring automation element '$Name' into view."
+}
+
 function Wait-ForAutomationNameLike([IntPtr]$RootHandle, [string]$Pattern, [int]$TimeoutSeconds) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($RootHandle)
@@ -398,16 +429,16 @@ try {
     $themeControl = Wait-ForAutomationName $mainWindow.Handle "应用主题" $WaitSeconds
     $backdropControl = Wait-ForAutomationName $mainWindow.Handle "窗口背景" $WaitSeconds
     $poetryToggle = Wait-ForAutomationName $mainWindow.Handle "顶部诗词" $WaitSeconds
-    $poetryServiceControl = Wait-ForAutomationName $mainWindow.Handle "诗词接口" $WaitSeconds
+    $poetryServiceControl = Wait-ForAutomationName $mainWindow.Handle "顶部诗词来源" $WaitSeconds
     $poetryLanguageControl = Wait-ForAutomationName $mainWindow.Handle "诗词语言" $WaitSeconds
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
     $inputDirectoryControl = Wait-ForAutomationName $mainWindow.Handle "输入目录" $WaitSeconds
     $browseInputDirectoryButton = Wait-ForAutomationName $mainWindow.Handle "选择输入目录" $WaitSeconds
     $openThresholdSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开阈值设置" $WaitSeconds
     $openDetectionRulesButton = Wait-ForAutomationName $mainWindow.Handle "打开检测规则" $WaitSeconds
-    $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "阈值设置" $WaitSeconds
-    $thresholdConfigControl = Wait-ForAutomationName $mainWindow.Handle "阈值配置文件" $WaitSeconds
-    $browseThresholdConfigButton = Wait-ForAutomationName $mainWindow.Handle "选择阈值配置文件" $WaitSeconds
+    $thresholdsSection = Wait-ForAutomationName $mainWindow.Handle "检测阈值" $WaitSeconds
+    $thresholdConfigControl = Wait-ForAutomationName $mainWindow.Handle "阈值文件路径" $WaitSeconds
+    $browseThresholdConfigButton = Wait-ForAutomationName $mainWindow.Handle "选择阈值文件" $WaitSeconds
     $rulesSection = Wait-ForAutomationName $mainWindow.Handle "检测规则" $WaitSeconds
     $reportsSection = Wait-ForAutomationName $mainWindow.Handle "报告" $WaitSeconds
     $logsSection = Wait-ForAutomationName $mainWindow.Handle "运行记录" $WaitSeconds
@@ -416,14 +447,15 @@ try {
     $currentMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "电流上限" $WaitSeconds
     $powerFactorMinThreshold = Wait-ForAutomationName $mainWindow.Handle "功率因数下限" $WaitSeconds
     $temperatureMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "温度上限" $WaitSeconds
-    $freezeCountThreshold = Wait-ForAutomationName $mainWindow.Handle "冻结持续点数" $WaitSeconds
+    $freezeCountThreshold = Wait-ForAutomationName $mainWindow.Handle "连续不变化点数" $WaitSeconds
     $moreThresholdsExpander = Expand-AutomationElement $mainWindow.Handle "更多阈值" $WaitSeconds
-    Start-Sleep -Milliseconds 300
+    Start-Sleep -Milliseconds 700
+    Bring-AutomationElementIntoView $mainWindow.Handle "更多阈值" $WaitSeconds | Out-Null
     $currentUnbalanceMaxThreshold = Wait-ForAutomationName $mainWindow.Handle "电流不平衡上限" $WaitSeconds
     $activePowerMinThreshold = Wait-ForAutomationName $mainWindow.Handle "有功功率下限" $WaitSeconds
     $temperatureMinThreshold = Wait-ForAutomationName $mainWindow.Handle "温度下限" $WaitSeconds
     $currentActiveMinThreshold = Wait-ForAutomationName $mainWindow.Handle "电流激活下限" $WaitSeconds
-    $freezeStdThreshold = Wait-ForAutomationName $mainWindow.Handle "冻结波动阈值" $WaitSeconds
+    $freezeStdThreshold = Wait-ForAutomationName $mainWindow.Handle "数据波动容差" $WaitSeconds
     $voltageImbalanceThreshold = Wait-ForAutomationName $mainWindow.Handle "相电压不平衡阈值" $WaitSeconds
     $currentOverloadRule = Wait-ForAutomationName $mainWindow.Handle "电流过载检测" $WaitSeconds
     $currentUnbalanceRule = Wait-ForAutomationName $mainWindow.Handle "电流不平衡检测" $WaitSeconds
@@ -435,23 +467,33 @@ try {
     $startupTrayToggle = Wait-ForAutomationName $mainWindow.Handle "启动时隐藏到托盘" $WaitSeconds
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $openWindowsStartupSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 启动应用设置" $WaitSeconds
-    $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手" $WaitSeconds
+    $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手集成" $WaitSeconds
+    $llmConnectionExpander = Expand-AutomationElement $mainWindow.Handle "连接与凭据" $WaitSeconds
+    Start-Sleep -Milliseconds 300
     $llmEndpointControl = Wait-ForAutomationName $mainWindow.Handle "LLM 服务地址" $WaitSeconds
     $llmProxyToggle = Wait-ForAutomationName $mainWindow.Handle "LLM 使用网络代理" $WaitSeconds
     $llmTestButton = Wait-ForAutomationName $mainWindow.Handle "测试 LLM 连接" $WaitSeconds
-    $ntfySection = Wait-ForAutomationName $mainWindow.Handle "消息推送" $WaitSeconds
+    $ntfySection = Wait-ForAutomationName $mainWindow.Handle "外部消息推送" $WaitSeconds
+    $ntfySettingsExpander = Expand-AutomationElement $mainWindow.Handle "推送服务配置" $WaitSeconds
+    Start-Sleep -Milliseconds 300
     $ntfyServerControl = Wait-ForAutomationName $mainWindow.Handle "ntfy 服务地址" $WaitSeconds
     $ntfyProxyToggle = Wait-ForAutomationName $mainWindow.Handle "ntfy 使用网络代理" $WaitSeconds
     $ntfyTestButton = Wait-ForAutomationName $mainWindow.Handle "发送 ntfy 测试推送" $WaitSeconds
-    $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络代理" $WaitSeconds
+    $diagnosticsSection = Wait-ForAutomationName $mainWindow.Handle "诊断与高级" $WaitSeconds
+    $diagnosticsExpander = Expand-AutomationElement $mainWindow.Handle "诊断详情" $WaitSeconds
+    Start-Sleep -Milliseconds 300
+    $pythonExecutableControl = Wait-ForAutomationName $mainWindow.Handle "检测组件程序" $WaitSeconds
+    $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络连接" $WaitSeconds
     $proxyAddressControl = Wait-ForAutomationName $mainWindow.Handle "代理地址" $WaitSeconds
     $proxyTestButton = Wait-ForAutomationName $mainWindow.Handle "测试网络代理" $WaitSeconds
     $openWindowsProxySettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 代理设置" $WaitSeconds
-    $updatesSection = Wait-ForAutomationName $mainWindow.Handle "软件更新" $WaitSeconds
+    $updatesSection = Wait-ForAutomationName $mainWindow.Handle "应用更新" $WaitSeconds
     $updateStatusText = Wait-ForAutomationNameLike $mainWindow.Handle "*当前版本*" $WaitSeconds
-    $updateProxyToggle = Wait-ForAutomationName $mainWindow.Handle "更新使用网络代理" $WaitSeconds
     $checkUpdatesButton = Wait-ForAutomationName $mainWindow.Handle "检查更新" $WaitSeconds
     $openUpdatePageButton = Wait-ForAutomationName $mainWindow.Handle "获取更新安装向导" $WaitSeconds
+    $advancedUpdateExpander = Expand-AutomationElement $mainWindow.Handle "高级更新选项" $WaitSeconds
+    Start-Sleep -Milliseconds 300
+    $updateProxyToggle = Wait-ForAutomationName $mainWindow.Handle "更新使用网络代理" $WaitSeconds
     $updateFeedControl = Wait-ForAutomationName $mainWindow.Handle "更新源" $WaitSeconds
     $recentLimitControl = Wait-ForAutomationName $mainWindow.Handle "报告历史保留" $WaitSeconds
     $logLimitControl = Wait-ForAutomationName $mainWindow.Handle "运行记录保留" $WaitSeconds
@@ -526,18 +568,24 @@ try {
         AutoStartToggle = $autoStartToggle
         OpenWindowsStartupSettingsButton = $openWindowsStartupSettingsButton
         LlmSection = $llmSection
+        LlmConnectionExpander = $llmConnectionExpander
         LlmEndpointControl = $llmEndpointControl
         LlmProxyToggle = $llmProxyToggle
         LlmTestButton = $llmTestButton
         NtfySection = $ntfySection
+        NtfySettingsExpander = $ntfySettingsExpander
         NtfyServerControl = $ntfyServerControl
         NtfyProxyToggle = $ntfyProxyToggle
         NtfyTestButton = $ntfyTestButton
+        DiagnosticsSection = $diagnosticsSection
+        DiagnosticsExpander = $diagnosticsExpander
+        PythonExecutableControl = $pythonExecutableControl
         ProxySection = $proxySection
         ProxyAddressControl = $proxyAddressControl
         ProxyTestButton = $proxyTestButton
         OpenWindowsProxySettingsButton = $openWindowsProxySettingsButton
         UpdatesSection = $updatesSection
+        AdvancedUpdateExpander = $advancedUpdateExpander
         UpdateStatusText = $updateStatusText
         UpdateProxyToggle = $updateProxyToggle
         CheckUpdatesButton = $checkUpdatesButton

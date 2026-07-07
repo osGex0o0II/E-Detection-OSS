@@ -48,10 +48,10 @@ def generate_template_report(context: ReportContext) -> str:
         for row in high.head(10).itertuples(index=False):
             row_data = row._asdict()
             lines.append(
-                f"- **{row_data.get('建筑')} / {row_data.get('变压器')}**: "
-                f"{row_data.get('主要异常类型')}，"
+                f"- **{_markdown_text(row_data.get('建筑'))} / {_markdown_text(row_data.get('变压器'))}**: "
+                f"{_markdown_text(row_data.get('主要异常类型'))}，"
                 f"{row_data.get('异常记录数')} 条，"
-                f"时间范围 {row_data.get('首次异常时间')} 至 {row_data.get('末次异常时间')}。"
+                f"时间范围 {_markdown_text(row_data.get('首次异常时间'))} 至 {_markdown_text(row_data.get('末次异常时间'))}。"
             )
 
     lines.extend(["", "## 分设备处置建议"])
@@ -62,8 +62,8 @@ def generate_template_report(context: ReportContext) -> str:
             row_data = row._asdict()
             lines.append(
                 f"- {row_data.get('建议优先级')} "
-                f"{row_data.get('建筑')} / {row_data.get('变压器')}: "
-                f"{row_data.get('主要异常类型')}。"
+                f"{_markdown_text(row_data.get('建筑'))} / {_markdown_text(row_data.get('变压器'))}: "
+                f"{_markdown_text(row_data.get('主要异常类型'))}。"
             )
 
     lines.extend(["", "## 采集/传感器问题"])
@@ -95,11 +95,11 @@ def _notable_sensor_rows(context: ReportContext) -> list[str]:
         for key in ["是否离线", "传感器故障", "传感器未配置", "原因"]:
             value = row_data.get(key)
             if _has_value(value) and not (key == "是否离线" and value != "是"):
-                bits.append(f"{key}: {value}")
+                bits.append(f"{key}: {_markdown_text(value)}")
         if bits:
             rows.append(
-                f"- {row_data.get('建筑', '')} / {row_data.get('变压器', '')} "
-                f"({row_data.get('来源文件', '')}): {'; '.join(bits)}"
+                f"- {_markdown_text(row_data.get('建筑', ''))} / {_markdown_text(row_data.get('变压器', ''))} "
+                f"({_markdown_text(row_data.get('来源文件', ''))}): {'; '.join(bits)}"
             )
     return rows[:20]
 
@@ -113,3 +113,27 @@ def _has_value(value: object) -> bool:
     except (TypeError, ValueError):
         pass
     return str(value).strip() != ""
+
+
+def _markdown_text(value: object) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+
+    text = str(value).replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    replacements = {
+        "\\": "\\\\",
+        "[": "\\[",
+        "]": "\\]",
+        "(": "\\(",
+        ")": "\\)",
+        "<": "&lt;",
+        ">": "&gt;",
+    }
+    for source, target in replacements.items():
+        text = text.replace(source, target)
+    return text

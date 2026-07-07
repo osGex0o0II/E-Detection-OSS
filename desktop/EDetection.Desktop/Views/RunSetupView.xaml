@@ -144,7 +144,7 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
                             </Grid>
-                            <Expander Header="运行诊断"
+                            <Expander Header="高级排障"
                                       HorizontalAlignment="Stretch"
                                       IsExpanded="False">
                                 <StackPanel Spacing="8">
@@ -194,21 +194,21 @@
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="8">
                                         <Button Command="{Binding RefreshDiagnosticsCommand}"
-                                                AutomationProperties.Name="检查状态"
-                                                ToolTipService.ToolTip="检查状态">
+                                                AutomationProperties.Name="重新检查"
+                                                ToolTipService.ToolTip="重新检查状态">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <FontIcon Glyph="&#xE895;" FontSize="14" />
-                                                <TextBlock Text="检查状态" />
+                                                <TextBlock Text="重新检查" />
                                             </StackPanel>
                                         </Button>
                                         <Button Command="{Binding RepairDetectionEnvironmentCommand}"
                                                 Style="{StaticResource AccentButtonStyle}"
                                                 Visibility="{Binding DetectionEnvironmentRepairActionsVisibility}"
-                                                AutomationProperties.Name="修复检测组件"
+                                                AutomationProperties.Name="修复"
                                                 ToolTipService.ToolTip="修复检测组件">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <FontIcon Glyph="&#xE777;" FontSize="14" />
-                                                <TextBlock Text="修复检测组件" />
+                                                <TextBlock Text="修复" />
                                             </StackPanel>
                                         </Button>
                                         <Button Command="{Binding CopyDiagnosticsCommand}"

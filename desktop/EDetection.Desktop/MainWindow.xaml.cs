@@ -93,6 +93,7 @@ public sealed partial class MainWindow : Window
         SetTitleBar(Shell.TitleBarElement);
         AppWindow.TitleBar.PreferredTheme = TitleBarTheme.UseDefaultAppMode;
         AppWindow.Closing += AppWindow_Closing;
+        ApplyWindowSizeConstraints();
         RestoreWindowPlacement();
         ViewModel.AppearanceChanged += (_, _) => ApplyAppearance();
         ViewModel.DesktopNotificationRequested += ViewModel_DesktopNotificationRequested;
@@ -242,7 +243,8 @@ public sealed partial class MainWindow : Window
         object? sender,
         DesktopNotificationRequest e)
     {
-        _desktopNotifications.Show(e);
+        var shown = _desktopNotifications.Show(e);
+        ViewModel.ReportDesktopNotificationResult(e, shown);
         if (!e.ForwardToRemoteNotifications)
         {
             return;
@@ -513,6 +515,19 @@ public sealed partial class MainWindow : Window
         minMaxInfo.ptMinTrackSize.X = minSize.Width;
         minMaxInfo.ptMinTrackSize.Y = minSize.Height;
         Marshal.StructureToPtr(minMaxInfo, lParam, false);
+    }
+
+    private void ApplyWindowSizeConstraints()
+    {
+        if (AppWindow.Presenter is not OverlappedPresenter presenter)
+        {
+            return;
+        }
+
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var minSize = GetMinWindowSizePixels(workArea);
+        presenter.PreferredMinimumWidth = minSize.Width;
+        presenter.PreferredMinimumHeight = minSize.Height;
     }
 
     private SizeInt32 GetDefaultWindowSizePixels(RectInt32 workArea, SizeInt32 minSize)

@@ -76,7 +76,26 @@ if (!(Test-Path $healthScript)) {
     throw "Installer build failed: Test-DesktopPackageHealth.ps1 was not found in $sourceFull"
 }
 
+$cacheRoots = @(
+    (Join-Path $sourceFull "core"),
+    (Join-Path $sourceFull "e_detection"),
+    (Join-Path $sourceFull "python-runtime")
+) | Where-Object { Test-Path $_ }
+if ($cacheRoots.Count -gt 0) {
+    Get-ChildItem -LiteralPath $cacheRoots -Recurse -Force |
+        Where-Object { $_.PSIsContainer -and $_.Name -eq "__pycache__" } |
+        Remove-Item -Recurse -Force
+
+    Get-ChildItem -LiteralPath $cacheRoots -Recurse -Force -Include "*.pyc", "*.pyo" |
+        Remove-Item -Force
+}
+
 & $healthScript -PackagePath $sourceFull
+
+$smokeResultsPath = Join-Path $sourceFull "smoke-results"
+if (Test-Path $smokeResultsPath) {
+    Remove-Item -LiteralPath $smokeResultsPath -Recurse -Force
+}
 
 New-Item -ItemType Directory -Force -Path $outputFull | Out-Null
 Get-ChildItem -LiteralPath $outputFull -Force | Remove-Item -Recurse -Force

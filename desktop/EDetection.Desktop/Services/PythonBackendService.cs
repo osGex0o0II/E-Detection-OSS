@@ -52,11 +52,20 @@ public sealed class PythonBackendService
 
     public static string ResolveBackendWorkingDirectory()
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        if (HasBackendFiles(AppContext.BaseDirectory))
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        if (!IsDevelopmentBuild())
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        var current = Directory.GetParent(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "pyproject.toml"))
-                && Directory.Exists(Path.Combine(current.FullName, "e_detection")))
+            if (HasBackendFiles(current.FullName))
             {
                 return current.FullName;
             }
@@ -67,13 +76,66 @@ public sealed class PythonBackendService
         return AppContext.BaseDirectory;
     }
 
+    private static bool HasBackendFiles(string directory) =>
+        File.Exists(Path.Combine(directory, "pyproject.toml"))
+        && Directory.Exists(Path.Combine(directory, "e_detection"));
+
+    private static bool IsDevelopmentBuild()
+    {
+#if DEBUG
+        return true;
+#else
+        return false;
+#endif
+    }
+
+    public static string ResolveBundledPythonExecutable()
+    {
+        var candidate = Path.Combine(AppContext.BaseDirectory, "python-runtime", "python.exe");
+        return File.Exists(candidate) ? candidate : "";
+    }
+
+    public static bool IsBundledPythonExecutable(string executable)
+    {
+        var bundled = ResolveBundledPythonExecutable();
+        if (string.IsNullOrWhiteSpace(bundled) || string.IsNullOrWhiteSpace(executable))
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(executable),
+                Path.GetFullPath(bundled),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    public static string ResolvePythonExecutable(string configuredExecutable)
+    {
+        var bundled = ResolveBundledPythonExecutable();
+        if ((string.IsNullOrWhiteSpace(configuredExecutable)
+             || string.Equals(configuredExecutable.Trim(), "python", StringComparison.OrdinalIgnoreCase))
+            && !string.IsNullOrWhiteSpace(bundled))
+        {
+            return bundled;
+        }
+
+        return string.IsNullOrWhiteSpace(configuredExecutable)
+            ? "python"
+            : configuredExecutable;
+    }
+
     private static ProcessStartInfo BuildStartInfo(DetectionRequest request)
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = string.IsNullOrWhiteSpace(request.PythonExecutable)
-                ? "python"
-                : request.PythonExecutable,
+            FileName = ResolvePythonExecutable(request.PythonExecutable),
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

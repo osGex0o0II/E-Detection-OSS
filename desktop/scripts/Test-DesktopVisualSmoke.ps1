@@ -78,6 +78,27 @@ public static class DesktopSmokeNative
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindowDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll")]
+    public static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll")]
+    public static extern IntPtr SelectObject(IntPtr hdc, IntPtr hgdiobj);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteObject(IntPtr hObject);
+
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hWnd, int dwAttribute, out RECT rect, int cbAttribute);
 
@@ -100,6 +121,7 @@ $HWND_NOTOPMOST = [IntPtr](-2)
 $SWP_NOACTIVATE = 0x0010
 $SWP_SHOWWINDOW = 0x0040
 $DWMWA_EXTENDED_FRAME_BOUNDS = 9
+$PW_RENDERFULLCONTENT = 0x00000002
 
 function Get-MainWindowHandle([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -182,6 +204,93 @@ function Test-BitmapIsUseful([System.Drawing.Bitmap]$Bitmap) {
     }
 }
 
+function Capture-WindowBitmap([IntPtr]$Handle, [DesktopSmokeNative+RECT]$Rect) {
+    $captureWidth = $Rect.Right - $Rect.Left
+    $captureHeight = $Rect.Bottom - $Rect.Top
+    if ($captureWidth -le 0 -or $captureHeight -le 0) {
+        throw "Invalid window rectangle: $captureWidth x $captureHeight"
+    }
+
+    $bufferBitmap = New-Object System.Drawing.Bitmap $captureWidth, $captureHeight
+    $bitmap = $null
+    $windowDc = [DesktopSmokeNative]::GetWindowDC($Handle)
+    $memoryDc = [IntPtr]::Zero
+    $hBitmap = [IntPtr]::Zero
+    $oldObject = [IntPtr]::Zero
+
+    try {
+        if ($windowDc -eq [IntPtr]::Zero) {
+            throw "GetWindowDC returned null."
+        }
+
+        $memoryDc = [DesktopSmokeNative]::CreateCompatibleDC($windowDc)
+        if ($memoryDc -eq [IntPtr]::Zero) {
+            throw "CreateCompatibleDC returned null."
+        }
+
+        $hBitmap = $bufferBitmap.GetHbitmap()
+        $oldObject = [DesktopSmokeNative]::SelectObject($memoryDc, $hBitmap)
+        $printed = [DesktopSmokeNative]::PrintWindow($Handle, $memoryDc, $PW_RENDERFULLCONTENT)
+        if (!$printed) {
+            $printed = [DesktopSmokeNative]::PrintWindow($Handle, $memoryDc, 0)
+        }
+
+        if (!$printed) {
+            $bitmap = $bufferBitmap
+            $bufferBitmap = $null
+            return [pscustomobject]@{
+                Bitmap = $bitmap
+                Method = "PrintWindowFailed"
+            }
+        }
+
+        $bitmap = [System.Drawing.Image]::FromHbitmap($hBitmap)
+    }
+    finally {
+        if ($oldObject -ne [IntPtr]::Zero -and $memoryDc -ne [IntPtr]::Zero) {
+            [DesktopSmokeNative]::SelectObject($memoryDc, $oldObject) | Out-Null
+        }
+
+        if ($hBitmap -ne [IntPtr]::Zero) {
+            [DesktopSmokeNative]::DeleteObject($hBitmap) | Out-Null
+        }
+
+        if ($memoryDc -ne [IntPtr]::Zero) {
+            [DesktopSmokeNative]::DeleteDC($memoryDc) | Out-Null
+        }
+
+        if ($windowDc -ne [IntPtr]::Zero) {
+            [DesktopSmokeNative]::ReleaseDC($Handle, $windowDc) | Out-Null
+        }
+
+        if ($bufferBitmap -ne $null) {
+            $bufferBitmap.Dispose()
+        }
+    }
+
+    [pscustomobject]@{
+        Bitmap = $bitmap
+        Method = "PrintWindow"
+    }
+}
+
+function Capture-ScreenBitmap([DesktopSmokeNative+RECT]$Rect) {
+    $captureWidth = $Rect.Right - $Rect.Left
+    $captureHeight = $Rect.Bottom - $Rect.Top
+    if ($captureWidth -le 0 -or $captureHeight -le 0) {
+        throw "Invalid window rectangle: $captureWidth x $captureHeight"
+    }
+
+    $bitmap = New-Object System.Drawing.Bitmap $captureWidth, $captureHeight
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $graphics.CopyFromScreen($Rect.Left, $Rect.Top, 0, 0, $bitmap.Size)
+    $graphics.Dispose()
+    [pscustomobject]@{
+        Bitmap = $bitmap
+        Method = "CopyFromScreen"
+    }
+}
+
 $process = $null
 $handle = [IntPtr]::Zero
 $bitmap = $null
@@ -215,52 +324,45 @@ try {
     [DesktopSmokeNative]::SetForegroundWindow($handle) | Out-Null
     Start-Sleep -Seconds 2
     $foreground = [DesktopSmokeNative]::GetForegroundWindow()
-    if ($foreground -ne $handle) {
-        [DesktopSmokeNative]::SetForegroundWindow($handle) | Out-Null
-        Start-Sleep -Milliseconds 500
-        $foreground = [DesktopSmokeNative]::GetForegroundWindow()
-    }
-
-    if ($foreground -ne $handle) {
-        $foregroundTitle = Get-WindowTitle $foreground
-        throw "Visual smoke failed: E-Detection did not become the foreground window. Foreground title: '$foregroundTitle'."
-    }
+    $foregroundTitle = if ($foreground -eq [IntPtr]::Zero) { "" } else { Get-WindowTitle $foreground }
 
     $startAction = Wait-ForAutomationName $handle "开始检测" $WaitSeconds
-    $diagnosticsAction = Wait-ForAutomationName $handle "运行诊断" $WaitSeconds
+    $settingsAction = Wait-ForAutomationName $handle "设置" $WaitSeconds
     $eventLogTab = Wait-ForAutomationName $handle "运行记录" $WaitSeconds
 
     $rect = Get-VisibleWindowRect $handle
 
-    $captureWidth = $rect.Right - $rect.Left
-    $captureHeight = $rect.Bottom - $rect.Top
-    if ($captureWidth -le 0 -or $captureHeight -le 0) {
-        throw "Invalid window rectangle: $captureWidth x $captureHeight"
+    $capture = Capture-WindowBitmap $handle $rect
+    $bitmap = $capture.Bitmap
+    $analysis = Test-BitmapIsUseful $bitmap
+    if (!$analysis.IsUseful) {
+        $bitmap.Dispose()
+        $capture = Capture-ScreenBitmap $rect
+        $bitmap = $capture.Bitmap
+        $analysis = Test-BitmapIsUseful $bitmap
     }
-
-    $bitmap = New-Object System.Drawing.Bitmap $captureWidth, $captureHeight
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $screenshotPath = Join-Path $outputFull "main-window-$timestamp.png"
     $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    $analysis = Test-BitmapIsUseful $bitmap
 
     $result = [pscustomobject]@{
         AppPath = $appFull
         ProcessId = $process.Id
         WindowTitle = $windowTitle
+        ForegroundTitle = $foregroundTitle
+        WasForeground = ($foreground -eq $handle)
+        CaptureMethod = $capture.Method
         ScreenshotPath = $screenshotPath
         Dpi = $dpi
         RequestedDipWidth = $Width
         RequestedDipHeight = $Height
         TargetWidth = $targetWidth
         TargetHeight = $targetHeight
-        Width = $captureWidth
-        Height = $captureHeight
+        Width = $bitmap.Width
+        Height = $bitmap.Height
         StartAction = $startAction
-        DiagnosticsAction = $diagnosticsAction
+        SettingsAction = $settingsAction
         EventLogTab = $eventLogTab
         Samples = $analysis.Samples
         UniqueColors = $analysis.UniqueColors
@@ -281,10 +383,6 @@ try {
 finally {
     if ($process -ne $null -and !$process.HasExited -and $handle -ne [IntPtr]::Zero) {
         [DesktopSmokeNative]::SetWindowPos($handle, $HWND_NOTOPMOST, 0, 0, 0, 0, 0x0001 -bor 0x0002 -bor $SWP_NOACTIVATE) | Out-Null
-    }
-
-    if ($graphics -ne $null) {
-        $graphics.Dispose()
     }
 
     if ($bitmap -ne $null) {

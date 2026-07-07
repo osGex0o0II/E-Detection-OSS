@@ -6,22 +6,39 @@ namespace EDetection.Desktop.Services;
 public sealed class DetectionEnvironmentRepairService
 {
     private static readonly TimeSpan RepairTimeout = TimeSpan.FromMinutes(5);
+    private static readonly string PrivateEnvironmentRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "E-Detection",
+        "Desktop",
+        "python-env");
 
     public bool CanRepair(DetectionEnvironmentRepairRequest request) =>
-        !string.IsNullOrWhiteSpace(request.PythonExecutable)
+        !string.IsNullOrWhiteSpace(PythonBackendService.ResolvePythonExecutable(request.PythonExecutable))
+        && !PythonBackendService.IsBundledPythonExecutable(PythonBackendService.ResolvePythonExecutable(request.PythonExecutable))
         && DesktopDiagnosticsService.HasBackendSource(request.BackendRoot);
 
     public async Task<DetectionEnvironmentRepairResult> RepairAsync(
         DetectionEnvironmentRepairRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.PythonExecutable))
+        var repairPython = PythonBackendService.ResolvePythonExecutable(request.PythonExecutable);
+        if (string.IsNullOrWhiteSpace(repairPython))
         {
             return new DetectionEnvironmentRepairResult(
                 false,
                 null,
                 "未设置检测组件运行程序",
                 "请先在设置中选择 Python 可执行文件，然后重新修复。",
+                "");
+        }
+
+        if (PythonBackendService.IsBundledPythonExecutable(repairPython))
+        {
+            return new DetectionEnvironmentRepairResult(
+                false,
+                null,
+                "内置检测运行时不需要修复",
+                "内置运行时损坏时，请重新安装或更新 E-Detection Desktop。",
                 "");
         }
 
@@ -35,55 +52,109 @@ public sealed class DetectionEnvironmentRepairService
                 "");
         }
 
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = request.PythonExecutable,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            WorkingDirectory = request.BackendRoot,
-        };
-        process.StartInfo.ArgumentList.Add("-m");
-        process.StartInfo.ArgumentList.Add("pip");
-        process.StartInfo.ArgumentList.Add("install");
-        process.StartInfo.ArgumentList.Add("-e");
-        process.StartInfo.ArgumentList.Add(request.BackendRoot);
-
         try
         {
-            process.Start();
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(RepairTimeout);
+            Directory.CreateDirectory(PrivateEnvironmentRoot);
+            var venvPython = Path.Combine(PrivateEnvironmentRoot, "Scripts", "python.exe");
+            if (!File.Exists(venvPython))
+            {
+                var createResult = await RunProcessAsync(
+                    repairPython,
+                    ["-m", "venv", PrivateEnvironmentRoot],
+                    request.BackendRoot,
+                    cancellationToken);
+                if (createResult.ExitCode != 0 || !File.Exists(venvPython))
+                {
+                    return new DetectionEnvironmentRepairResult(
+                        false,
+                        createResult.ExitCode,
+                        $"私有检测环境创建失败 · 退出码 {createResult.ExitCode}",
+                        "无法创建应用私有 Python 环境。请确认 Python 支持 venv 后重试。",
+                        createResult.OutputTail);
+                }
+            }
 
-            await process.WaitForExitAsync(timeout.Token);
-            var output = await outputTask;
-            var error = await errorTask;
-            var combinedTail = BuildOutputTail(output, error);
+            var installResults = new List<ProcessRunResult>();
+            var wheelhouse = Path.Combine(request.BackendRoot, "python-wheelhouse");
+            var runtimeRequirements = Path.Combine(request.BackendRoot, "requirements-runtime.lock");
+            var requirements = File.Exists(runtimeRequirements)
+                ? runtimeRequirements
+                : Path.Combine(request.BackendRoot, "requirements.txt");
+            var useOfflineWheelhouse = false;
+            if (Directory.Exists(wheelhouse) && File.Exists(requirements))
+            {
+                var pythonTag = await GetPythonTagAsync(venvPython, request.BackendRoot, cancellationToken);
+                useOfflineWheelhouse = IsWheelhouseCompatible(wheelhouse, pythonTag);
+                if (useOfflineWheelhouse)
+                {
+                    installResults.Add(await RunProcessAsync(
+                        venvPython,
+                        ["-m", "pip", "install", "--no-index", "--find-links", wheelhouse, "-r", requirements],
+                        request.BackendRoot,
+                        cancellationToken));
+                }
+            }
 
-            if (process.ExitCode == 0)
+            if (installResults.Count == 0 || installResults[^1].ExitCode != 0)
+            {
+                installResults.Add(await RunProcessAsync(
+                    venvPython,
+                    ["-m", "pip", "install", "-r", requirements],
+                    request.BackendRoot,
+                    cancellationToken));
+            }
+
+            if (installResults[^1].ExitCode != 0)
+            {
+                return new DetectionEnvironmentRepairResult(
+                    false,
+                    installResults[^1].ExitCode,
+                    $"检测依赖安装失败 · 退出码 {installResults[^1].ExitCode}",
+                    "私有检测环境已创建，但依赖安装失败。请检查网络、代理或发布包中的离线依赖后重试。",
+                    BuildOutputTail(installResults));
+            }
+
+            var coreInstallArguments = useOfflineWheelhouse
+                ? new[]
+                {
+                    "-m",
+                    "pip",
+                    "install",
+                    "--no-index",
+                    "--find-links",
+                    wheelhouse,
+                    "--no-deps",
+                    "-e",
+                    request.BackendRoot,
+                }
+                : ["-m", "pip", "install", "--no-deps", "-e", request.BackendRoot];
+            var coreInstall = await RunProcessAsync(
+                venvPython,
+                coreInstallArguments,
+                request.BackendRoot,
+                cancellationToken);
+            installResults.Add(coreInstall);
+
+            if (coreInstall.ExitCode == 0)
             {
                 return new DetectionEnvironmentRepairResult(
                     true,
-                    process.ExitCode,
+                    coreInstall.ExitCode,
                     "检测组件修复完成",
-                    "已完成本地检测核心安装，正在重新检查运行环境。",
-                    combinedTail);
+                    "已创建应用私有检测环境，不会修改系统 Python。正在重新检查运行环境。",
+                    BuildOutputTail(installResults),
+                    venvPython);
             }
 
             return new DetectionEnvironmentRepairResult(
                 false,
-                process.ExitCode,
-                $"检测组件修复失败 · 退出码 {process.ExitCode}",
-                "修复未完成。请复制状态详情交给维护人员，或检查网络、权限和 Python 环境后重试。",
-                combinedTail);
+                coreInstall.ExitCode,
+                $"检测组件修复失败 · 退出码 {coreInstall.ExitCode}",
+                "私有环境已创建，但检测核心安装未完成。请复制状态详情交给维护人员。",
+                BuildOutputTail(installResults));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            KillProcessTree(process);
             return new DetectionEnvironmentRepairResult(
                 false,
                 null,
@@ -93,7 +164,6 @@ public sealed class DetectionEnvironmentRepairService
         }
         catch (OperationCanceledException)
         {
-            KillProcessTree(process);
             return new DetectionEnvironmentRepairResult(
                 false,
                 null,
@@ -113,6 +183,95 @@ public sealed class DetectionEnvironmentRepairService
                 "请确认检测组件运行程序可启动，并且当前用户有权限访问检测核心目录。",
                 "");
         }
+    }
+
+    private static async Task<ProcessRunResult> RunProcessAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string workingDirectory,
+        CancellationToken cancellationToken)
+    {
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = workingDirectory,
+        };
+        foreach (var argument in arguments)
+        {
+            process.StartInfo.ArgumentList.Add(argument);
+        }
+
+        process.Start();
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(RepairTimeout);
+
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch
+        {
+            KillProcessTree(process);
+            throw;
+        }
+
+        var output = await outputTask;
+        var error = await errorTask;
+        return new ProcessRunResult(
+            process.ExitCode,
+            string.Join(" ", arguments),
+            BuildOutputTail(output, error));
+    }
+
+    private static async Task<string> GetPythonTagAsync(
+        string pythonExecutable,
+        string workingDirectory,
+        CancellationToken cancellationToken)
+    {
+        var result = await RunProcessAsync(
+            pythonExecutable,
+            ["-c", "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')"],
+            workingDirectory,
+            cancellationToken);
+        return result.ExitCode == 0
+            ? result.OutputTail.Trim()
+            : "";
+    }
+
+    private static bool IsWheelhouseCompatible(string wheelhouse, string pythonTag)
+    {
+        if (string.IsNullOrWhiteSpace(pythonTag))
+        {
+            return false;
+        }
+
+        var wheels = Directory.GetFiles(wheelhouse, "*.whl");
+        return wheels.Length > 0
+            && wheels.All(path =>
+            {
+                var name = Path.GetFileName(path);
+                return name.Contains("-py3-none-any.whl", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains($"-{pythonTag}-", StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
+    private static string BuildOutputTail(IEnumerable<ProcessRunResult> results)
+    {
+        var lines = new List<string>();
+        foreach (var result in results)
+        {
+            lines.Add($"> {result.Command}");
+            AppendLines(lines, result.OutputTail);
+        }
+
+        return string.Join(Environment.NewLine, lines.TakeLast(80));
     }
 
     private static string BuildOutputTail(string output, string error)
@@ -154,4 +313,6 @@ public sealed class DetectionEnvironmentRepairService
         {
         }
     }
+
+    private sealed record ProcessRunResult(int ExitCode, string Command, string OutputTail);
 }

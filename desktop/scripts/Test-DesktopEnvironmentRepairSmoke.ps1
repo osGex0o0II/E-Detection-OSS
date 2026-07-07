@@ -52,7 +52,7 @@ $repoRoot = Resolve-Path $BackendRoot
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = if (![string]::IsNullOrWhiteSpace($PackagePath)) {
-        Join-Path ([System.IO.Path]::GetFullPath((Resolve-Path $PackagePath).Path)) "smoke-results\environment-repair"
+        Join-Path ([System.IO.Path]::GetTempPath()) "E-Detection-Desktop-EnvironmentRepairSmoke"
     }
     else {
         Join-Path $repoRoot "artifacts\desktop\environment-repair-smoke"
@@ -77,6 +77,14 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $venvRoot = Join-Path $outputFull "venv-$timestamp"
 $repairLogPath = Join-Path $outputFull "repair-$timestamp.log"
 $resultPath = Join-Path $outputFull "environment-repair-$timestamp.json"
+$wheelhousePath = Join-Path $backendRoot "python-wheelhouse"
+$runtimeRequirementsPath = Join-Path $backendRoot "requirements-runtime.lock"
+$requirementsPath = if (Test-Path $runtimeRequirementsPath) {
+    $runtimeRequirementsPath
+}
+else {
+    Join-Path $backendRoot "requirements.txt"
+}
 
 function Invoke-Python([string]$Executable, [string[]]$Arguments, [string]$WorkingDirectory) {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -85,6 +93,7 @@ function Invoke-Python([string]$Executable, [string[]]$Arguments, [string]$Worki
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    $startInfo.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"] = "1"
     foreach ($argument in $Arguments) {
         $startInfo.ArgumentList.Add($argument)
     }
@@ -111,7 +120,16 @@ function Invoke-Python([string]$Executable, [string[]]$Arguments, [string]$Worki
     }
 }
 
-$createVenv = Invoke-Python $PythonExecutable @("-m", "venv", $venvRoot) $backendRoot
+function Remove-PythonCacheEntries([string]$RootPath) {
+    Get-ChildItem -LiteralPath $RootPath -Recurse -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSIsContainer -and $_.Name -eq "__pycache__" } |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+    Get-ChildItem -LiteralPath $RootPath -Recurse -Force -Include "*.pyc", "*.pyo" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+$createVenv = Invoke-Python $PythonExecutable @("-B", "-m", "venv", $venvRoot) $backendRoot
 if ($createVenv.ExitCode -ne 0) {
     throw "Failed to create temporary venv: $($createVenv.StdErr)"
 }
@@ -122,17 +140,35 @@ if (!(Test-Path $venvPython)) {
 }
 
 $probeScript = "import importlib.util, sys; spec = importlib.util.find_spec('e_detection'); print('found=' + str(spec is not None)); sys.exit(20) if spec is None else None; import e_detection.cli"
-$beforeProbe = Invoke-Python $venvPython @("-c", $probeScript) $backendRoot
+$beforeProbe = Invoke-Python $venvPython @("-B", "-c", $probeScript) $backendRoot
 if ($beforeProbe.ExitCode -eq 0) {
     throw "Temporary venv unexpectedly imports e_detection before repair."
 }
 
-$repair = Invoke-Python $venvPython @("-m", "pip", "install", "-e", $backendRoot) $backendRoot
+$dependencyArgs = if ((Test-Path $wheelhousePath) -and (Test-Path $requirementsPath)) {
+    @("-m", "pip", "install", "--no-index", "--find-links", $wheelhousePath, "-r", $requirementsPath)
+}
+else {
+    @("-m", "pip", "install", "-r", $requirementsPath)
+}
+
+$dependencyRepair = Invoke-Python $venvPython $dependencyArgs $backendRoot
+$repair = if ($dependencyRepair.ExitCode -eq 0) {
+    Invoke-Python $venvPython @("-m", "pip", "install", "--no-deps", "-e", $backendRoot) $backendRoot
+}
+else {
+    $dependencyRepair
+}
 @(
-    "ExitCode: $($repair.ExitCode)"
-    "STDOUT:"
+    "DependencyExitCode: $($dependencyRepair.ExitCode)"
+    "DependencySTDOUT:"
+    $dependencyRepair.StdOut
+    "DependencySTDERR:"
+    $dependencyRepair.StdErr
+    "CoreInstallExitCode: $($repair.ExitCode)"
+    "CoreInstallSTDOUT:"
     $repair.StdOut
-    "STDERR:"
+    "CoreInstallSTDERR:"
     $repair.StdErr
 ) | Set-Content -Path $repairLogPath -Encoding UTF8
 
@@ -141,7 +177,7 @@ if ($repair.ExitCode -ne 0) {
 }
 
 $afterScript = "import e_detection, sys; print('module=' + (getattr(e_detection, '__file__', '') or 'unknown')); print('version=' + getattr(e_detection, '__version__', 'unknown'))"
-$afterProbe = Invoke-Python $venvPython @("-c", $afterScript) $backendRoot
+$afterProbe = Invoke-Python $venvPython @("-B", "-c", $afterScript) $backendRoot
 if ($afterProbe.ExitCode -ne 0) {
     throw "e_detection is still not importable after repair: $($afterProbe.StdErr)"
 }
@@ -156,11 +192,16 @@ $result = [pscustomobject]@{
     BackendRoot = $backendRoot
     VenvPython = $venvPython
     BeforeExitCode = $beforeProbe.ExitCode
+    DependencyExitCode = $dependencyRepair.ExitCode
     RepairExitCode = $repair.ExitCode
+    UsedWheelhouse = (Test-Path $wheelhousePath)
     Module = $moduleLine.Replace("module=", "")
     RepairLogPath = $repairLogPath
     CheckedAt = (Get-Date).ToString("o")
 }
 
 $result | ConvertTo-Json | Set-Content -Path $resultPath -Encoding UTF8
+if (![string]::IsNullOrWhiteSpace($PackagePath)) {
+    Remove-PythonCacheEntries $backendRoot
+}
 Write-Host "Desktop environment repair smoke passed: $resultPath"

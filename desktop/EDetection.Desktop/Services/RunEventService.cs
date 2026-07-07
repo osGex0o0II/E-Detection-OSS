@@ -40,14 +40,16 @@ public sealed class RunEventService
     public string BuildRunCompletedLogMessage(RunEventState state) =>
         HasFaultResult(state)
             ? $"发现故障: 异常 {state.AnomalyRecords} 条，传感器问题 {BuildSensorIssueCount(state)} 项，跳过 {state.SkippedFiles} 个文件。"
-            : $"检测成功: 已处理 {state.ProcessedFiles}/{state.TotalFiles} 个文件，未发现异常。";
+            : HasIncompleteResult(state)
+                ? $"检测部分完成: 已处理 {state.ProcessedFiles}/{state.TotalFiles} 个文件，跳过 {state.SkippedFiles} 个文件。"
+                : $"检测成功: 已处理 {state.ProcessedFiles}/{state.TotalFiles} 个文件，未发现异常。";
 
     public DesktopNotificationRequest BuildRunCompletedNotification(
         RunEventState state,
         string? reportPath)
     {
         var normalizedReportPath = string.IsNullOrWhiteSpace(reportPath) ? null : reportPath;
-        if (!HasFaultResult(state))
+        if (!HasFaultResult(state) && !HasIncompleteResult(state))
         {
             return new DesktopNotificationRequest(
                 DesktopNotificationKind.Success,
@@ -57,13 +59,21 @@ public sealed class RunEventService
         }
 
         var sensorIssues = BuildSensorIssueCount(state);
+        var allProcessedFilesSkipped = state.ProcessedFiles > 0 && state.SkippedFiles >= state.ProcessedFiles;
+        var title = allProcessedFilesSkipped
+            ? "检测未完成"
+            : HasFaultResult(state)
+                ? "检测发现故障"
+                : "检测部分完成";
         var message = sensorIssues > 0
             ? $"异常 {state.AnomalyRecords} 条，异常文件 {state.AnomalyFiles} 个，传感器问题 {sensorIssues} 项，跳过 {state.SkippedFiles} 个。"
-            : $"异常 {state.AnomalyRecords} 条，异常文件 {state.AnomalyFiles} 个，跳过 {state.SkippedFiles} 个。";
+            : state.SkippedFiles > 0
+                ? $"已处理 {state.ProcessedFiles}/{state.TotalFiles} 个文件，其中 {state.SkippedFiles} 个未完成处理。"
+                : $"异常 {state.AnomalyRecords} 条，异常文件 {state.AnomalyFiles} 个。";
 
         return new DesktopNotificationRequest(
-            DesktopNotificationKind.Warning,
-            "检测发现故障",
+            allProcessedFilesSkipped ? DesktopNotificationKind.Error : DesktopNotificationKind.Warning,
+            title,
             message,
             normalizedReportPath);
     }
@@ -167,6 +177,9 @@ public sealed class RunEventService
         || state.SensorOfflineDevices > 0
         || state.SensorFaultRows > 0
         || state.SensorMissingRows > 0;
+
+    private static bool HasIncompleteResult(RunEventState state) =>
+        state.SkippedFiles > 0;
 
     private static int BuildSensorIssueCount(RunEventState state) =>
         state.SensorOfflineDevices

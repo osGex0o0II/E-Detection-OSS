@@ -88,7 +88,7 @@ def write_excel_report_from_context(report_path: str | Path, context: ReportCont
 
 
 def _write_overview(worksheet: Worksheet, context: ReportContext) -> None:
-    worksheet.append(["指标", "值"])
+    _append_excel_row(worksheet, ["指标", "值"])
     for key, label in [
         ("input_dir", "输入目录"),
         ("output_dir", "输出目录"),
@@ -100,18 +100,18 @@ def _write_overview(worksheet: Worksheet, context: ReportContext) -> None:
         ("skipped_files", "跳过文件"),
         ("generated_at", "生成时间"),
     ]:
-        worksheet.append([label, getattr(context.run, key)])
+        _append_excel_row(worksheet, [label, getattr(context.run, key)])
 
     worksheet.append([])
-    worksheet.append(["高风险设备 Top 10", "异常记录数"])
+    _append_excel_row(worksheet, ["高风险设备 Top 10", "异常记录数"])
     for _, row in context.high_risk_devices.head(10).iterrows():
-        worksheet.append([f"{row['建筑']} / {row['变压器']}", int(row["异常记录数"])])
+        _append_excel_row(worksheet, [f"{row['建筑']} / {row['变压器']}", int(row["异常记录数"])])
 
     if context.messages:
         worksheet.append([])
-        worksheet.append(["逐文件结果摘录", ""])
+        _append_excel_row(worksheet, ["逐文件结果摘录", ""])
         for message in context.messages[:20]:
-            worksheet.append([message, ""])
+            _append_excel_row(worksheet, [message, ""])
 
     _style_tabular_sheet(worksheet)
 
@@ -125,9 +125,9 @@ def _write_dataframe_sheet(
     if dataframe is None or dataframe.empty:
         dataframe = pd.DataFrame(columns=list(dataframe.columns) if dataframe is not None else [])
 
-    worksheet.append(list(dataframe.columns))
+    _append_excel_row(worksheet, list(dataframe.columns))
     for _, row in dataframe.iterrows():
-        worksheet.append([_excel_value(row.get(column)) for column in dataframe.columns])
+        _append_excel_row(worksheet, [row.get(column) for column in dataframe.columns])
 
     _style_tabular_sheet(worksheet)
 
@@ -149,13 +149,13 @@ def _write_config_sheet(
     config: dict[str, Any],
     summary: dict[str, Any],
 ) -> None:
-    worksheet.append(["配置项", "值"])
+    _append_excel_row(worksheet, ["配置项", "值"])
     for key, value in config.items():
-        worksheet.append([key, value])
+        _append_excel_row(worksheet, [key, value])
     worksheet.append([])
-    worksheet.append(["运行信息", "值"])
+    _append_excel_row(worksheet, ["运行信息", "值"])
     for key, value in summary.items():
-        worksheet.append([key, value])
+        _append_excel_row(worksheet, [key, value])
     _style_tabular_sheet(worksheet)
 
 
@@ -189,4 +189,20 @@ def _style_tabular_sheet(worksheet: Worksheet) -> None:
 def _excel_value(value: Any) -> Any:
     if pd.isna(value):
         return None
+    if isinstance(value, str):
+        return _escape_excel_formula_text(value)
+    return value
+
+
+def _append_excel_row(worksheet: Worksheet, values: list[Any]) -> None:
+    worksheet.append([_excel_value(value) for value in values])
+
+
+def _escape_excel_formula_text(value: str) -> str:
+    if not value:
+        return value
+
+    stripped = value.lstrip(" ")
+    if value[0] in ("\t", "\r", "\n") or stripped.startswith(("=", "+", "-", "@", "\t", "\r", "\n")):
+        return f"'{value}"
     return value

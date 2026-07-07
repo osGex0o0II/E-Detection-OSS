@@ -9,6 +9,7 @@ public sealed class DesktopDiagnosticsService
     {
         var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
         var resolvedConfig = ResolveAgainstBackend(request.ConfigPath, backendRoot);
+        var resolvedPython = PythonBackendService.ResolvePythonExecutable(request.PythonExecutable);
         var hasBackendSource = HasBackendSource(backendRoot);
         var isInputReady = IsInputReady(request.InputDirectory);
         var isConfigReady = File.Exists(resolvedConfig);
@@ -36,9 +37,11 @@ public sealed class DesktopDiagnosticsService
             isConfigReady
                 ? $"可用 · {resolvedConfig}"
                 : $"未找到 · {resolvedConfig}",
-            string.IsNullOrWhiteSpace(request.PythonExecutable)
-                ? "未设置 Python 可执行文件"
-                : $"待检查 · {request.PythonExecutable}",
+            PythonBackendService.IsBundledPythonExecutable(resolvedPython)
+                ? $"待检查 · 内置检测运行时 {resolvedPython}"
+                : string.IsNullOrWhiteSpace(request.PythonExecutable)
+                    ? "待检查 · 系统 Python"
+                    : $"待检查 · {request.PythonExecutable}",
             hasBackendSource
                 ? $"待检查 · 本地核心 {backendRoot}"
                 : $"待检查 · 发布目录 {backendRoot}",
@@ -69,7 +72,8 @@ public sealed class DesktopDiagnosticsService
             issues.Add($"阈值配置文件不存在: {resolvedConfig}");
         }
 
-        if (string.IsNullOrWhiteSpace(request.PythonExecutable))
+        var resolvedPython = PythonBackendService.ResolvePythonExecutable(request.PythonExecutable);
+        if (string.IsNullOrWhiteSpace(resolvedPython))
         {
             issues.Add("Python 可执行文件未设置");
         }
@@ -90,7 +94,8 @@ public sealed class DesktopDiagnosticsService
         string executable,
         string backendRoot)
     {
-        if (string.IsNullOrWhiteSpace(executable))
+        var resolvedExecutable = PythonBackendService.ResolvePythonExecutable(executable);
+        if (string.IsNullOrWhiteSpace(resolvedExecutable))
         {
             return new PythonProbeResult(
                 false,
@@ -105,7 +110,7 @@ public sealed class DesktopDiagnosticsService
         {
             process.StartInfo = new ProcessStartInfo
             {
-                FileName = executable,
+                FileName = resolvedExecutable,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -159,8 +164,11 @@ public sealed class DesktopDiagnosticsService
             var reason = string.IsNullOrWhiteSpace(error)
                 ? $"退出码 {process.ExitCode}"
                 : error.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? error;
-            var canRepair = HasBackendSource(backendRoot);
-            var action = HasBackendSource(backendRoot)
+            var canRepair = HasBackendSource(backendRoot)
+                && !PythonBackendService.IsBundledPythonExecutable(resolvedExecutable);
+            var action = PythonBackendService.IsBundledPythonExecutable(resolvedExecutable)
+                ? "内置检测运行时不可用。请重新安装或更新 E-Detection Desktop。"
+                : HasBackendSource(backendRoot)
                 ? "检测核心不可导入。可点击“修复检测组件”自动安装本地检测核心，或复制修复命令手动处理。"
                 : "检测核心不可导入。请将 Python 指向已安装 e_detection 的环境，或使用包含源码的开发目录运行。";
             return new PythonProbeResult(
@@ -219,7 +227,7 @@ public sealed class DesktopDiagnosticsService
 
     public static string BuildPythonSetupCommand(string executable, string backendRoot)
     {
-        var python = string.IsNullOrWhiteSpace(executable) ? "python" : executable;
+        var python = PythonBackendService.ResolvePythonExecutable(executable);
         return $"{QuoteCommandArgument(python)} -m pip install -e {QuoteCommandArgument(backendRoot)}";
     }
 

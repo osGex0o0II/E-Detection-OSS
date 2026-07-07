@@ -47,6 +47,7 @@ public sealed class UpdateCheckService
             releaseUrl,
             installerAsset.Name,
             installerAsset.DownloadUrl,
+            installerAsset.Digest,
             publishedAt,
             IsNewer(tagName, currentVersion));
     }
@@ -54,6 +55,11 @@ public sealed class UpdateCheckService
     private static Uri ResolveLatestReleaseEndpoint(string feedUrl)
     {
         var uri = new Uri(feedUrl, UriKind.Absolute);
+        if (uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException("更新源必须使用 HTTPS。");
+        }
+
         if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
         {
             var parts = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -112,15 +118,15 @@ public sealed class UpdateCheckService
             ? value.GetString() ?? ""
             : "";
 
-    private static (string Name, string DownloadUrl) FindRecommendedInstallerAsset(JsonElement root)
+    private static (string Name, string DownloadUrl, string Digest) FindRecommendedInstallerAsset(JsonElement root)
     {
         if (!root.TryGetProperty("assets", out var assets)
             || assets.ValueKind is not JsonValueKind.Array)
         {
-            return ("", "");
+            return ("", "", "");
         }
 
-        var candidates = new List<(string Name, string DownloadUrl, int Score)>();
+        var candidates = new List<(string Name, string DownloadUrl, string Digest, int Score)>();
         foreach (var asset in assets.EnumerateArray())
         {
             if (asset.ValueKind is not JsonValueKind.Object)
@@ -130,6 +136,7 @@ public sealed class UpdateCheckService
 
             var name = GetString(asset, "name");
             var downloadUrl = GetString(asset, "browser_download_url");
+            var digest = GetString(asset, "digest");
             if (string.IsNullOrWhiteSpace(name)
                 || string.IsNullOrWhiteSpace(downloadUrl)
                 || !name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
@@ -140,7 +147,7 @@ public sealed class UpdateCheckService
             var score = ScoreInstallerAsset(name);
             if (score > 0)
             {
-                candidates.Add((name, downloadUrl, score));
+                candidates.Add((name, downloadUrl, digest, score));
             }
         }
 
@@ -149,8 +156,8 @@ public sealed class UpdateCheckService
             .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
         return selected.Score > 0
-            ? (selected.Name ?? "", selected.DownloadUrl ?? "")
-            : ("", "");
+            ? (selected.Name ?? "", selected.DownloadUrl ?? "", selected.Digest ?? "")
+            : ("", "", "");
     }
 
     private static int ScoreInstallerAsset(string name)

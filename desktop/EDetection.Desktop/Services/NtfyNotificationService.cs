@@ -25,6 +25,7 @@ public sealed class NtfyNotificationService(
         }
 
         var endpoint = BuildTopicEndpoint(settings.NtfyServerUrl, settings.NtfyTopic);
+        EndpointSecurity.RequireHttpsOrLocal(endpoint, "ntfy 服务地址");
         using var handler = _networkProxy.BuildHandler(settings, settings.UseProxyForNotifications);
         using var client = new HttpClient(handler)
         {

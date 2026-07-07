@@ -238,6 +238,7 @@ $result = [ordered]@{
     StartupEntryRemoved = $false
     StartupTaskRemoved = $false
     StartupTaskCreationAvailable = $false
+    UserFilePreserved = $false
     ShortcutsVerified = !$IncludeShortcuts
     UninstallPassed = $false
     UserArtifactsRestored = $false
@@ -294,6 +295,9 @@ try {
 
     $result.AppPathsVerified = $true
 
+    $sentinelPath = Join-Path $installFull "user-report-sentinel.txt"
+    Set-Content -Path $sentinelPath -Value "user-owned file" -Encoding UTF8
+
     New-Item -Path $runKey -Force | Out-Null
     $startupValue = "`"$installedExe`" --startup-minimized"
     New-ItemProperty -Path $runKey -Name $startupEntryName -Value $startupValue -PropertyType String -Force | Out-Null
@@ -320,9 +324,15 @@ try {
     & $uninstallScript -InstallDirectory $installFull -Quiet:$AsJson
     $installed = $false
 
-    if (Test-Path $installFull) {
-        throw "Install smoke failed: install directory still exists after uninstall: $installFull"
+    if (Test-Path $installedExe) {
+        throw "Install smoke failed: installed executable still exists after uninstall: $installedExe"
     }
+
+    if (!(Test-Path $sentinelPath)) {
+        throw "Install smoke failed: user-owned sentinel file was not preserved after uninstall: $sentinelPath"
+    }
+
+    $result.UserFilePreserved = $true
 
     if (Test-Path $appPathsKey) {
         throw "Install smoke failed: App Paths entry still exists after uninstall: $appPathsKey"
@@ -397,6 +407,7 @@ $result.Passed = $result.PackageHealthPassed `
     -and $result.AppPathsVerified `
     -and $result.StartupEntryRemoved `
     -and $result.StartupTaskRemoved `
+    -and $result.UserFilePreserved `
     -and $result.ShortcutsVerified `
     -and $result.UninstallPassed `
     -and $result.UserArtifactsRestored

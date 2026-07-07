@@ -56,3 +56,56 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\{#AppEx
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Uninstall-Desktop.ps1"" -InstallDirectory ""{app}"" -CleanupOnly -Quiet"; Flags: runhidden waituntilterminated; RunOnceId: "CleanupUserStartupEntries"
+
+[Code]
+function IsSamePath(PathA: string; PathB: string): Boolean;
+begin
+  Result := CompareText(RemoveBackslashUnlessRoot(ExpandFileName(PathA)), RemoveBackslashUnlessRoot(ExpandFileName(PathB))) = 0;
+end;
+
+function IsPathInside(ChildPath: string; ParentPath: string): Boolean;
+var
+  Child: string;
+  Parent: string;
+begin
+  Child := AddBackslash(ExpandFileName(ChildPath));
+  Parent := AddBackslash(ExpandFileName(ParentPath));
+  Result := Pos(Lowercase(Parent), Lowercase(Child)) = 1;
+end;
+
+function IsUnsafeInstallDirectory(Dir: string): Boolean;
+var
+  ExpandedDir: string;
+  DriveRoot: string;
+  UserProfile: string;
+begin
+  ExpandedDir := RemoveBackslashUnlessRoot(ExpandFileName(Dir));
+  DriveRoot := ExtractFileDrive(ExpandedDir) + '\';
+  UserProfile := GetEnv('USERPROFILE');
+  Result :=
+    IsSamePath(ExpandedDir, DriveRoot) or
+    ((UserProfile <> '') and IsSamePath(ExpandedDir, UserProfile)) or
+    IsSamePath(ExpandedDir, ExpandConstant('{userdesktop}')) or
+    IsPathInside(ExpandedDir, ExpandConstant('{autopf}')) or
+    IsPathInside(ExpandedDir, ExpandConstant('{commonpf}')) or
+    IsPathInside(ExpandedDir, ExpandConstant('{commonpf32}'));
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+  begin
+    if IsUnsafeInstallDirectory(WizardDirValue) then
+    begin
+      MsgBox(
+        '当前安装向导按普通用户权限安装。请选择用户目录下的应用文件夹，例如默认位置，避免安装到 Program Files、桌面、用户根目录或磁盘根目录。',
+        mbError,
+        MB_OK);
+      Result := False;
+    end;
+  end;
+end;

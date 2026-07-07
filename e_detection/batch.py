@@ -79,18 +79,25 @@ def run_batch_detection(
     anomaly_frames: list[pd.DataFrame] = []
 
     for path in files:
-        anomalies, log_data, _cleaned_df, extra_info = check_anomaly_in_file(
-            str(path),
-            thresholds,
-            enabled_rules,
-        )
-        result.processed_files += 1
         building, transformer = _extract_building_and_transformer(str(path), str(root))
         relative_path = str(path.relative_to(root)) if path.is_relative_to(root) else path.name
         status = "normal"
         message = ""
         anomaly_count = 0
         anomaly_types = ""
+        extra_info: dict[str, Any] = {}
+
+        try:
+            anomalies, log_data, _cleaned_df, extra_info = check_anomaly_in_file(
+                str(path),
+                thresholds,
+                enabled_rules,
+            )
+        except Exception as exc:
+            anomalies = pd.DataFrame()
+            log_data = f"读取失败 {path.name}: {type(exc).__name__}: {exc}"
+
+        result.processed_files += 1
 
         if extra_info:
             result.sensor_status_rows.append(
@@ -169,7 +176,10 @@ def run_batch_detection(
             },
         )
 
-    if anomaly_frames:
+    has_reportable_findings = bool(
+        anomaly_frames or result.sensor_status_rows or result.skipped_details
+    )
+    if has_reportable_findings:
         summary = {
             "input_dir": str(root),
             "output_dir": str(report_dir),
@@ -181,8 +191,13 @@ def run_batch_detection(
             "skipped_files": result.skipped_files,
             "generated_at": generated_at,
         }
+        anomaly_data = (
+            pd.concat(anomaly_frames, ignore_index=True, sort=False)
+            if anomaly_frames
+            else pd.DataFrame()
+        )
         result.report_context = build_report_context(
-            pd.concat(anomaly_frames, ignore_index=True, sort=False),
+            anomaly_data,
             summary=summary,
             config=config or DEFAULT_CONFIG,
             sensor_status_rows=result.sensor_status_rows,

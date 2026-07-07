@@ -71,7 +71,11 @@ public sealed class RuntimeLogService
         {
             "时间\t类型\t消息",
         };
-        lines.AddRange(items.Select(item => item.ToTsv()));
+        lines.AddRange(items.Select(item => string.Join(
+            "\t",
+            TabularExportSanitizer.Cell(item.TimeText),
+            TabularExportSanitizer.Cell(item.Kind),
+            TabularExportSanitizer.Cell(item.Message))));
         return string.Join(Environment.NewLine, lines);
     }
 

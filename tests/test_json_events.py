@@ -134,3 +134,95 @@ def test_run_batch_detection_emits_native_report_summary(tmp_path: Path, monkeyp
     assert summary["detail_preview"][0]["severity"] == "高"
     assert summary["detail_preview"][0]["issue_value"] == "Uab=320"
     assert summary["detail_preview"][0]["recommended_action"].startswith("优先检查 PT")
+
+
+def test_run_batch_detection_continues_after_single_file_failure(tmp_path: Path, monkeypatch):
+    bad_csv = tmp_path / "bad.csv"
+    good_csv = tmp_path / "good.csv"
+    bad_csv.write_text("time,Uab\n0,broken\n", encoding="utf-8")
+    good_csv.write_text("time,Uab\n0,380\n", encoding="utf-8")
+
+    def fake_check_anomaly_in_file(file_path, thresholds, enabled_rules):
+        if Path(file_path).name == "bad.csv":
+            raise ValueError("broken input")
+        return (
+            pd.DataFrame(),
+            {"count": 0, "types": "", "filename": Path(file_path).name},
+            None,
+            {},
+        )
+
+    monkeypatch.setattr(batch, "check_anomaly_in_file", fake_check_anomaly_in_file)
+    events: list[dict[str, object]] = []
+
+    result = batch.run_batch_detection(
+        tmp_path,
+        config=DEFAULT_CONFIG,
+        write_report=False,
+        event_handler=events.append,
+    )
+
+    assert result.total_files == 2
+    assert result.processed_files == 2
+    assert result.normal_files == 1
+    assert result.skipped_files == 1
+    assert result.skipped_details[0]["来源文件"] == "bad.csv"
+    assert "broken input" in result.skipped_details[0]["原因"]
+    assert [event["status"] for event in events if event["event"] == "file_result"] == [
+        "skipped",
+        "normal",
+    ]
+
+
+def test_run_batch_detection_reports_summary_for_skipped_only_run(tmp_path: Path, monkeypatch):
+    csv_path = tmp_path / "bad.csv"
+    csv_path.write_text("time,Uab\n0,broken\n", encoding="utf-8")
+
+    def fake_check_anomaly_in_file(file_path, thresholds, enabled_rules):
+        raise ValueError("broken input")
+
+    monkeypatch.setattr(batch, "check_anomaly_in_file", fake_check_anomaly_in_file)
+    events: list[dict[str, object]] = []
+
+    result = batch.run_batch_detection(
+        tmp_path,
+        config=DEFAULT_CONFIG,
+        write_report=False,
+        event_handler=events.append,
+    )
+
+    assert result.skipped_files == 1
+    assert result.report_context is not None
+    summary = next(event for event in events if event["event"] == "report_summary")
+    assert summary["sensor_overview"]["skipped_rows"] == 1
+    assert summary["detail_preview_count"] == 0
+    assert events[-1]["skipped_files"] == 1
+
+
+def test_run_batch_detection_reports_summary_for_sensor_only_issue(tmp_path: Path, monkeypatch):
+    csv_path = tmp_path / "sensor.csv"
+    csv_path.write_text("time,Uab\n0,380\n", encoding="utf-8")
+
+    def fake_check_anomaly_in_file(file_path, thresholds, enabled_rules):
+        return (
+            pd.DataFrame(),
+            {"count": 0, "types": "", "filename": Path(file_path).name},
+            None,
+            {"is_offline": False, "sensor_faults": [], "sensor_missing": ["功率因数"]},
+        )
+
+    monkeypatch.setattr(batch, "check_anomaly_in_file", fake_check_anomaly_in_file)
+    events: list[dict[str, object]] = []
+
+    result = batch.run_batch_detection(
+        tmp_path,
+        config=DEFAULT_CONFIG,
+        write_report=False,
+        event_handler=events.append,
+    )
+
+    assert result.normal_files == 1
+    assert result.report_context is not None
+    summary = next(event for event in events if event["event"] == "report_summary")
+    assert summary["sensor_overview"]["sensor_missing_rows"] == 1
+    assert summary["detail_preview_count"] == 0
