@@ -39,14 +39,12 @@ public partial class App : Application
             var startMinimized = commandLineStartupMinimized || savedSettings.StartMinimizedToTray;
             CurrentWindow = new EDetection.Desktop.MainWindow();
             CurrentWindow.Closed += (_, _) => CurrentWindow = null;
-            if (startMinimized)
-            {
-                CurrentWindow.PrepareForStartupHidden();
-            }
+            var preparedForStartupHide = startMinimized
+                && CurrentWindow.PrepareForStartupHidden();
 
             CurrentWindow.Activate();
 
-            if (startMinimized)
+            if (preparedForStartupHide)
             {
                 CurrentWindow.HideForStartup();
             }

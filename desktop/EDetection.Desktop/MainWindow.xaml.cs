@@ -36,12 +36,14 @@ public sealed partial class MainWindow : Window
     private bool _isHiddenToTray;
     private bool _isSessionEnding;
     private bool _shellResourcesCleanedUp;
-    private bool _restorePlacementAfterStartupHide;
     private bool _isClosed;
 
     private const uint WmQueryEndSession = 0x0011;
     private const uint WmEndSession = 0x0016;
     private const uint WmGetMinMaxInfo = 0x0024;
+    private const double MaxRestoredWindowWorkAreaRatio = 0.92;
+    private const int MinimumVisiblePlacementWidth = 320;
+    private const int MinimumVisiblePlacementHeight = 220;
 
     public MainViewModel ViewModel { get; }
 
@@ -126,15 +128,21 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        args.Cancel = true;
-        HideToTray();
+        args.Cancel = HideToTray();
     }
 
-    public void PrepareForStartupHidden()
+    public bool PrepareForStartupHidden()
     {
-        _restorePlacementAfterStartupHide = true;
+        if (!_trayIcon.IsAvailable)
+        {
+            AppWindow.IsShownInSwitchers = true;
+            ViewModel.AddRuntimeLog("托盘状态", "系统托盘不可用，启动时保持主窗口可见。");
+            return false;
+        }
+
         AppWindow.IsShownInSwitchers = false;
         AppWindow.Move(new PointInt32(-32000, -32000));
+        return true;
     }
 
     public void HideForStartup() => HideToTray(savePlacement: false);
@@ -359,11 +367,23 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void HideToTray(bool savePlacement = true)
+    private bool HideToTray(bool savePlacement = true)
     {
         if (_isHiddenToTray)
         {
-            return;
+            return true;
+        }
+
+        if (!_trayIcon.IsAvailable)
+        {
+            _isHiddenToTray = false;
+            AppWindow.IsShownInSwitchers = true;
+            RestoreWindowPlacement();
+            AppWindow.Show();
+            ShowWindow(_windowHandle, ShowWindowCommand.Restore);
+            SetForegroundWindow(_windowHandle);
+            ViewModel.AddRuntimeLog("托盘状态", "系统托盘不可用，已保持主窗口可见。");
+            return true;
         }
 
         if (savePlacement)
@@ -376,17 +396,14 @@ public sealed partial class MainWindow : Window
         AppWindow.Hide();
         ShowWindow(_windowHandle, ShowWindowCommand.Hide);
         _shellResources.ReleaseAfterHideToTray();
+        return true;
     }
 
     private void ShowFromTray()
     {
         _isHiddenToTray = false;
         AppWindow.IsShownInSwitchers = true;
-        if (_restorePlacementAfterStartupHide)
-        {
-            _restorePlacementAfterStartupHide = false;
-            RestoreWindowPlacement();
-        }
+        RestoreWindowPlacement();
 
         AppWindow.Show();
         ShowWindow(_windowHandle, ShowWindowCommand.Show);
@@ -429,21 +446,22 @@ public sealed partial class MainWindow : Window
         var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         var minSize = GetMinWindowSizePixels(workArea);
         var defaultSize = GetDefaultWindowSizePixels(workArea, minSize);
+        var maxRestoredSize = GetMaxRestoredWindowSizePixels(workArea, minSize);
         var requestedWidth = ViewModel.WindowWidth > 0
             ? ViewModel.WindowWidth
             : defaultSize.Width;
         var requestedHeight = ViewModel.WindowHeight > 0
             ? ViewModel.WindowHeight
             : defaultSize.Height;
-        var width = Math.Clamp(
-            requestedWidth,
-            minSize.Width,
-            Math.Max(minSize.Width, workArea.Width));
-        var height = Math.Clamp(
-            requestedHeight,
-            minSize.Height,
-            Math.Max(minSize.Height, workArea.Height));
-        if (IsSavedPlacementVisible(workArea, ViewModel.WindowLeft, ViewModel.WindowTop))
+        var savedSizeLooksLikeWorkArea = requestedWidth >= workArea.Width * 0.96
+            || requestedHeight >= workArea.Height * 0.96;
+        var width = savedSizeLooksLikeWorkArea && !ViewModel.IsWindowMaximized
+            ? defaultSize.Width
+            : Math.Clamp(requestedWidth, minSize.Width, maxRestoredSize.Width);
+        var height = savedSizeLooksLikeWorkArea && !ViewModel.IsWindowMaximized
+            ? defaultSize.Height
+            : Math.Clamp(requestedHeight, minSize.Height, maxRestoredSize.Height);
+        if (IsSavedPlacementUsable(workArea, ViewModel.WindowLeft, ViewModel.WindowTop, width, height))
         {
             var left = Math.Clamp(ViewModel.WindowLeft, workArea.X, Math.Max(workArea.X, workArea.X + workArea.Width - width));
             var top = Math.Clamp(ViewModel.WindowTop, workArea.Y, Math.Max(workArea.Y, workArea.Y + workArea.Height - height));
@@ -455,7 +473,7 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            AppWindow.Resize(new SizeInt32(width, height));
+            AppWindow.MoveAndResize(GetVisibleDefaultBounds(workArea, width, height));
         }
 
         if (ViewModel.IsWindowMaximized
@@ -465,14 +483,41 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static bool IsSavedPlacementVisible(RectInt32 workArea, int left, int top) =>
-        left >= workArea.X
-        && top >= workArea.Y
-        && left < workArea.X + workArea.Width
-        && top < workArea.Y + workArea.Height;
+    private static bool IsSavedPlacementUsable(RectInt32 workArea, int left, int top, int width, int height)
+    {
+        if (left <= -30000 || top <= -30000 || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        var right = left + width;
+        var bottom = top + height;
+        var visibleLeft = Math.Max(left, workArea.X);
+        var visibleTop = Math.Max(top, workArea.Y);
+        var visibleRight = Math.Min(right, workArea.X + workArea.Width);
+        var visibleBottom = Math.Min(bottom, workArea.Y + workArea.Height);
+        return visibleRight - visibleLeft >= Math.Min(MinimumVisiblePlacementWidth, width)
+            && visibleBottom - visibleTop >= Math.Min(MinimumVisiblePlacementHeight, height);
+    }
+
+    private static RectInt32 GetVisibleDefaultBounds(RectInt32 workArea, int width, int height)
+    {
+        var safeWidth = Math.Min(width, Math.Max(1, workArea.Width));
+        var safeHeight = Math.Min(height, Math.Max(1, workArea.Height));
+        var left = workArea.X + Math.Max(0, (workArea.Width - safeWidth) / 2);
+        var top = workArea.Y + Math.Max(0, (workArea.Height - safeHeight) / 3);
+        return new RectInt32(left, top, safeWidth, safeHeight);
+    }
 
     private void SaveWindowPlacement()
     {
+        if (_isHiddenToTray
+            || AppWindow.Position.X <= -30000
+            || AppWindow.Position.Y <= -30000)
+        {
+            return;
+        }
+
         var isMaximized = AppWindow.Presenter is OverlappedPresenter
         {
             State: OverlappedPresenterState.Maximized,
@@ -534,6 +579,16 @@ public sealed partial class MainWindow : Window
     {
         var width = Math.Max(minSize.Width, DipToPixels(MainViewModel.DefaultWindowWidthDip));
         var height = Math.Max(minSize.Height, DipToPixels(MainViewModel.DefaultWindowHeightDip));
+        var maxSize = GetMaxRestoredWindowSizePixels(workArea, minSize);
+        return new SizeInt32(
+            Math.Min(width, maxSize.Width),
+            Math.Min(height, maxSize.Height));
+    }
+
+    private SizeInt32 GetMaxRestoredWindowSizePixels(RectInt32 workArea, SizeInt32 minSize)
+    {
+        var width = Math.Max(minSize.Width, (int)Math.Floor(workArea.Width * MaxRestoredWindowWorkAreaRatio));
+        var height = Math.Max(minSize.Height, (int)Math.Floor(workArea.Height * MaxRestoredWindowWorkAreaRatio));
         return new SizeInt32(
             Math.Min(width, Math.Max(minSize.Width, workArea.Width)),
             Math.Min(height, Math.Max(minSize.Height, workArea.Height)));

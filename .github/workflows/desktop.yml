@@ -97,6 +97,11 @@ jobs:
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopBundledPythonSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
 
+      - name: Startup visibility smoke
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_desktop_ui_smoke == true }}
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopSingleInstanceSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish -OutputDirectory ./artifacts/desktop/single-instance-smoke
+
       - name: Settings page smoke
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_desktop_ui_smoke == true }}
         shell: pwsh
@@ -264,6 +269,7 @@ jobs:
               "- publish package health"
               "- environment repair smoke"
               "- bundled Python smoke"
+              "- startup visibility smoke when run_desktop_ui_smoke is enabled"
               "- install/uninstall smoke"
               "- setup installer smoke"
               ""

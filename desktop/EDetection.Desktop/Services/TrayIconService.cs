@@ -67,6 +67,8 @@ public sealed class TrayIconService : IDisposable
 
     public event EventHandler? OpenReportFolderRequested;
 
+    public bool IsAvailable => _iconAdded;
+
     public void UpdateStatus(ShellStatusSnapshot status)
     {
         if (!_iconAdded)

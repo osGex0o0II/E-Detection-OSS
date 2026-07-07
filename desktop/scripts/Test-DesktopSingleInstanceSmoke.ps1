@@ -50,6 +50,7 @@ if ($settingsExisted) {
     $settingsBackup = Get-Content -Path $settingsPath -Raw
 }
 
+Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type @"
@@ -72,6 +73,18 @@ public static class DesktopSingleInstanceSmokeNative
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 }
 "@
 
@@ -122,6 +135,33 @@ function Test-WindowTitle([int]$ProcessId, [string]$Pattern) {
     Get-ProcessWindows $ProcessId | Where-Object { $_.Title -like $Pattern } | Select-Object -First 1
 }
 
+function Assert-WindowVisibleInWorkArea([IntPtr]$Handle) {
+    $rect = New-Object DesktopSingleInstanceSmokeNative+RECT
+    if (![DesktopSingleInstanceSmokeNative]::GetWindowRect($Handle, [ref]$rect)) {
+        throw "Single-instance smoke failed: could not read restored window rectangle."
+    }
+
+    $workArea = [System.Windows.Forms.Screen]::FromHandle($Handle).WorkingArea
+    $visibleLeft = [Math]::Max($rect.Left, $workArea.Left)
+    $visibleTop = [Math]::Max($rect.Top, $workArea.Top)
+    $visibleRight = [Math]::Min($rect.Right, $workArea.Right)
+    $visibleBottom = [Math]::Min($rect.Bottom, $workArea.Bottom)
+    $visibleWidth = $visibleRight - $visibleLeft
+    $visibleHeight = $visibleBottom - $visibleTop
+    if ($visibleWidth -lt 320 -or $visibleHeight -lt 220) {
+        throw "Single-instance smoke failed: restored window is not sufficiently visible. Rect=($($rect.Left),$($rect.Top),$($rect.Right),$($rect.Bottom)); WorkArea=($($workArea.Left),$($workArea.Top),$($workArea.Right),$($workArea.Bottom))."
+    }
+
+    [pscustomobject]@{
+        Left = $rect.Left
+        Top = $rect.Top
+        Right = $rect.Right
+        Bottom = $rect.Bottom
+        VisibleWidth = $visibleWidth
+        VisibleHeight = $visibleHeight
+    }
+}
+
 function Wait-ForProcessExit([System.Diagnostics.Process]$Process, [int]$TimeoutSeconds) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
@@ -153,6 +193,11 @@ try {
         EnableDesktopNotifications = $false
         SelectedThemeIndex = 0
         SelectedBackdropIndex = 0
+        WindowLeft = -32000
+        WindowTop = -32000
+        WindowWidth = 4096
+        WindowHeight = 2304
+        IsWindowMaximized = $false
         RecentReports = @()
     } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
 
@@ -182,6 +227,7 @@ try {
     if ($root.Current.Name -notlike "*E-Detection*") {
         throw "Single-instance smoke failed: restored window automation name was '$($root.Current.Name)'."
     }
+    $restoredBounds = Assert-WindowVisibleInWorkArea $mainWindow.Handle
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $resultPath = Join-Path $outputFull "single-instance-smoke-$timestamp.json"
@@ -191,6 +237,7 @@ try {
         DuplicateProcessId = $duplicate.Id
         DuplicateExitCode = $duplicate.ExitCode
         MainWindowTitle = $mainWindow.Title
+        RestoredWindowBounds = $restoredBounds
         StartupArgument = "--startup-minimized"
         HiddenOnStartup = $true
         RestoredBySecondLaunch = $true
