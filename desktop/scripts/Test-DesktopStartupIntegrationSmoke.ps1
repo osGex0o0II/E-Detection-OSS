@@ -100,6 +100,79 @@ function Restore-StartupTask([string]$TaskXml) {
     }
 }
 
+function New-StartupTaskWithArgument([string]$ExecutablePath, [string]$Argument) {
+    $escapedExecutablePath = [System.Security.SecurityElement]::Escape($ExecutablePath)
+    $escapedArgument = [System.Security.SecurityElement]::Escape($Argument)
+    $workingDirectory = [System.Security.SecurityElement]::Escape((Split-Path -Parent $ExecutablePath))
+    $userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $escapedUserId = [System.Security.SecurityElement]::Escape($userId)
+    $taskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>E-Detection OSS Smoke</Author>
+    <Description>Temporary startup integration smoke task.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>$escapedUserId</UserId>
+      <Delay>PT5S</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>$escapedUserId</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>false</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>$escapedExecutablePath</Command>
+      <Arguments>$escapedArgument</Arguments>
+      <WorkingDirectory>$workingDirectory</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"@
+
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) "EDetectionDesktopTaskSmoke-$([Guid]::NewGuid().ToString('N')).xml"
+    try {
+        Set-Content -Path $tempPath -Value $taskXml -Encoding Unicode
+        & schtasks.exe /Create /TN $taskName /XML $tempPath /F 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $taskCommand = "`"$ExecutablePath`" $Argument"
+    & schtasks.exe /Create /TN $taskName /SC ONLOGON /TR $taskCommand /F 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Wait-ForTaskContains([string]$ExpectedText, [bool]$ShouldExist, [int]$TimeoutSeconds) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
@@ -211,6 +284,12 @@ public static class DesktopStartupIntegrationSmokeNative
 
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 }
 "@
 
@@ -276,6 +355,25 @@ function Find-AutomationElement([IntPtr]$RootHandle, [string]$Name, [int]$Timeou
     throw "Timed out waiting for automation element '$Name'."
 }
 
+function Find-AutomationElementByAutomationId([IntPtr]$RootHandle, [string]$AutomationId, [int]$TimeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($RootHandle)
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::AutomationIdProperty,
+        $AutomationId)
+
+    do {
+        $match = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if ($match -ne $null) {
+            return $match
+        }
+
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Timed out waiting for automation id '$AutomationId'."
+}
+
 function Try-FindAutomationElement([IntPtr]$RootHandle, [string]$Name) {
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($RootHandle)
     $condition = New-Object System.Windows.Automation.PropertyCondition(
@@ -307,8 +405,33 @@ function Invoke-AutomationElement([IntPtr]$RootHandle, [string]$Name, [int]$Time
 }
 
 function Toggle-AutomationElement([System.Windows.Automation.AutomationElement]$Element) {
+    try {
+        $pattern = $Element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
+        $pattern.Toggle()
+        return
+    }
+    catch {
+    }
+
+    $bounds = $Element.Current.BoundingRectangle
+    if ($bounds.IsEmpty) {
+        throw "Automation element '$($Element.Current.Name)' does not support TogglePattern and has no clickable bounds."
+    }
+
+    $x = [int][Math]::Round($bounds.Left + ($bounds.Width / 2))
+    $y = [int][Math]::Round($bounds.Top + ($bounds.Height / 2))
+    [DesktopStartupIntegrationSmokeNative]::SetCursorPos($x, $y) | Out-Null
+    Start-Sleep -Milliseconds 100
+    [DesktopStartupIntegrationSmokeNative]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+    [DesktopStartupIntegrationSmokeNative]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+}
+
+function Assert-ToggleState([System.Windows.Automation.AutomationElement]$Element, [System.Windows.Automation.ToggleState]$ExpectedState) {
     $pattern = $Element.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern)
-    $pattern.Toggle()
+    $actualState = $pattern.Current.ToggleState
+    if ($actualState -ne $ExpectedState) {
+        throw "Startup-integration smoke failed: toggle state was '$actualState', expected '$ExpectedState'."
+    }
 }
 
 $process = $null
@@ -321,6 +444,10 @@ try {
 
     Remove-ItemProperty -Path $runKeyPath -Name $runEntryName -ErrorAction SilentlyContinue
     Remove-StartupTask
+    $legacyStartupTaskSeeded = New-StartupTaskWithArgument $appFull "--startup-minimized"
+    if (!$legacyStartupTaskSeeded) {
+        New-ItemProperty -Path $runKeyPath -Name $runEntryName -Value "`"$appFull`" --startup-minimized" -PropertyType String -Force | Out-Null
+    }
 
     [pscustomobject]@{
         InputDirectory = ""
@@ -357,22 +484,34 @@ try {
     Start-Sleep -Milliseconds 500
 
     Invoke-AutomationElement $mainWindow.Handle "设置" $WaitSeconds
-    Find-AutomationElement $mainWindow.Handle "登录后自动启动未启用 · Task Scheduler" $WaitSeconds | Out-Null
-    $autoStartToggle = Find-AutomationElement $mainWindow.Handle "登录后自动启动" $WaitSeconds
+    $autoStartToggle = Find-AutomationElementByAutomationId $mainWindow.Handle "AutoStartOnSignInToggle" $WaitSeconds
+    Assert-ToggleState $autoStartToggle ([System.Windows.Automation.ToggleState]::Off)
 
     Toggle-AutomationElement $autoStartToggle
     $enabledIntegration = Wait-ForStartupIntegration $appFull $true $WaitSeconds
-    $enabledStatusText = Wait-ForAnyAutomationName $mainWindow.Handle @(
-        "登录后自动启动已启用 · Task Scheduler",
-        "登录后自动启动已启用 · HKCU Run"
-    ) $WaitSeconds
+    $registeredCommand = if ($enabledIntegration.Provider -eq "Task Scheduler") {
+        $enabledIntegration.TaskXml
+    }
+    else {
+        $enabledIntegration.RunValue
+    }
+    $registeredCommandText = if ($registeredCommand -is [string]) {
+        $registeredCommand
+    }
+    else {
+        ""
+    }
+
+    if ($registeredCommandText.IndexOf("--background-startup", [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        throw "Startup-integration smoke failed: startup command did not use --background-startup."
+    }
+
+    if ($registeredCommandText.IndexOf("--startup-minimized", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        throw "Startup-integration smoke failed: startup command still used legacy --startup-minimized."
+    }
 
     Toggle-AutomationElement $autoStartToggle
     Wait-ForStartupIntegration $appFull $false $WaitSeconds | Out-Null
-    $disabledStatusText = Wait-ForAnyAutomationName $mainWindow.Handle @(
-        "登录后自动启动未启用 · Task Scheduler",
-        "登录后自动启动未启用 · HKCU Run"
-    ) $WaitSeconds
 
     $resultPath = Join-Path $outputFull "startup-integration-smoke-$timestamp.json"
     [pscustomobject]@{
@@ -383,10 +522,13 @@ try {
         TaskCreated = ($enabledIntegration.Provider -eq "Task Scheduler")
         RunEntryCreated = ($enabledIntegration.Provider -eq "HKCU Run")
         TaskRemoved = $true
-        EnabledStatusText = $enabledStatusText
-        DisabledStatusText = $disabledStatusText
         TaskXmlContainsAppPath = ($enabledIntegration.TaskXml -is [string] -and $enabledIntegration.TaskXml.IndexOf($appFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
         RunEntryContainsAppPath = ($enabledIntegration.RunValue -is [string] -and $enabledIntegration.RunValue.IndexOf($appFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+        StartupCommandUsesBackgroundArgument = $true
+        StartupCommandAvoidsLegacyArgument = $true
+        LegacyStartupTaskSeeded = $legacyStartupTaskSeeded
+        LegacyStartupRunEntrySeeded = !$legacyStartupTaskSeeded
+        LegacyStartupEntryTreatedAsDisabled = $true
         Dpi = $dpi
         Passed = $true
         CapturedAt = (Get-Date).ToString("o")

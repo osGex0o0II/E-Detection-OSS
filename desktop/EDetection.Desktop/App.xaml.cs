@@ -7,6 +7,7 @@ namespace EDetection.Desktop;
 public partial class App : Application
 {
     public const string StartupMinimizedArgument = "--startup-minimized";
+    public const string BackgroundStartupArgument = "--background-startup";
 
     private const string SingleInstanceKey = "EDetection.Desktop.MainInstance";
 
@@ -30,13 +31,18 @@ public partial class App : Application
             var commandLineStartupMinimized = commandLineArgs.Contains(
                 StartupMinimizedArgument,
                 StringComparer.OrdinalIgnoreCase);
-            if (await TryRedirectToExistingInstanceAsync(commandLineStartupMinimized))
+            var commandLineBackgroundStartup = commandLineArgs.Contains(
+                BackgroundStartupArgument,
+                StringComparer.OrdinalIgnoreCase);
+            if (await TryRedirectToExistingInstanceAsync(commandLineBackgroundStartup))
             {
                 return;
             }
 
             var savedSettings = new SettingsService().Load();
-            var startMinimized = commandLineStartupMinimized || savedSettings.StartMinimizedToTray;
+            var startMinimized = commandLineBackgroundStartup
+                || commandLineStartupMinimized
+                || savedSettings.StartMinimizedToTray;
             CurrentWindow = new EDetection.Desktop.MainWindow();
             CurrentWindow.Closed += (_, _) => CurrentWindow = null;
             var preparedForStartupHide = startMinimized

@@ -22,6 +22,11 @@ public sealed record StartupIntegrationSnapshot(
                 return $"登录后自动启动未启用 · {ProviderName} 指向其他安装位置";
             }
 
+            if (!string.IsNullOrWhiteSpace(RegisteredCommand) && PointsToCurrentExecutable)
+            {
+                return $"登录后自动启动未启用 · {ProviderName} 需要更新";
+            }
+
             return $"登录后自动启动未启用 · {ProviderName}";
         }
     }

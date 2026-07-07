@@ -9,7 +9,7 @@ namespace EDetection.Desktop.Services;
 public sealed class TaskSchedulerStartupIntegrationProvider : IStartupIntegrationProvider
 {
     private const string TaskName = "E-Detection Desktop Autostart";
-    private const string StartupArgument = "--startup-minimized";
+    private const string StartupArgument = App.BackgroundStartupArgument;
     private const string ProviderName = "Task Scheduler";
     private const int CommandTimeoutMilliseconds = 10000;
 
@@ -35,9 +35,12 @@ public sealed class TaskSchedulerStartupIntegrationProvider : IStartupIntegratio
                 command,
                 executablePath,
                 StringComparison.OrdinalIgnoreCase);
+            var usesBackgroundStartup = arguments.Contains(
+                StartupArgument,
+                StringComparison.OrdinalIgnoreCase);
 
             return new StartupIntegrationSnapshot(
-                IsEnabled: pointsToCurrentExecutable,
+                IsEnabled: pointsToCurrentExecutable && usesBackgroundStartup,
                 PointsToCurrentExecutable: pointsToCurrentExecutable,
                 ProviderName,
                 TaskName,

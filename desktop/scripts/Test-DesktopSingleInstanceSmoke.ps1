@@ -177,7 +177,9 @@ function Wait-ForProcessExit([System.Diagnostics.Process]$Process, [int]$Timeout
 }
 
 $primary = $null
-$duplicate = $null
+$backgroundDuplicate = $null
+$normalDuplicate = $null
+$legacyDuplicate = $null
 
 try {
     New-Item -ItemType Directory -Force -Path $settingsDirectory | Out-Null
@@ -203,44 +205,77 @@ try {
 
     $primary = Start-Process -FilePath $appFull `
         -WorkingDirectory (Split-Path -Parent $appFull) `
-        -ArgumentList "--startup-minimized" `
+        -ArgumentList "--background-startup" `
         -PassThru
 
     Start-Sleep -Seconds 2
     $primary.Refresh()
     if ($primary.HasExited) {
-        throw "Single-instance smoke failed: startup-minimized process exited early with code $($primary.ExitCode)."
+        throw "Single-instance smoke failed: background-startup process exited early with code $($primary.ExitCode)."
     }
 
     $hiddenWindow = Test-WindowTitle $primary.Id "*E-Detection*"
     if ($hiddenWindow -ne $null) {
-        throw "Single-instance smoke failed: startup-minimized launch left a visible window '$($hiddenWindow.Title)'."
+        throw "Single-instance smoke failed: background-startup launch left a visible window '$($hiddenWindow.Title)'."
     }
 
-    $duplicate = Start-Process -FilePath $appFull `
+    $backgroundDuplicate = Start-Process -FilePath $appFull `
+        -WorkingDirectory (Split-Path -Parent $appFull) `
+        -ArgumentList "--background-startup" `
+        -PassThru
+    Wait-ForProcessExit $backgroundDuplicate $WaitSeconds
+
+    $hiddenWindow = Test-WindowTitle $primary.Id "*E-Detection*"
+    if ($hiddenWindow -ne $null) {
+        throw "Single-instance smoke failed: duplicate background-startup restored a visible window '$($hiddenWindow.Title)'."
+    }
+
+    $normalDuplicate = Start-Process -FilePath $appFull `
         -WorkingDirectory (Split-Path -Parent $appFull) `
         -PassThru
-    Wait-ForProcessExit $duplicate $WaitSeconds
+    Wait-ForProcessExit $normalDuplicate $WaitSeconds
 
     $mainWindow = Wait-ForWindowTitle $primary.Id "*E-Detection*" $WaitSeconds
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($mainWindow.Handle)
     if ($root.Current.Name -notlike "*E-Detection*") {
-        throw "Single-instance smoke failed: restored window automation name was '$($root.Current.Name)'."
+        throw "Single-instance smoke failed: normal duplicate restored window automation name was '$($root.Current.Name)'."
     }
     $restoredBounds = Assert-WindowVisibleInWorkArea $mainWindow.Handle
+
+    $legacyDuplicate = Start-Process -FilePath $appFull `
+        -WorkingDirectory (Split-Path -Parent $appFull) `
+        -ArgumentList "--startup-minimized" `
+        -PassThru
+    Wait-ForProcessExit $legacyDuplicate $WaitSeconds
+
+    $mainWindow = Wait-ForWindowTitle $primary.Id "*E-Detection*" $WaitSeconds
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($mainWindow.Handle)
+    if ($root.Current.Name -notlike "*E-Detection*") {
+        throw "Single-instance smoke failed: legacy duplicate restored window automation name was '$($root.Current.Name)'."
+    }
+    $legacyRestoredBounds = Assert-WindowVisibleInWorkArea $mainWindow.Handle
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $resultPath = Join-Path $outputFull "single-instance-smoke-$timestamp.json"
     [pscustomobject]@{
         AppPath = $appFull
         PrimaryProcessId = $primary.Id
-        DuplicateProcessId = $duplicate.Id
-        DuplicateExitCode = $duplicate.ExitCode
+        BackgroundDuplicateProcessId = $backgroundDuplicate.Id
+        BackgroundDuplicateExitCode = $backgroundDuplicate.ExitCode
+        NormalDuplicateProcessId = $normalDuplicate.Id
+        NormalDuplicateExitCode = $normalDuplicate.ExitCode
+        LegacyDuplicateProcessId = $legacyDuplicate.Id
+        LegacyDuplicateExitCode = $legacyDuplicate.ExitCode
         MainWindowTitle = $mainWindow.Title
         RestoredWindowBounds = $restoredBounds
-        StartupArgument = "--startup-minimized"
+        LegacyRestoredWindowBounds = $legacyRestoredBounds
+        StartupArgument = "--background-startup"
+        BackgroundDuplicateStartupArgument = "--background-startup"
+        LegacyDuplicateStartupArgument = "--startup-minimized"
         HiddenOnStartup = $true
-        RestoredBySecondLaunch = $true
+        BackgroundDuplicateKeptHidden = $true
+        RestoredByNormalLaunch = $true
+        RestoredByLegacyStartupMinimizedLaunch = $true
         Passed = $true
         CapturedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json | Set-Content -Path $resultPath -Encoding UTF8
@@ -248,8 +283,16 @@ try {
     Write-Host "Single-instance smoke passed: $resultPath"
 }
 finally {
-    if ($duplicate -ne $null -and !$duplicate.HasExited) {
-        Stop-Process -Id $duplicate.Id -Force
+    if ($legacyDuplicate -ne $null -and !$legacyDuplicate.HasExited) {
+        Stop-Process -Id $legacyDuplicate.Id -Force
+    }
+
+    if ($backgroundDuplicate -ne $null -and !$backgroundDuplicate.HasExited) {
+        Stop-Process -Id $backgroundDuplicate.Id -Force
+    }
+
+    if ($normalDuplicate -ne $null -and !$normalDuplicate.HasExited) {
+        Stop-Process -Id $normalDuplicate.Id -Force
     }
 
     if ($primary -ne $null -and !$primary.HasExited) {

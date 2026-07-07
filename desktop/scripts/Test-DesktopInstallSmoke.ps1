@@ -134,7 +134,7 @@ function Restore-ScheduledTaskXml([string]$TaskName, [string]$TaskXml) {
 }
 
 function New-SmokeScheduledStartupTask([string]$TaskName, [string]$ExecutablePath) {
-    $taskCommand = "`"$ExecutablePath`" --startup-minimized"
+    $taskCommand = "`"$ExecutablePath`" --background-startup"
     & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR $taskCommand /F 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
         $global:LASTEXITCODE = 0
@@ -299,7 +299,7 @@ try {
     Set-Content -Path $sentinelPath -Value "user-owned file" -Encoding UTF8
 
     New-Item -Path $runKey -Force | Out-Null
-    $startupValue = "`"$installedExe`" --startup-minimized"
+    $startupValue = "`"$installedExe`" --background-startup"
     New-ItemProperty -Path $runKey -Name $startupEntryName -Value $startupValue -PropertyType String -Force | Out-Null
     Remove-ScheduledTaskIfExists $startupTaskName
     $result.StartupTaskCreationAvailable = New-SmokeScheduledStartupTask $startupTaskName $installedExe

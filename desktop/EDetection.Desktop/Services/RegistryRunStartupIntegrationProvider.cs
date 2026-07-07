@@ -8,7 +8,7 @@ public sealed class RegistryRunStartupIntegrationProvider : IStartupIntegrationP
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string EntryName = "E-Detection Desktop";
-    private const string StartupArgument = "--startup-minimized";
+    private const string StartupArgument = App.BackgroundStartupArgument;
     private const string ProviderName = "HKCU Run";
 
     public StartupIntegrationSnapshot GetStatus()
@@ -18,9 +18,11 @@ public sealed class RegistryRunStartupIntegrationProvider : IStartupIntegrationP
         var command = runKey?.GetValue(EntryName) as string;
         var pointsToCurrentExecutable = !string.IsNullOrWhiteSpace(command)
             && command.Contains(executablePath, StringComparison.OrdinalIgnoreCase);
+        var usesBackgroundStartup = !string.IsNullOrWhiteSpace(command)
+            && command.Contains(StartupArgument, StringComparison.OrdinalIgnoreCase);
 
         return new StartupIntegrationSnapshot(
-            IsEnabled: pointsToCurrentExecutable,
+            IsEnabled: pointsToCurrentExecutable && usesBackgroundStartup,
             PointsToCurrentExecutable: pointsToCurrentExecutable,
             ProviderName,
             EntryName,

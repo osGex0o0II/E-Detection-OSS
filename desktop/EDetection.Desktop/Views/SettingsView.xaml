@@ -510,7 +510,7 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <ToggleSwitch IsOn="{Binding AutoStartOnSignIn, Mode=TwoWay}" AutomationProperties.Name="登录后自动启动" />
+                                        <ToggleSwitch IsOn="{Binding AutoStartOnSignIn, Mode=TwoWay}" AutomationProperties.Name="登录后自动启动" AutomationProperties.AutomationId="AutoStartOnSignInToggle" />
                                         <Button Grid.Column="1" Command="{Binding OpenSystemStartupSettingsCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="打开 Windows 启动应用设置">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <FontIcon Glyph="&#xE713;" FontSize="14" />
