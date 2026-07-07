@@ -139,6 +139,46 @@ public sealed class DetectionConfigService
         return Normalize(settings);
     }
 
+    public static string? ValidateConfigFile(string path)
+    {
+        string resolvedPath;
+        try
+        {
+            resolvedPath = ResolveConfigPath(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
+        {
+            return $"阈值配置文件路径无效: {ex.Message}";
+        }
+
+        if (!File.Exists(resolvedPath))
+        {
+            return $"阈值配置文件不存在: {resolvedPath}";
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(resolvedPath));
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                ? null
+                : $"阈值配置文件格式错误: {resolvedPath}";
+        }
+        catch (JsonException ex)
+        {
+            return $"阈值配置文件无法解析: {resolvedPath} · {ex.Message}";
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or ArgumentException
+                                   or NotSupportedException
+                                   or PathTooLongException)
+        {
+            return $"阈值配置文件不可读取: {ex.Message}";
+        }
+    }
+
     public void Save(string path, DetectionConfigSettings settings)
     {
         var resolvedPath = ResolveConfigPath(path);

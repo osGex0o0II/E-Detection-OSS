@@ -12,7 +12,8 @@ public sealed class DesktopDiagnosticsService
         var resolvedPython = PythonBackendService.ResolvePythonExecutable(request.PythonExecutable);
         var hasBackendSource = HasBackendSource(backendRoot);
         var isInputReady = IsInputReady(request.InputDirectory);
-        var isConfigReady = File.Exists(resolvedConfig);
+        var configIssue = DetectionConfigService.ValidateConfigFile(resolvedConfig);
+        var isConfigReady = configIssue is null;
         var pythonSetupCommand = hasBackendSource
             ? BuildPythonSetupCommand(request.PythonExecutable, backendRoot)
             : "";
@@ -36,7 +37,7 @@ public sealed class DesktopDiagnosticsService
                         : $"未使用 · {request.OutputDirectory}",
             isConfigReady
                 ? $"可用 · {resolvedConfig}"
-                : $"未找到 · {resolvedConfig}",
+                : configIssue ?? $"未找到 · {resolvedConfig}",
             PythonBackendService.IsBundledPythonExecutable(resolvedPython)
                 ? $"待检查 · 内置检测运行时 {resolvedPython}"
                 : string.IsNullOrWhiteSpace(request.PythonExecutable)
@@ -67,9 +68,10 @@ public sealed class DesktopDiagnosticsService
 
         var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
         var resolvedConfig = ResolveAgainstBackend(request.ConfigPath, backendRoot);
-        if (!File.Exists(resolvedConfig))
+        var configIssue = DetectionConfigService.ValidateConfigFile(resolvedConfig);
+        if (configIssue is not null)
         {
-            issues.Add($"阈值配置文件不存在: {resolvedConfig}");
+            issues.Add(configIssue);
         }
 
         var resolvedPython = PythonBackendService.ResolvePythonExecutable(request.PythonExecutable);

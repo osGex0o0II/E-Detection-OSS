@@ -51,9 +51,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    config = load_config(args.config)
     if args.json_events:
         try:
+            config = load_config(args.config)
             result = run_batch_detection(
                 input_dir=args.input_dir,
                 output_dir=args.output_dir,
@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
 
+    config = load_config(args.config)
     result = run_batch_detection(
         input_dir=args.input_dir,
         output_dir=args.output_dir,

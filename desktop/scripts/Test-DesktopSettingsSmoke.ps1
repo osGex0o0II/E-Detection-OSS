@@ -454,6 +454,10 @@ try {
     $currentActiveMinThreshold = Wait-ForAutomationName $mainWindow.Handle "电流激活下限" $WaitSeconds
     $freezeStdThreshold = Wait-ForAutomationName $mainWindow.Handle "数据波动容差" $WaitSeconds
     $voltageImbalanceThreshold = Wait-ForAutomationName $mainWindow.Handle "相电压不平衡阈值" $WaitSeconds
+    $voltageUnitHint = Wait-ForAutomationName $mainWindow.Handle "单位 V · 0-1000" $WaitSeconds
+    $currentUnitHint = Wait-ForAutomationName $mainWindow.Handle "单位 A" $WaitSeconds
+    $ratioUnitHint = Wait-ForAutomationName $mainWindow.Handle "比例 · 0-1" $WaitSeconds
+    $sampleCountHint = Wait-ForAutomationName $mainWindow.Handle "采样点数 · 1-1000" $WaitSeconds
     $currentOverloadRule = Wait-ForAutomationName $mainWindow.Handle "电流过载检测" $WaitSeconds
     $currentUnbalanceRule = Wait-ForAutomationName $mainWindow.Handle "电流不平衡检测" $WaitSeconds
     $powerFactorRule = Wait-ForAutomationName $mainWindow.Handle "功率因数检测" $WaitSeconds
@@ -476,8 +480,8 @@ try {
     $ntfyServerControl = Wait-ForAutomationName $mainWindow.Handle "ntfy 服务地址" $WaitSeconds
     $ntfyProxyToggle = Wait-ForAutomationName $mainWindow.Handle "ntfy 使用网络代理" $WaitSeconds
     $ntfyTestButton = Wait-ForAutomationName $mainWindow.Handle "发送 ntfy 测试推送" $WaitSeconds
-    $diagnosticsSection = Wait-ForAutomationName $mainWindow.Handle "诊断与高级" $WaitSeconds
-    $diagnosticsExpander = Expand-AutomationElement $mainWindow.Handle "诊断详情" $WaitSeconds
+    $diagnosticsSection = Wait-ForAutomationName $mainWindow.Handle "维护" $WaitSeconds
+    $diagnosticsExpander = Expand-AutomationElement $mainWindow.Handle "维护详情" $WaitSeconds
     Start-Sleep -Milliseconds 300
     $pythonExecutableControl = Wait-ForAutomationName $mainWindow.Handle "检测组件程序" $WaitSeconds
     $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络连接" $WaitSeconds
@@ -553,6 +557,10 @@ try {
         CurrentActiveMinThreshold = $currentActiveMinThreshold
         FreezeStdThreshold = $freezeStdThreshold
         VoltageImbalanceThreshold = $voltageImbalanceThreshold
+        VoltageUnitHint = $voltageUnitHint
+        CurrentUnitHint = $currentUnitHint
+        RatioUnitHint = $ratioUnitHint
+        SampleCountHint = $sampleCountHint
         CurrentOverloadRule = $currentOverloadRule
         CurrentUnbalanceRule = $currentUnbalanceRule
         PowerFactorRule = $powerFactorRule

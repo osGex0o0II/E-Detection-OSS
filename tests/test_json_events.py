@@ -82,6 +82,31 @@ def test_cli_json_events_outputs_jsonl_only(tmp_path: Path, monkeypatch, capsys)
     assert "汇总" not in "\n".join(lines)
 
 
+def test_cli_json_events_reports_invalid_config(tmp_path: Path, capsys):
+    config_path = tmp_path / "broken-config.json"
+    config_path.write_text("{not-json", encoding="utf-8")
+
+    exit_code = cli.main(
+        [
+            "--json-events",
+            "--no-report",
+            "--config",
+            str(config_path),
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == 1
+    events = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
+    assert events == [
+        {
+            "event": "error",
+            "error_type": "ValueError",
+            "message": f"配置文件无法解析: {config_path} (Expecting property name enclosed in double quotes)",
+        }
+    ]
+
+
 def test_run_batch_detection_emits_native_report_summary(tmp_path: Path, monkeypatch):
     csv_path = tmp_path / "demo.csv"
     csv_path.write_text("time,Uab\n0,320\n", encoding="utf-8")

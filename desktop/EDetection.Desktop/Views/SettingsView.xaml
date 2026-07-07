@@ -248,27 +248,33 @@
                                     </Grid.RowDefinitions>
                                     <StackPanel x:Name="VoltageMinThresholdRow" Spacing="6">
                                         <TextBlock Text="电压下限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                        <NumberBox Value="{Binding VoltageMinThreshold, Mode=TwoWay}" Minimum="0" Maximum="1000" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电压下限" />
+                                        <NumberBox Value="{Binding VoltageMinThreshold, Mode=TwoWay}" Minimum="0" Maximum="1000" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电压下限" AutomationProperties.HelpText="单位 V，范围 0 到 1000" />
+                                        <TextBlock Text="单位 V · 0-1000" Style="{StaticResource TableHeaderTextStyle}" />
                                     </StackPanel>
                                     <StackPanel x:Name="VoltageMaxThresholdRow" Grid.Column="1" Spacing="6">
                                         <TextBlock Text="电压上限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                        <NumberBox Value="{Binding VoltageMaxThreshold, Mode=TwoWay}" Minimum="0" Maximum="1000" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电压上限" />
+                                        <NumberBox Value="{Binding VoltageMaxThreshold, Mode=TwoWay}" Minimum="0" Maximum="1000" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电压上限" AutomationProperties.HelpText="单位 V，范围 0 到 1000" />
+                                        <TextBlock Text="单位 V · 0-1000" Style="{StaticResource TableHeaderTextStyle}" />
                                     </StackPanel>
                                     <StackPanel x:Name="CurrentMaxThresholdRow" Grid.Row="1" Spacing="6">
                                         <TextBlock Text="电流上限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                        <NumberBox Value="{Binding CurrentMaxThreshold, Mode=TwoWay}" Minimum="0" Maximum="100000" SmallChange="1" LargeChange="100" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电流上限" />
+                                        <NumberBox Value="{Binding CurrentMaxThreshold, Mode=TwoWay}" Minimum="0" Maximum="100000" SmallChange="1" LargeChange="100" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电流上限" AutomationProperties.HelpText="单位 A" />
+                                        <TextBlock Text="单位 A" Style="{StaticResource TableHeaderTextStyle}" />
                                     </StackPanel>
                                     <StackPanel x:Name="PowerFactorThresholdRow" Grid.Row="1" Grid.Column="1" Spacing="6">
                                         <TextBlock Text="功率因数下限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                        <NumberBox Value="{Binding PowerFactorMinThreshold, Mode=TwoWay}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="功率因数下限" />
+                                        <NumberBox Value="{Binding PowerFactorMinThreshold, Mode=TwoWay}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="功率因数下限" AutomationProperties.HelpText="比例，范围 0 到 1" />
+                                        <TextBlock Text="比例 · 0-1" Style="{StaticResource TableHeaderTextStyle}" />
                                     </StackPanel>
                                     <StackPanel x:Name="TemperatureMaxThresholdRow" Grid.Row="2" Spacing="6">
                                         <TextBlock Text="温度上限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                        <NumberBox Value="{Binding TemperatureMaxThreshold, Mode=TwoWay}" Minimum="-50" Maximum="200" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="温度上限" />
+                                        <NumberBox Value="{Binding TemperatureMaxThreshold, Mode=TwoWay}" Minimum="-50" Maximum="200" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="温度上限" AutomationProperties.HelpText="单位 ℃，范围 -50 到 200" />
+                                        <TextBlock Text="单位 ℃ · -50-200" Style="{StaticResource TableHeaderTextStyle}" />
                                     </StackPanel>
                                     <StackPanel x:Name="FreezeCountThresholdRow" Grid.Row="2" Grid.Column="1" Spacing="6">
                                         <TextBlock Text="连续不变化点数" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                        <NumberBox Value="{Binding FreezeCountThreshold, Mode=TwoWay}" Minimum="1" Maximum="1000" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="连续不变化点数" />
+                                        <NumberBox Value="{Binding FreezeCountThreshold, Mode=TwoWay}" Minimum="1" Maximum="1000" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="连续不变化点数" AutomationProperties.HelpText="采样点数，范围 1 到 1000" />
+                                        <TextBlock Text="采样点数 · 1-1000" Style="{StaticResource TableHeaderTextStyle}" />
                                     </StackPanel>
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
@@ -285,27 +291,33 @@
                                         </Grid.RowDefinitions>
                                         <StackPanel x:Name="CurrentUnbalanceThresholdRow" Spacing="6">
                                             <TextBlock Text="电流不平衡上限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <NumberBox Value="{Binding CurrentUnbalanceMaxThreshold, Mode=TwoWay}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电流不平衡上限" />
+                                            <NumberBox Value="{Binding CurrentUnbalanceMaxThreshold, Mode=TwoWay}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电流不平衡上限" AutomationProperties.HelpText="比例，范围 0 到 1，例如 0.15 表示 15%" />
+                                            <TextBlock Text="比例 · 0-1，例如 0.15 表示 15%" Style="{StaticResource TableHeaderTextStyle}" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Spacing="6">
                                             <TextBlock Text="有功功率下限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <NumberBox Value="{Binding ActivePowerMinThreshold, Mode=TwoWay}" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="有功功率下限" />
+                                            <NumberBox Value="{Binding ActivePowerMinThreshold, Mode=TwoWay}" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="有功功率下限" AutomationProperties.HelpText="单位 kW" />
+                                            <TextBlock Text="单位 kW" Style="{StaticResource TableHeaderTextStyle}" />
                                         </StackPanel>
                                         <StackPanel x:Name="TemperatureMinThresholdRow" Grid.Row="1" Spacing="6">
                                             <TextBlock Text="温度下限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <NumberBox Value="{Binding TemperatureMinThreshold, Mode=TwoWay}" Minimum="-50" Maximum="200" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="温度下限" />
+                                            <NumberBox Value="{Binding TemperatureMinThreshold, Mode=TwoWay}" Minimum="-50" Maximum="200" SmallChange="1" LargeChange="10" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="温度下限" AutomationProperties.HelpText="单位 ℃，范围 -50 到 200" />
+                                            <TextBlock Text="单位 ℃ · -50-200" Style="{StaticResource TableHeaderTextStyle}" />
                                         </StackPanel>
                                         <StackPanel x:Name="CurrentActiveMinThresholdRow" Grid.Row="1" Grid.Column="1" Spacing="6">
                                             <TextBlock Text="电流激活下限" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <NumberBox Value="{Binding CurrentActiveMinThreshold, Mode=TwoWay}" Minimum="0.001" Maximum="100000" SmallChange="0.1" LargeChange="1" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电流激活下限" />
+                                            <NumberBox Value="{Binding CurrentActiveMinThreshold, Mode=TwoWay}" Minimum="0.001" Maximum="100000" SmallChange="0.1" LargeChange="1" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="电流激活下限" AutomationProperties.HelpText="单位 A" />
+                                            <TextBlock Text="单位 A" Style="{StaticResource TableHeaderTextStyle}" />
                                         </StackPanel>
                                         <StackPanel x:Name="FreezeStdThresholdRow" Grid.Row="2" Spacing="6">
                                             <TextBlock Text="数据波动容差" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <NumberBox Value="{Binding FreezeStdThreshold, Mode=TwoWay}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="数据波动容差" />
+                                            <NumberBox Value="{Binding FreezeStdThreshold, Mode=TwoWay}" Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="数据波动容差" AutomationProperties.HelpText="比例，范围 0 到 1" />
+                                            <TextBlock Text="比例 · 0-1" Style="{StaticResource TableHeaderTextStyle}" />
                                         </StackPanel>
                                         <StackPanel Grid.Row="2" Grid.Column="1" Spacing="6">
                                             <TextBlock Text="相电压不平衡阈值" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <NumberBox Value="{Binding VoltageImbalanceThreshold, Mode=TwoWay}" Minimum="0.001" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="相电压不平衡阈值" />
+                                            <NumberBox Value="{Binding VoltageImbalanceThreshold, Mode=TwoWay}" Minimum="0.001" Maximum="1" SmallChange="0.01" LargeChange="0.05" SpinButtonPlacementMode="Inline" ValidationMode="InvalidInputOverwritten" HorizontalAlignment="Stretch" AutomationProperties.Name="相电压不平衡阈值" AutomationProperties.HelpText="比例，范围 0.001 到 1" />
+                                            <TextBlock Text="比例 · 0.001-1" Style="{StaticResource TableHeaderTextStyle}" />
                                         </StackPanel>
                                     </Grid>
                                 </Expander>
@@ -690,7 +702,7 @@
                         </Border>
                     </StackPanel>
                     <StackPanel x:Name="AdvancedSection" Spacing="8">
-                        <TextBlock Text="诊断与高级" Style="{StaticResource SectionTitleTextStyle}" />
+                        <TextBlock Text="维护" Style="{StaticResource SectionTitleTextStyle}" />
                         <Border Style="{StaticResource SettingsGroupStyle}">
                             <StackPanel>
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -699,16 +711,28 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="应用状态" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <Button Grid.Column="1" Command="{Binding RefreshDesktopHealthCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="刷新应用状态">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
-                                            <TextBlock Text="刷新状态" />
-                                        </StackPanel>
-                                    </Button>
+                                    <StackPanel Grid.Column="1" Spacing="8">
+                                        <TextBlock Text="{Binding DesktopHealth.SummaryText}" TextWrapping="WrapWholeWords" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Button Command="{Binding RefreshDesktopHealthCommand}" HorizontalAlignment="Left" AutomationProperties.Name="刷新应用状态">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                                <TextBlock Text="刷新状态" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Expander x:Name="DiagnosticsDetailsExpander" Header="诊断详情" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
+                                <Expander x:Name="DiagnosticsDetailsExpander" Header="维护详情" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
                                     <StackPanel>
+                                        <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="200" />
+                                                <ColumnDefinition Width="*" MaxWidth="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="检测组件" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding DesktopHealth.PythonBridgeText}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                         <Grid x:Name="PythonExecutableRow" MinHeight="64" Padding="18,10" ColumnSpacing="20">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="200" />
@@ -734,15 +758,6 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="设置存储" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                             <TextBlock Grid.Column="1" Text="{Binding DesktopHealth.SettingsText}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                                        </Grid>
-                                        <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                        <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="200" />
-                                                <ColumnDefinition Width="*" MaxWidth="320" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="检测组件状态" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <TextBlock Grid.Column="1" Text="{Binding DesktopHealth.PythonBridgeText}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                         </Grid>
                                     </StackPanel>
                                 </Expander>

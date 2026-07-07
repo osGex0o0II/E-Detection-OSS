@@ -20,9 +20,7 @@ This folder contains the WinUI 3 native shell for E-Detection. The desktop app o
 - `EDetection.Desktop/Services/StartupService.cs` owns the startup integration boundary. The default provider is a per-user Task Scheduler logon task with `HKCU Run` kept as a legacy fallback.
 - `EDetection.Desktop/Services/TaskbarProgressService.cs` exposes native Windows taskbar progress.
 - `EDetection.Desktop/Services/DesktopNotificationService.cs` registers Windows App SDK notifications and handles notification actions when available.
-- `EDetection.Desktop/Services/CommandPaletteService.cs` owns quick action catalog construction, search scoring, category ordering, command execution bridges, and recent report actions.
 - `EDetection.Desktop/Models/ShellStatusSnapshot.cs` is the shared shell contract used by native surfaces such as the tray menu and Windows taskbar progress.
-- `EDetection.Desktop/Models/CommandPaletteAction.cs` is the shared command palette item contract consumed by the shell view.
 - `EDetection.Desktop/ViewModels` holds screen state and commands.
 - `EDetection.Desktop/ViewModels/DiagnosticsViewModel.cs` owns bindable diagnostics text, Python probe status, repair command text, and clipboard diagnostic export text.
 - `EDetection.Desktop/ViewModels/DesktopHealthViewModel.cs` owns the bindable desktop health card state while `DesktopHealthService` owns the actual checks.

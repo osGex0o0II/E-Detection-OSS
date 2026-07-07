@@ -713,8 +713,8 @@ public sealed partial class SettingsView : UserControl
         new("更新代理", "更新与网络", "更新 网络代理 proxy", "UpdatesSection", TargetName: "UpdateProxyRow", ExpanderName: "AdvancedUpdateExpander"),
         new("更新通道", "更新与网络", "更新 通道 稳定版 预览版 手动", "UpdatesSection", TargetName: "UpdateChannelRow", ExpanderName: "AdvancedUpdateExpander"),
         new("更新源", "更新与网络", "更新源 feed release github", "UpdatesSection", TargetName: "UpdateFeedRow", ExpanderName: "AdvancedUpdateExpander"),
-        new("高级设置", "集成与高级", "高级 应用状态 检测组件 python 设置存储", "AdvancedSection"),
-        new("检测组件程序", "集成与高级", "高级 python 检测组件 程序 exe", "AdvancedSection", TargetName: "PythonExecutableRow", ExpanderName: "DiagnosticsDetailsExpander"),
+        new("维护", "集成与高级", "维护 应用状态 检测组件 python 设置存储", "AdvancedSection"),
+        new("检测组件程序", "集成与高级", "维护 python 检测组件 程序 exe", "AdvancedSection", TargetName: "PythonExecutableRow", ExpanderName: "DiagnosticsDetailsExpander"),
     ];
 
     private async void BrowseInputDirectory_Click(object sender, RoutedEventArgs e)

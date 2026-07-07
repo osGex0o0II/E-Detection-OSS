@@ -2577,7 +2577,8 @@ public partial class MainViewModel : ObservableObject
         DesktopDiagnosticsService.IsInputReady(InputDirectory);
 
     private bool IsConfigReady()
-        => File.Exists(DetectionConfigService.ResolveEffectiveConfigPath(ConfigPath));
+        => DetectionConfigService.ValidateConfigFile(
+            DetectionConfigService.ResolveEffectiveConfigPath(ConfigPath)) is null;
 
     private bool CanCopyPythonSetupCommand() =>
         !string.IsNullOrWhiteSpace(PythonSetupCommandText);

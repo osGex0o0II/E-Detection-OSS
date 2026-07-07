@@ -124,14 +124,18 @@ def split_config(config: dict[str, Any]) -> tuple[dict[str, float], dict[str, bo
 
 
 def load_config(path: str | Path) -> dict[str, float | bool]:
-    """Load a config file, returning defaults if it is missing or invalid."""
+    """Load a config file, returning defaults only when it is missing."""
     config_path = Path(path)
     if not config_path.exists():
         return DEFAULT_CONFIG.copy()
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return DEFAULT_CONFIG.copy()
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"配置文件无法解析: {config_path} ({exc.msg})") from exc
+    except OSError as exc:
+        raise OSError(f"配置文件不可读取: {config_path} ({exc})") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"配置文件格式错误: {config_path}，根节点必须是对象。")
     return normalize_config(data)
 
 

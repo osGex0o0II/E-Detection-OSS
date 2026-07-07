@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import math
 
-from e_detection.settings import DEFAULT_CONFIG, normalize_config, split_config
+import pytest
+
+from e_detection.settings import DEFAULT_CONFIG, load_config, normalize_config, split_config
 
 
 def test_normalize_config_uses_defaults_for_invalid_values():
@@ -36,3 +38,25 @@ def test_old_current_switch_still_maps_to_new_rule_keys():
 
     assert config["current_overload"] is True
     assert config["current_unbalance"] is True
+
+
+def test_load_config_uses_defaults_when_missing(tmp_path):
+    config = load_config(tmp_path / "missing.json")
+
+    assert config == DEFAULT_CONFIG
+
+
+def test_load_config_rejects_invalid_json(tmp_path):
+    config_path = tmp_path / "broken.json"
+    config_path.write_text("{not-json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="配置文件无法解析"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_non_object_root(tmp_path):
+    config_path = tmp_path / "array.json"
+    config_path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="根节点必须是对象"):
+        load_config(config_path)
