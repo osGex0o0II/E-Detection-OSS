@@ -1,22 +1,13 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
-using EDetection.Desktop.Models;
-using EDetection.Desktop.Services;
 using EDetection.Desktop.ViewModels;
-using Windows.Foundation;
-using Windows.System;
 
 namespace EDetection.Desktop.Views;
 
 public sealed partial class AppShellView : UserControl
 {
-    private readonly CommandPaletteService _commandPalette = new();
-    private ContentDialog? _quickActionDialog;
-    private TextBox? _quickActionSearchBox;
-    private ListView? _quickActionListView;
     private MainViewModel? _observedViewModel;
     private bool? _lastCompactLayout;
     private bool _isSettingsPageVisible;
@@ -40,9 +31,6 @@ public sealed partial class AppShellView : UserControl
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) =>
         ShowSettingsPage();
-
-    private async void QuickActionsButton_Click(object sender, RoutedEventArgs e) =>
-        await ShowQuickActionsAsync();
 
     private void AboutButton_Click(object sender, RoutedEventArgs e) =>
         AboutRequested?.Invoke(this, EventArgs.Empty);
@@ -277,203 +265,6 @@ public sealed partial class AppShellView : UserControl
                 WorkbenchScroll.ChangeView(null, 0, null, disableAnimation: true);
             }
         });
-    }
-
-    private CommandPaletteContext BuildCommandPaletteContext() =>
-        new(
-            ViewModel,
-            ViewModel?.StartCommand,
-            null,
-            ViewModel?.CancelCommand,
-            null,
-            ViewModel?.RefreshDiagnosticsCommand,
-            null,
-            RunSetup.BrowseInputDirectoryAsync,
-            RunSetup.BrowseConfigPathAsync,
-            RunSetup.BrowsePythonExecutableAsync,
-            OpenSettingsAsync,
-            OpenAppearanceSettingsAsync,
-            OpenThresholdSettingsAsync,
-            OpenDetectionRulesAsync,
-            OpenUpdateSettingsAsync,
-            OpenAboutAsync);
-
-    private Task OpenSettingsAsync()
-    {
-        ShowSettingsPage();
-        return Task.CompletedTask;
-    }
-
-    private Task OpenAppearanceSettingsAsync()
-    {
-        ShowSettingsPage("AppearanceSection");
-        return Task.CompletedTask;
-    }
-
-    private Task OpenThresholdSettingsAsync()
-    {
-        ShowSettingsPage("ThresholdsSection");
-        return Task.CompletedTask;
-    }
-
-    private Task OpenDetectionRulesAsync()
-    {
-        ShowSettingsPage("DetectionRulesSection");
-        return Task.CompletedTask;
-    }
-
-    private Task OpenUpdateSettingsAsync()
-    {
-        ShowSettingsPage("UpdatesSection");
-        return Task.CompletedTask;
-    }
-
-    private Task OpenAboutAsync()
-    {
-        AboutRequested?.Invoke(this, EventArgs.Empty);
-        return Task.CompletedTask;
-    }
-
-    private async Task ShowQuickActionsAsync()
-    {
-        if (_quickActionDialog is not null)
-        {
-            return;
-        }
-
-        _quickActionSearchBox = new TextBox
-        {
-            PlaceholderText = "搜索命令",
-        };
-        _quickActionSearchBox.TextChanged += QuickActionSearchBox_TextChanged;
-        _quickActionSearchBox.KeyDown += QuickActionSearchBox_KeyDown;
-
-        _quickActionListView = new ListView
-        {
-            MaxHeight = 360,
-            SelectionMode = ListViewSelectionMode.Single,
-            IsItemClickEnabled = true,
-            ItemTemplate = BuildQuickActionTemplate(),
-        };
-        _quickActionListView.ItemClick += QuickActionListView_ItemClick;
-
-        var panel = new StackPanel
-        {
-            MinWidth = 520,
-            Spacing = 12,
-        };
-        panel.Children.Add(_quickActionSearchBox);
-        panel.Children.Add(_quickActionListView);
-
-        _quickActionDialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = "快速操作",
-            Content = panel,
-            CloseButtonText = "关闭",
-            DefaultButton = ContentDialogButton.None,
-        };
-
-        RefreshQuickActionList();
-        _quickActionDialog.Opened += (_, _) => _quickActionSearchBox.Focus(FocusState.Programmatic);
-        _quickActionDialog.Closed += (_, _) =>
-        {
-            _quickActionDialog = null;
-            _quickActionSearchBox = null;
-            _quickActionListView = null;
-        };
-
-        await _quickActionDialog.ShowAsync();
-    }
-
-    private void QuickActionSearchBox_TextChanged(object sender, TextChangedEventArgs e) =>
-        RefreshQuickActionList();
-
-    private async void QuickActionSearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key is VirtualKey.Enter)
-        {
-            e.Handled = true;
-            await ExecuteSelectedQuickActionAsync();
-        }
-        else if (e.Key is VirtualKey.Down && _quickActionListView is { Items.Count: > 0 })
-        {
-            e.Handled = true;
-            _quickActionListView.SelectedIndex = Math.Min(_quickActionListView.SelectedIndex + 1, _quickActionListView.Items.Count - 1);
-            _quickActionListView.Focus(FocusState.Programmatic);
-        }
-    }
-
-    private async void QuickActionListView_ItemClick(object sender, ItemClickEventArgs e)
-    {
-        if (e.ClickedItem is CommandPaletteAction action)
-        {
-            await ExecuteQuickActionAsync(action);
-        }
-    }
-
-    private async Task ExecuteSelectedQuickActionAsync()
-    {
-        if (_quickActionListView?.SelectedItem is CommandPaletteAction selected)
-        {
-            await ExecuteQuickActionAsync(selected);
-            return;
-        }
-
-        if (_quickActionListView?.Items.FirstOrDefault() is CommandPaletteAction first)
-        {
-            await ExecuteQuickActionAsync(first);
-        }
-    }
-
-    private async Task ExecuteQuickActionAsync(CommandPaletteAction action)
-    {
-        if (!action.IsEnabled)
-        {
-            return;
-        }
-
-        _quickActionDialog?.Hide();
-        await action.ExecuteAsync();
-    }
-
-    private void RefreshQuickActionList()
-    {
-        if (_quickActionListView is null)
-        {
-            return;
-        }
-
-        var query = _quickActionSearchBox?.Text.Trim() ?? "";
-        var actions = _commandPalette.Build(BuildCommandPaletteContext());
-        var filtered = _commandPalette.Filter(actions, query);
-        _quickActionListView.ItemsSource = filtered;
-        if (filtered.Count > 0)
-        {
-            _quickActionListView.SelectedIndex = 0;
-        }
-    }
-
-    private static DataTemplate BuildQuickActionTemplate()
-    {
-        const string xaml = """
-<DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-    <Grid ColumnSpacing="12" Padding="4,8">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="32" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <FontIcon Glyph="{Binding Glyph}" FontSize="16" VerticalAlignment="Center" />
-        <StackPanel Grid.Column="1" Spacing="2">
-            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-            <TextBlock Text="{Binding Description}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
-        </StackPanel>
-        <TextBlock Grid.Column="2" Text="{Binding Category}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Right" />
-    </Grid>
-</DataTemplate>
-""";
-        return (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(xaml);
     }
 
 }

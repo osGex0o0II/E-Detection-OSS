@@ -70,20 +70,6 @@ public sealed class SettingsService
             return false;
         }
 
-        if (settings.SettingsVersion < 3)
-        {
-            if (!settings.EnableQuickActionsShortcut)
-            {
-                settings.SelectedQuickActionsShortcutIndex = 2;
-            }
-        }
-
-        if (settings.SettingsVersion < 4 && settings.SelectedQuickActionsShortcutIndex == 0)
-        {
-            settings.EnableQuickActionsShortcut = false;
-            settings.SelectedQuickActionsShortcutIndex = 2;
-        }
-
         if (settings.SettingsVersion < 6)
         {
             if (string.IsNullOrWhiteSpace(settings.NtfyServerUrl))

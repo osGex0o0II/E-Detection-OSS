@@ -3,6 +3,8 @@ param(
 
     [string]$InstallDirectory = "",
 
+    [string]$UnsafeInstallDirectory = "",
+
     [switch]$KeepInstallDirectory
 )
 
@@ -137,6 +139,7 @@ New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
 
 $installLog = Join-Path $smokeRoot "install.log"
 $updateLog = Join-Path $smokeRoot "update.log"
+$unsafeInstallLog = Join-Path $smokeRoot "unsafe-install.log"
 $uninstallLog = Join-Path $smokeRoot "uninstall.log"
 $entryPoint = "EDetection.Desktop.exe"
 $installedExe = Join-Path $installFull $entryPoint
@@ -159,6 +162,28 @@ else {
 try {
     if (Test-Path $installFull) {
         Remove-Item -LiteralPath $installFull -Recurse -Force
+    }
+
+    if (![string]::IsNullOrWhiteSpace($UnsafeInstallDirectory)) {
+        $unsafeFull = Resolve-FullPath $UnsafeInstallDirectory
+        Assert-SmokeInstallPath $unsafeFull
+        New-Item -ItemType Directory -Force -Path $unsafeFull | Out-Null
+        $unsafeProcess = Start-Process `
+            -FilePath $installerFull `
+            -ArgumentList @(
+                "/VERYSILENT",
+                "/SUPPRESSMSGBOXES",
+                "/NORESTART",
+                "/SP-",
+                "/DIR=$unsafeFull",
+                "/LOG=$unsafeInstallLog"
+            ) `
+            -Wait `
+            -PassThru `
+            -NoNewWindow
+        if ($unsafeProcess.ExitCode -eq 0) {
+            throw "Installer smoke failed: unsafe install directory was accepted: $unsafeFull"
+        }
     }
 
     Invoke-Native `
@@ -195,6 +220,12 @@ try {
         InstallerUpdateSmokeMarker = $settingsMarker
     } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
 
+    $staleTopLevelFile = Join-Path $installFull "obsolete-publish-file.txt"
+    $staleRuntimeDirectory = Join-Path $installFull "python-runtime\obsolete-package"
+    New-Item -ItemType Directory -Force -Path $staleRuntimeDirectory | Out-Null
+    Set-Content -Path $staleTopLevelFile -Value "stale top-level file" -Encoding ASCII
+    Set-Content -Path (Join-Path $staleRuntimeDirectory "stale.txt") -Value "stale runtime file" -Encoding ASCII
+
     Set-Content -Path $installedExe -Value "corrupted by installer update smoke" -Encoding ASCII
     Invoke-Native `
         -FilePath $installerFull `
@@ -209,6 +240,14 @@ try {
         -FailureMessage "Installer smoke failed: update/repair setup did not complete successfully."
 
     & $healthScript -PackagePath $installFull
+    if (Test-Path $staleTopLevelFile) {
+        throw "Installer smoke failed: stale top-level file was not removed during update: $staleTopLevelFile"
+    }
+
+    if (Test-Path $staleRuntimeDirectory) {
+        throw "Installer smoke failed: stale runtime directory was not removed during update: $staleRuntimeDirectory"
+    }
+
     $settingsAfterUpdate = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
     if ($settingsAfterUpdate.InstallerUpdateSmokeMarker -ne $settingsMarker) {
         throw "Installer smoke failed: user settings were not preserved during update/repair install."

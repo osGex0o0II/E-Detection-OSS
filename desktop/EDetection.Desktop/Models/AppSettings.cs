@@ -56,12 +56,6 @@ public sealed class AppSettings
 
     public string UpdateFeedUrl { get; set; } = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest";
 
-    public bool EnableGlobalHotkeys { get; set; }
-
-    public bool EnableQuickActionsShortcut { get; set; }
-
-    public int SelectedQuickActionsShortcutIndex { get; set; } = 2;
-
     public int SelectedLogRetentionIndex { get; set; } = 1;
 
     public int SelectedRecentReportLimitIndex { get; set; } = 1;

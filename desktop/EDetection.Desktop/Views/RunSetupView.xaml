@@ -144,53 +144,10 @@
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </StackPanel>
                             </Grid>
-                            <Expander Header="高级排障"
+                            <Expander Header="查看排障选项"
                                       HorizontalAlignment="Stretch"
                                       IsExpanded="False">
-                                <StackPanel Spacing="8">
-                                    <Grid ColumnSpacing="10"
-                                          RowSpacing="6">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="96" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="输入"
-                                                   Style="{StaticResource TableHeaderTextStyle}" />
-                                        <TextBlock Grid.Column="1"
-                                                   Text="{Binding InputDiagnosticText}"
-                                                   TextWrapping="WrapWholeWords"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Grid.Row="1"
-                                                   Text="阈值"
-                                                   Style="{StaticResource TableHeaderTextStyle}" />
-                                        <TextBlock Grid.Row="1"
-                                                   Grid.Column="1"
-                                                   Text="{Binding ConfigDiagnosticText}"
-                                                   TextWrapping="WrapWholeWords"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Grid.Row="2"
-                                                   Text="检测组件"
-                                                   Style="{StaticResource TableHeaderTextStyle}" />
-                                        <TextBlock Grid.Row="2"
-                                                   Grid.Column="1"
-                                                   Text="{Binding BackendDiagnosticText}"
-                                                   TextWrapping="WrapWholeWords"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Grid.Row="3"
-                                                   Text="报告"
-                                                   Style="{StaticResource TableHeaderTextStyle}" />
-                                        <TextBlock Grid.Row="3"
-                                                   Grid.Column="1"
-                                                   Text="{Binding OutputDiagnosticText}"
-                                                   TextWrapping="WrapWholeWords"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    </Grid>
+                                <StackPanel Spacing="10">
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="8">
                                         <Button Command="{Binding RefreshDiagnosticsCommand}"
@@ -219,6 +176,53 @@
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
+                                    <Expander Header="状态详情"
+                                              HorizontalAlignment="Stretch"
+                                              IsExpanded="False">
+                                        <Grid ColumnSpacing="10"
+                                              RowSpacing="6">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="96" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="输入"
+                                                       Style="{StaticResource TableHeaderTextStyle}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding InputDiagnosticText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Text="阈值"
+                                                       Style="{StaticResource TableHeaderTextStyle}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="1"
+                                                       Text="{Binding ConfigDiagnosticText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Grid.Row="2"
+                                                       Text="检测组件"
+                                                       Style="{StaticResource TableHeaderTextStyle}" />
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.Column="1"
+                                                       Text="{Binding BackendDiagnosticText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <TextBlock Grid.Row="3"
+                                                       Text="报告"
+                                                       Style="{StaticResource TableHeaderTextStyle}" />
+                                            <TextBlock Grid.Row="3"
+                                                       Grid.Column="1"
+                                                       Text="{Binding OutputDiagnosticText}"
+                                                       TextWrapping="WrapWholeWords"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </Grid>
+                                    </Expander>
                                 </StackPanel>
                             </Expander>
                         </StackPanel>

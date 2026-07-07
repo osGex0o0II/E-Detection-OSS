@@ -46,6 +46,23 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\Assets"
+Type: filesandordirs; Name: "{app}\core"
+Type: filesandordirs; Name: "{app}\e_detection"
+Type: filesandordirs; Name: "{app}\python-runtime"
+Type: filesandordirs; Name: "{app}\python-wheelhouse"
+Type: filesandordirs; Name: "{app}\Styles"
+Type: filesandordirs; Name: "{app}\Views"
+Type: files; Name: "{app}\*.dll"
+Type: files; Name: "{app}\*.exe"
+Type: files; Name: "{app}\*.json"
+Type: files; Name: "{app}\*.pri"
+Type: files; Name: "{app}\*.ps1"
+Type: files; Name: "{app}\*.toml"
+Type: files; Name: "{app}\*.txt"
+Type: files; Name: "{app}\*.xbf"
+
 [Icons]
 Name: "{group}\E-Detection Desktop"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"
 Name: "{autodesktop}\E-Detection Desktop"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"; Tasks: desktopicon
@@ -107,5 +124,14 @@ begin
         MB_OK);
       Result := False;
     end;
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+  if IsUnsafeInstallDirectory(WizardDirValue) then
+  begin
+    Result := '当前安装向导按普通用户权限安装。请选择用户目录下的应用文件夹，例如默认位置，避免安装到 Program Files、桌面、用户根目录或磁盘根目录。';
   end;
 end;

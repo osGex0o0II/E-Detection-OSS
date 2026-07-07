@@ -127,9 +127,6 @@ public partial class MainViewModel : ObservableObject
         UpdateFeedUrl = saved.UpdateFeedUrl;
         UpdateStatusText = $"当前版本 {new AppInfoService().GetInfo().Version}";
         RefreshSecureCredentialStatus();
-        EnableGlobalHotkeys = false;
-        SelectedQuickActionsShortcutIndex = 2;
-        EnableQuickActionsShortcut = false;
         RuntimeLogs.SelectedRetentionIndex = Math.Clamp(saved.SelectedLogRetentionIndex, 0, 3);
         SelectedThemeIndex = Math.Clamp(saved.SelectedThemeIndex, 0, 2);
         SelectedBackdropIndex = Math.Clamp(saved.SelectedBackdropIndex, 0, 2);
@@ -577,15 +574,6 @@ public partial class MainViewModel : ObservableObject
     public RuntimeLogViewModel RuntimeLogs { get; }
 
     public ReportHistoryViewModel ReportHistory { get; }
-
-    [ObservableProperty]
-    public partial bool EnableGlobalHotkeys { get; set; }
-
-    [ObservableProperty]
-    public partial bool EnableQuickActionsShortcut { get; set; }
-
-    [ObservableProperty]
-    public partial int SelectedQuickActionsShortcutIndex { get; set; } = 2;
 
     public void PrepareForShellShutdown()
     {
@@ -1270,51 +1258,6 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnUpdateFeedUrlChanged(string value) => SavePreferenceSettings();
 
-    partial void OnEnableGlobalHotkeysChanged(bool value)
-    {
-        if (value)
-        {
-            EnableGlobalHotkeys = false;
-            return;
-        }
-
-        SavePreferenceSettings();
-    }
-
-    partial void OnEnableQuickActionsShortcutChanged(bool value)
-    {
-        if (value)
-        {
-            EnableQuickActionsShortcut = false;
-            return;
-        }
-
-        if (SelectedQuickActionsShortcutIndex != 2)
-        {
-            SelectedQuickActionsShortcutIndex = 2;
-            return;
-        }
-
-        SavePreferenceSettings();
-    }
-
-    partial void OnSelectedQuickActionsShortcutIndexChanged(int value)
-    {
-        if (value != 2)
-        {
-            SelectedQuickActionsShortcutIndex = 2;
-            return;
-        }
-
-        if (EnableQuickActionsShortcut)
-        {
-            EnableQuickActionsShortcut = false;
-            return;
-        }
-
-        SavePreferenceSettings();
-    }
-
     partial void OnWriteReportChanged(bool value)
     {
         RefreshLocalDiagnostics();
@@ -1826,7 +1769,20 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        SaveDetectionConfig();
+        if (!SaveDetectionConfig())
+        {
+            LastFailureText = "检测阈值保存失败，请检查阈值文件路径或文件权限。";
+            StatusText = "无法开始检测";
+            RunTelemetry.ApplyCurrentFile("阈值设置未保存");
+            SetTaskbarProgress(TaskbarProgressKind.Error, 100);
+            RequestDesktopNotification(
+                DesktopNotificationKind.Error,
+                "无法开始检测",
+                LastFailureText,
+                ReportPath);
+            return;
+        }
+
         var configPath = EnsureEffectiveConfigPath();
         ResetRunState();
         var request = new DetectionRequest
@@ -3343,9 +3299,6 @@ public partial class MainViewModel : ObservableObject
             UseProxyForUpdates = UseProxyForUpdates,
             SelectedUpdateChannelIndex = SelectedUpdateChannelIndex,
             UpdateFeedUrl = UpdateFeedUrl,
-            EnableGlobalHotkeys = false,
-            EnableQuickActionsShortcut = false,
-            SelectedQuickActionsShortcutIndex = 2,
             SelectedLogRetentionIndex = SelectedLogRetentionIndex,
             SelectedRecentReportLimitIndex = ReportHistory.SelectedRecentReportLimitIndex,
             RecentReports = RecentReports.ToList(),
@@ -3389,9 +3342,6 @@ public partial class MainViewModel : ObservableObject
         UseProxyForUpdates = defaults.UseProxyForUpdates;
         SelectedUpdateChannelIndex = defaults.SelectedUpdateChannelIndex;
         UpdateFeedUrl = defaults.UpdateFeedUrl;
-        EnableGlobalHotkeys = false;
-        SelectedQuickActionsShortcutIndex = 2;
-        EnableQuickActionsShortcut = false;
         RuntimeLogs.SelectedRetentionIndex = defaults.SelectedLogRetentionIndex;
         ReportHistory.SelectedRecentReportLimitIndex = defaults.SelectedRecentReportLimitIndex;
         SelectedThemeIndex = defaults.SelectedThemeIndex;

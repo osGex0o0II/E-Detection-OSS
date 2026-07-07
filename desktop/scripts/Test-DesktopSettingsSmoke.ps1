@@ -387,9 +387,6 @@ try {
         UseProxyForUpdates = $true
         SelectedUpdateChannelIndex = 2
         UpdateFeedUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest"
-        EnableGlobalHotkeys = $false
-        EnableQuickActionsShortcut = $false
-        SelectedQuickActionsShortcutIndex = 2
         SelectedLogRetentionIndex = 2
         SelectedRecentReportLimitIndex = 2
         SelectedThemeIndex = 0
@@ -505,16 +502,15 @@ try {
         throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '8'."
     }
 
-    if ($settingsJson.EnableGlobalHotkeys -ne $false) {
-        throw "Settings smoke failed: EnableGlobalHotkeys was '$($settingsJson.EnableGlobalHotkeys)', expected 'False'."
-    }
-
-    if ($settingsJson.EnableQuickActionsShortcut -ne $false) {
-        throw "Settings smoke failed: EnableQuickActionsShortcut was '$($settingsJson.EnableQuickActionsShortcut)', expected 'False'."
-    }
-
-    if ($settingsJson.SelectedQuickActionsShortcutIndex -ne 2) {
-        throw "Settings smoke failed: SelectedQuickActionsShortcutIndex was '$($settingsJson.SelectedQuickActionsShortcutIndex)', expected '2'."
+    $removedShortcutSettings = @(
+        "EnableGlobalHotkeys",
+        "EnableQuickActionsShortcut",
+        "SelectedQuickActionsShortcutIndex"
+    )
+    foreach ($propertyName in $removedShortcutSettings) {
+        if ($settingsJson.PSObject.Properties.Name -contains $propertyName) {
+            throw "Settings smoke failed: removed shortcut setting '$propertyName' is still persisted."
+        }
     }
 
     if ($settingsJson.UseProxyForUpdates -ne $true) {
@@ -591,9 +587,7 @@ try {
         CheckUpdatesButton = $checkUpdatesButton
         OpenUpdatePageButton = $openUpdatePageButton
         UpdateFeedControl = $updateFeedControl
-        EnableGlobalHotkeys = $settingsJson.EnableGlobalHotkeys
-        EnableQuickActionsShortcut = $settingsJson.EnableQuickActionsShortcut
-        QuickActionsShortcutIndex = $settingsJson.SelectedQuickActionsShortcutIndex
+        RemovedShortcutSettingsPersisted = @($removedShortcutSettings | Where-Object { $settingsJson.PSObject.Properties.Name -contains $_ })
         SettingsVersion = $settingsJson.SettingsVersion
         DesktopHealthSection = $desktopHealthSection
         RecentLimitControl = $recentLimitControl

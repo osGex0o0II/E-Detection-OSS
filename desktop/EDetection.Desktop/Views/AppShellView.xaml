@@ -22,6 +22,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="138" />
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal"
@@ -43,9 +44,8 @@
 
             <StackPanel Grid.Column="2"
                         Orientation="Horizontal"
-                        Margin="0,0,148,0"
                         Height="44"
-                        VerticalAlignment="Top">
+                        VerticalAlignment="Stretch">
                 <Button x:Name="SettingsTitleBarButton"
                         Style="{StaticResource TitleBarIconButtonStyle}"
                         Click="SettingsButton_Click"
