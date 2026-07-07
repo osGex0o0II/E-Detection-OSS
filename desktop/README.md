@@ -7,6 +7,7 @@ This folder contains the WinUI 3 native shell for E-Detection. The desktop app o
 - `EDetection.Desktop/Models` contains the JSONL event contract shared with the Python CLI.
 - `EDetection.Desktop/Services/PythonBackendService.cs` starts the Python process and streams stdout JSON Lines into ViewModels.
 - `EDetection.Desktop/Services/DesktopDiagnosticsService.cs` owns input/config/output/Python readiness checks and repair-command generation.
+- `EDetection.Desktop/Services/DetectionEnvironmentRepairService.cs` owns the user-triggered local detection-core repair path.
 - `EDetection.Desktop/Services/DesktopHealthService.cs` summarizes shell health for notifications, startup integration, settings storage, package integrity, Python bridge mode, and install shape.
 - `EDetection.Desktop/Services/ReportHistoryService.cs` owns report history filtering, trimming, latest markers, and snapshot item updates.
 - `EDetection.Desktop/Services/ReportDetailPreviewService.cs` owns anomaly detail filtering, issue-type filters, sorting, and TSV export text.
@@ -46,7 +47,7 @@ For release packaging, prefer the repo script:
 .\desktop\scripts\Publish-Desktop.ps1 -RuntimeIdentifier win-x64
 ```
 
-The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
+The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the local Python detection core plus install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
 
 GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.1.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
 
@@ -73,11 +74,12 @@ Run a local visual smoke test after publishing:
 .\desktop\scripts\Test-DesktopSingleInstanceSmoke.ps1
 .\desktop\scripts\Test-DesktopSessionEndingSmoke.ps1
 .\desktop\scripts\Test-DesktopStartupIntegrationSmoke.ps1
+.\desktop\scripts\Test-DesktopEnvironmentRepairSmoke.ps1
 ```
 
 When running against a publish folder, every desktop GUI smoke script also accepts `-PackagePath .\artifacts\desktop\win-x64\publish`.
 
-The visual smoke test starts the published app, verifies the main window title, moves the main window to a stable size, captures a PNG under `artifacts\desktop\visual-smoke`, checks that the image is not blank or undersized, and writes a JSON result next to the screenshot. The settings smoke verifies persisted settings, startup provider status, settings schema migration, and the desktop health card. The single-instance smoke test starts the app hidden with `--startup-minimized`, launches a second copy, verifies the duplicate exits, and confirms the first instance is restored. The session-ending smoke test sends Windows session-ending messages to the main window, verifies a cancelled session does not close the app, then verifies a real end-session message exits cleanly. The startup-integration smoke toggles login startup from the settings UI, verifies the scheduled task or fallback startup entry points to the published app, then verifies disabling removes it.
+The visual smoke test starts the published app, verifies the main window title, moves the main window to a stable size, captures a PNG under `artifacts\desktop\visual-smoke`, checks that the image is not blank or undersized, and writes a JSON result next to the screenshot. The settings smoke verifies persisted settings, startup provider status, settings schema migration, and the desktop health card. The single-instance smoke test starts the app hidden with `--startup-minimized`, launches a second copy, verifies the duplicate exits, and confirms the first instance is restored. The session-ending smoke test sends Windows session-ending messages to the main window, verifies a cancelled session does not close the app, then verifies a real end-session message exits cleanly. The startup-integration smoke toggles login startup from the settings UI, verifies the scheduled task or fallback startup entry points to the published app, then verifies disabling removes it. The environment-repair smoke creates a temporary venv, verifies `e_detection` is initially missing, runs the same local editable-install repair path, and verifies the module is importable afterward.
 
 Validate the install/uninstall path without keeping user artifacts:
 
@@ -87,7 +89,7 @@ Validate the install/uninstall path without keeping user artifacts:
 
 The install smoke test installs to a temporary smoke directory, verifies the installed package and per-user App Paths registration, uninstalls the app, and restores any pre-existing shortcuts or App Paths entry.
 
-The Python package must be importable by the Python executable configured in the app. The run setup panel and empty workbench state can probe the selected Python executable, verify `e_detection` importability, copy a local editable-install repair command, open the detected backend directory, and copy the current diagnostic details. Starting a run performs the same readiness gate before launching the backend process: missing input/config, empty CSV input, unavailable Python, an unimportable detection core, or an uncreatable report directory are reported in the shell instead of surfacing as a late process failure. During development, run `python -m pip install -e .[dev]` from the repository root when the probe reports that the detection core cannot be imported.
+The Python package must be importable by the Python executable configured in the app. Published packages include the local Python detection core source so the run setup panel and empty workbench state can probe the selected Python executable, verify `e_detection` importability, repair the local detection core into the current Python environment, copy a local editable-install repair command, open the detected backend directory, and copy the current diagnostic details. Starting a run performs the same readiness gate before launching the backend process: missing input/config, empty CSV input, unavailable Python, an unimportable detection core, or an uncreatable report directory are reported in the shell instead of surfacing as a late process failure. During development, run `python -m pip install -e .` from the repository root when the probe reports that the detection core cannot be imported.
 
 The quick action palette is available from the title bar search button. It exposes entries for copying diagnostics, refreshing desktop health, opening settings sections, opening or copying the current report path, opening the report folder, and opening up to five recent reports.
 
@@ -128,7 +130,7 @@ By default uninstall keeps `%LOCALAPPDATA%\E-Detection\Desktop\settings.json`. U
 - The tray menu is command-aware: it shows the current run state and can restore the workbench, start/cancel detection when available, and open the latest report or its folder. The tray and window/taskbar icon switch to `running.ico` while detection is active.
 - System notifications are registered on a best-effort basis for the unpackaged app. Completion/error notifications can restore the workbench, and completed runs can open the generated report directly when a report path is available. If Windows notification policy or registration blocks them, detection continues normally.
 - Native taskbar progress mirrors the run lifecycle: indeterminate while starting, normal while processing, paused while cancel confirmation is armed or a run is cancelled, and error when a backend failure occurs.
-- The published desktop app does not bundle Python yet; configure the Python executable in the app to point at an environment where `e_detection` is importable.
+- The published desktop app does not bundle Python yet; configure the Python executable in the app, then use the in-app repair button if that Python cannot import `e_detection`.
 - Launching `EDetection.Desktop.exe --startup-minimized` starts the primary instance hidden in the tray. A normal second launch restores the existing instance instead of creating another window.
 - Startup-hidden launches park the first window frame off-screen before activation, then restore the saved placement when the user reopens the workbench.
 - When the main window is hidden to the tray, the shell schedules a best-effort resource release pass so long-running sessions keep a smaller desktop footprint.

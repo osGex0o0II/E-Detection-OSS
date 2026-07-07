@@ -55,6 +55,7 @@ public sealed partial class MainWindow : Window
             new SettingsService(),
             new DetectionConfigService(),
             new DesktopDiagnosticsService(),
+            new DetectionEnvironmentRepairService(),
             new ReportHistoryService(),
             new RuntimeLogService(),
             new RunTelemetryService(),

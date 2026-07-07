@@ -201,6 +201,16 @@
                                                 <TextBlock Text="检查状态" />
                                             </StackPanel>
                                         </Button>
+                                        <Button Command="{Binding RepairDetectionEnvironmentCommand}"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{Binding DetectionEnvironmentRepairActionsVisibility}"
+                                                AutomationProperties.Name="修复检测组件"
+                                                ToolTipService.ToolTip="修复检测组件">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE777;" FontSize="14" />
+                                                <TextBlock Text="修复检测组件" />
+                                            </StackPanel>
+                                        </Button>
                                         <Button Command="{Binding CopyDiagnosticsCommand}"
                                                 ToolTipService.ToolTip="复制状态详情">
                                             <StackPanel Orientation="Horizontal" Spacing="6">

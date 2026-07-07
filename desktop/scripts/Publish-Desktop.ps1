@@ -81,6 +81,7 @@ $deliveryScripts = @(
     "Test-DesktopRunCompletionSmoke.ps1",
     "Test-DesktopSettingsSmoke.ps1",
     "Test-DesktopStartupIntegrationSmoke.ps1",
+    "Test-DesktopEnvironmentRepairSmoke.ps1",
     "Test-DesktopInstallSmoke.ps1"
 )
 
@@ -92,6 +93,35 @@ foreach ($scriptName in $deliveryScripts) {
 
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $publishDir $scriptName) -Force
 }
+
+$pythonCoreItems = @(
+    "core",
+    "e_detection",
+    "pyproject.toml",
+    "config.json",
+    "requirements.txt"
+)
+
+foreach ($item in $pythonCoreItems) {
+    $sourcePath = Join-Path $repoRoot $item
+    if (!(Test-Path $sourcePath)) {
+        throw "Publish failed: Python core item $item was not found in $repoRoot"
+    }
+
+    $destinationPath = Join-Path $publishDir $item
+    if (Test-Path $destinationPath) {
+        Remove-Item -LiteralPath $destinationPath -Recurse -Force
+    }
+
+    Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Recurse -Force
+}
+
+Get-ChildItem -LiteralPath (Join-Path $publishDir "core"), (Join-Path $publishDir "e_detection") -Recurse -Force |
+    Where-Object { $_.PSIsContainer -and $_.Name -eq "__pycache__" } |
+    Remove-Item -Recurse -Force
+
+Get-ChildItem -LiteralPath (Join-Path $publishDir "core"), (Join-Path $publishDir "e_detection") -Recurse -Force -Include "*.pyc", "*.pyo" |
+    Remove-Item -Force
 
 $requiredWinUIResources = @(
     "App.xbf",
@@ -130,7 +160,7 @@ $infoPath = Join-Path $publishDir "release-info.txt"
     "RecommendedInstaller=E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"
     "InstallScript=Install-Desktop.ps1"
     "UninstallScript=Uninstall-Desktop.ps1"
-    "PythonCore=Requires a Python environment that can import e_detection"
+    "PythonCore=Includes local e_detection source; configure Python and use repair if needed"
 ) | Set-Content -Path $infoPath -Encoding UTF8
 
 $installTextPath = Join-Path $publishDir "INSTALL.txt"
@@ -154,7 +184,7 @@ $installTextPath = Join-Path $publishDir "INSTALL.txt"
     "Uninstall:"
     "  powershell -ExecutionPolicy Bypass -File .\Uninstall-Desktop.ps1"
     ""
-    "The desktop app does not bundle Python yet. Configure Python in the app to point at an environment where e_detection is importable."
+    "The desktop app does not bundle Python yet. Configure Python in the app; if the detection core is missing, use the in-app repair button."
     ""
     "Validate install/uninstall without keeping user artifacts:"
     "  powershell -ExecutionPolicy Bypass -File .\Test-DesktopInstallSmoke.ps1"

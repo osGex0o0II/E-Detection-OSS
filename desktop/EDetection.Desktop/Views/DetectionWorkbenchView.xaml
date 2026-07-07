@@ -280,7 +280,17 @@
                                     <TextBlock Text="检查状态" />
                                 </StackPanel>
                             </Button>
+                            <Button Command="{Binding RepairDetectionEnvironmentCommand}"
+                                    Style="{StaticResource AccentButtonStyle}"
+                                    Visibility="{Binding DetectionEnvironmentRepairActionsVisibility}"
+                                    ToolTipService.ToolTip="修复检测组件">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE777;" FontSize="14" />
+                                    <TextBlock Text="修复检测组件" />
+                                </StackPanel>
+                            </Button>
                             <Button Command="{Binding CopyPythonSetupCommand}"
+                                    Visibility="{Binding DetectionEnvironmentRepairActionsVisibility}"
                                     ToolTipService.ToolTip="复制修复命令">
                                 <FontIcon Glyph="&#xE8C8;" FontSize="14" />
                             </Button>

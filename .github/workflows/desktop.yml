@@ -56,6 +56,10 @@ jobs:
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
 
+      - name: Environment repair smoke
+        shell: pwsh
+        run: ./artifacts/desktop/win-x64/publish/Test-DesktopEnvironmentRepairSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
+
       - name: Install smoke
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
@@ -121,6 +125,7 @@ jobs:
               "Included checks:"
               "- dotnet restore/build"
               "- publish package health"
+              "- environment repair smoke"
               "- install/uninstall smoke"
               "- setup installer smoke"
           ) | Set-Content -Path $notesPath -Encoding UTF8

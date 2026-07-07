@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private readonly SettingsService _settings;
     private readonly DetectionConfigService _detectionConfig;
     private readonly DesktopDiagnosticsService _diagnostics;
+    private readonly DetectionEnvironmentRepairService _environmentRepair;
     private readonly RunEventService _runEvents;
     private readonly ReportDetailPreviewService _detailPreview;
     private readonly RunStateService _runState;
@@ -38,6 +39,7 @@ public partial class MainViewModel : ObservableObject
     private readonly PoetryStatusService _poetryStatus;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
+    private CancellationTokenSource? _environmentRepairCts;
     private CancellationTokenSource? _cancelPromptCts;
     private bool _settingsLoaded;
     private bool _desktopNotificationSent;
@@ -51,6 +53,7 @@ public partial class MainViewModel : ObservableObject
         SettingsService settings,
         DetectionConfigService detectionConfig,
         DesktopDiagnosticsService diagnostics,
+        DetectionEnvironmentRepairService environmentRepair,
         ReportHistoryService reportHistory,
         RuntimeLogService runtimeLogs,
         RunTelemetryService runTelemetry,
@@ -70,6 +73,7 @@ public partial class MainViewModel : ObservableObject
         _settings = settings;
         _detectionConfig = detectionConfig;
         _diagnostics = diagnostics;
+        _environmentRepair = environmentRepair;
         _runEvents = runEvents;
         _detailPreview = detailPreview;
         _runState = runState;
@@ -172,15 +176,15 @@ public partial class MainViewModel : ObservableObject
 
     public bool HasSelectedDetail => SelectedDetail is not null;
 
-    public bool IsIdle => !IsRunning;
+    public bool IsIdle => !IsRunning && !IsRepairingDetectionEnvironment;
 
-    public bool CanEditRunConfiguration => !IsRunning;
+    public bool CanEditRunConfiguration => !IsRunning && !IsRepairingDetectionEnvironment;
 
     public Visibility CancelCommandVisibility => IsRunning
         ? Visibility.Visible
         : Visibility.Collapsed;
 
-    public Visibility StatusProgressVisibility => IsRunning
+    public Visibility StatusProgressVisibility => IsRunning || IsRepairingDetectionEnvironment
         ? Visibility.Visible
         : Visibility.Collapsed;
 
@@ -328,6 +332,7 @@ public partial class MainViewModel : ObservableObject
 
     public Visibility WorkbenchActivityVisibility =>
         IsRunning
+        || IsRepairingDetectionEnvironment
         || IsCancelConfirmationPending
         || ShouldShowCompletionActions
         || HasActionableFailure
@@ -340,11 +345,13 @@ public partial class MainViewModel : ObservableObject
         ? "报告快照"
         : IsRunning
             ? "运行详情"
-            : HasActionableFailure
-                ? "处理建议"
-                : ShouldShowCompletionActions
-                    ? "完成摘要"
-                    : "报告操作";
+            : IsRepairingDetectionEnvironment
+                ? "修复检测组件"
+                : HasActionableFailure
+                    ? "处理建议"
+                    : ShouldShowCompletionActions
+                        ? "完成摘要"
+                        : "报告操作";
 
     public string WorkbenchContextText => SelectedReport is { } report
         ? $"{report.SourceText} · {report.RunMetaText}"
@@ -358,13 +365,16 @@ public partial class MainViewModel : ObservableObject
         ? ReportHistoryStatusText
         : IsRunning
             ? CurrentFileText
-            : !string.IsNullOrWhiteSpace(ReportPath)
-                ? "报告已生成"
-                : "待开始";
+            : IsRepairingDetectionEnvironment
+                ? "正在修复"
+                : !string.IsNullOrWhiteSpace(ReportPath)
+                    ? "报告已生成"
+                    : "待开始";
 
     public Visibility WorkbenchStatusBadgeVisibility =>
         SelectedReport is not null
         || IsRunning
+        || IsRepairingDetectionEnvironment
         || !string.IsNullOrWhiteSpace(ReportPath)
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -376,6 +386,11 @@ public partial class MainViewModel : ObservableObject
             if (IsRunning)
             {
                 return "正在检测";
+            }
+
+            if (IsRepairingDetectionEnvironment)
+            {
+                return "正在修复检测组件";
             }
 
             if (StatusText == "无法开始检测")
@@ -416,6 +431,11 @@ public partial class MainViewModel : ObservableObject
                 return string.IsNullOrWhiteSpace(CurrentFileText)
                     ? "检测正在运行，完成后可在右侧查看结果。"
                     : CurrentFileText;
+            }
+
+            if (IsRepairingDetectionEnvironment)
+            {
+                return "应用正在安装本地检测核心，完成后会自动重新检查运行环境。";
             }
 
             if (StatusText == "无法开始检测" || StatusText == "检测失败")
@@ -570,6 +590,7 @@ public partial class MainViewModel : ObservableObject
     public void PrepareForShellShutdown()
     {
         _isShellShutdownRequested = true;
+        _environmentRepairCts?.Cancel();
         _cancelPromptCts?.Cancel();
         _runCts?.Cancel();
 
@@ -772,6 +793,23 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(UseSelectedReportDirectoriesCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyCompletionSummaryCommand))]
     public partial bool IsRunning { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyPropertyChangedFor(nameof(CanEditRunConfiguration))]
+    [NotifyPropertyChangedFor(nameof(StatusProgressVisibility))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityVisibility))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
+    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchActivityTitleText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
+    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeVisibility))]
+    [NotifyPropertyChangedFor(nameof(FirstRunGuideSubtitleText))]
+    [NotifyPropertyChangedFor(nameof(DetectionEnvironmentRepairActionsVisibility))]
+    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RepairDetectionEnvironmentCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RefreshDiagnosticsCommand))]
+    public partial bool IsRepairingDetectionEnvironment { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
@@ -1089,6 +1127,13 @@ public partial class MainViewModel : ObservableObject
     public partial bool IsCancelConfirmationPending { get; set; }
 
     public string PythonSetupCommandText => Diagnostics.PythonSetupCommandText;
+
+    public bool CanRepairDetectionEnvironment => Diagnostics.CanRepairDetectionEnvironment;
+
+    public Visibility DetectionEnvironmentRepairActionsVisibility =>
+        Diagnostics.CanRepairDetectionEnvironment || IsRepairingDetectionEnvironment
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FailureActionBodyText))]
@@ -1691,6 +1736,11 @@ public partial class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(PythonSetupCommandText));
                 CopyPythonSetupCommand.NotifyCanExecuteChanged();
                 break;
+            case nameof(DiagnosticsViewModel.CanRepairDetectionEnvironment):
+                OnPropertyChanged(nameof(CanRepairDetectionEnvironment));
+                OnPropertyChanged(nameof(DetectionEnvironmentRepairActionsVisibility));
+                RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
+                break;
         }
     }
 
@@ -1746,7 +1796,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanStart() => !IsRunning;
+    private bool CanStart() => !IsRunning && !IsRepairingDetectionEnvironment;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
     private async Task StartAsync()
@@ -2425,7 +2475,9 @@ public partial class MainViewModel : ObservableObject
         return true;
     }
 
-    [RelayCommand]
+    private bool CanRefreshDiagnostics() => !IsRepairingDetectionEnvironment;
+
+    [RelayCommand(CanExecute = nameof(CanRefreshDiagnostics))]
     private async Task RefreshDiagnosticsAsync()
     {
         RefreshLocalDiagnostics();
@@ -2508,6 +2560,95 @@ public partial class MainViewModel : ObservableObject
     {
         CopyTextToClipboard(PythonSetupCommandText);
         AddLog("修复", "已复制检测组件修复命令。");
+    }
+
+    private bool CanRepairDetectionEnvironmentCommand() =>
+        !IsRunning
+        && !IsRepairingDetectionEnvironment
+        && Diagnostics.CanRepairDetectionEnvironment;
+
+    [RelayCommand(CanExecute = nameof(CanRepairDetectionEnvironmentCommand))]
+    private async Task RepairDetectionEnvironmentAsync()
+    {
+        RefreshLocalDiagnostics();
+        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
+        var request = new DetectionEnvironmentRepairRequest(PythonExecutable, backendRoot);
+        if (!_environmentRepair.CanRepair(request))
+        {
+            Diagnostics.ApplyRepairResult(new DetectionEnvironmentRepairResult(
+                false,
+                null,
+                "当前环境不能自动修复",
+                "请先确认 Python 可执行文件有效，并使用包含本地检测核心源码的安装目录。",
+                ""));
+            BlockStart("检测组件未就绪", Diagnostics.ActionText);
+            RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
+            return;
+        }
+
+        _environmentRepairCts?.Cancel();
+        _environmentRepairCts?.Dispose();
+        _environmentRepairCts = new CancellationTokenSource();
+        var repairCts = _environmentRepairCts;
+
+        IsRepairingDetectionEnvironment = true;
+        StatusText = "正在修复检测组件";
+        LastFailureText = "正在安装本地检测核心，请稍候...";
+        Diagnostics.MarkRepairInProgress();
+        SetTaskbarProgress(TaskbarProgressKind.Indeterminate, 0);
+        AddLog("修复", "正在修复检测组件运行环境。");
+
+        try
+        {
+            var repairResult = await _environmentRepair.RepairAsync(request, repairCts.Token);
+            Diagnostics.ApplyRepairResult(repairResult);
+            AddLog(repairResult.Succeeded ? "修复" : "修复提醒", repairResult.SummaryMessage);
+            if (!string.IsNullOrWhiteSpace(repairResult.OutputTail))
+            {
+                AddLog("修复详情", repairResult.OutputTail);
+            }
+
+            Diagnostics.MarkProbeInProgress("修复完成，正在重新检查运行环境...");
+            var probeResult = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
+            ApplyPythonProbeResult(probeResult);
+
+            if (probeResult.IsReady)
+            {
+                StatusText = "就绪";
+                LastFailureText = "暂无失败";
+                SetTaskbarProgress(TaskbarProgressKind.None, 0);
+                AddLog("状态检查", "检测组件已就绪，可以开始检测。");
+                ShowSettingsFeedback("检测组件修复完成，可以开始检测。", InfoBarSeverity.Success);
+                return;
+            }
+
+            BlockStart(
+                repairResult.Succeeded ? "检测组件复查仍未通过" : repairResult.SummaryMessage,
+                probeResult.ActionMessage);
+        }
+        catch (OperationCanceledException)
+        {
+            Diagnostics.ApplyRepairResult(new DetectionEnvironmentRepairResult(
+                false,
+                null,
+                "检测组件修复已取消",
+                "修复过程已停止，请重新检查运行环境。",
+                ""));
+            BlockStart("检测组件修复已取消", Diagnostics.ActionText);
+        }
+        finally
+        {
+            if (ReferenceEquals(_environmentRepairCts, repairCts))
+            {
+                _environmentRepairCts.Dispose();
+                _environmentRepairCts = null;
+            }
+
+            IsRepairingDetectionEnvironment = false;
+            RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
+            StartCommand.NotifyCanExecuteChanged();
+            RefreshDiagnosticsCommand.NotifyCanExecuteChanged();
+        }
     }
 
     [RelayCommand]

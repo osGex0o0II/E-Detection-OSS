@@ -32,6 +32,12 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     [ObservableProperty]
     public partial string PythonSetupCommandText { get; set; } = "";
 
+    [ObservableProperty]
+    public partial bool CanRepairDetectionEnvironment { get; set; }
+
+    [ObservableProperty]
+    public partial string RepairOutputText { get; set; } = "";
+
     public void ApplyLocalSnapshot(DesktopDiagnosticsSnapshot snapshot)
     {
         InputText = snapshot.InputMessage;
@@ -40,6 +46,7 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
         PythonText = snapshot.PythonMessage;
         BackendText = snapshot.BackendMessage;
         PythonSetupCommandText = snapshot.PythonSetupCommand;
+        CanRepairDetectionEnvironment = false;
         ActionText = snapshot.ActionMessage;
         SummaryText = snapshot.SummaryMessage;
     }
@@ -48,7 +55,18 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     {
         PythonText = "检查中...";
         BackendText = "检查中...";
+        CanRepairDetectionEnvironment = false;
         ActionText = actionText;
+    }
+
+    public void MarkRepairInProgress()
+    {
+        SummaryText = "正在修复检测组件";
+        PythonText = "修复中...";
+        BackendText = "正在安装本地检测核心...";
+        CanRepairDetectionEnvironment = false;
+        ActionText = "修复完成后会自动重新检查运行环境。";
+        RepairOutputText = "";
     }
 
     public void ApplyPythonProbeResult(
@@ -59,11 +77,19 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
     {
         PythonText = result.PythonMessage;
         BackendText = result.BackendMessage;
+        CanRepairDetectionEnvironment = result.CanRepairDetectionEnvironment;
         ActionText = result.ActionMessage;
         CheckedAtText = $"上次检查: {checkedAt:yyyy-MM-dd HH:mm:ss}";
         SummaryText = result.IsReady && isInputReady && isConfigReady
             ? "运行环境就绪"
             : "运行环境需要处理";
+    }
+
+    public void ApplyRepairResult(DetectionEnvironmentRepairResult result)
+    {
+        SummaryText = result.SummaryMessage;
+        ActionText = result.ActionMessage;
+        RepairOutputText = result.OutputTail;
     }
 
     public void ApplyBlockStart(string message, string action)
@@ -93,6 +119,14 @@ public sealed partial class DiagnosticsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(PythonSetupCommandText))
         {
             lines.Add($"修复命令: {PythonSetupCommandText}");
+        }
+
+        lines.Add($"自动修复可用: {(CanRepairDetectionEnvironment ? "是" : "否")}");
+
+        if (!string.IsNullOrWhiteSpace(RepairOutputText))
+        {
+            lines.Add("最近修复输出:");
+            lines.Add(RepairOutputText);
         }
 
         return string.Join(Environment.NewLine, lines);

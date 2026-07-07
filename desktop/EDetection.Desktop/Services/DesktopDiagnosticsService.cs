@@ -94,6 +94,7 @@ public sealed class DesktopDiagnosticsService
         {
             return new PythonProbeResult(
                 false,
+                false,
                 "Python 可执行文件未设置",
                 "检测核心未检查",
                 "请选择 Python 可执行文件，或输入可在命令行中运行的 python。");
@@ -120,6 +121,7 @@ public sealed class DesktopDiagnosticsService
                 + "spec = importlib.util.find_spec('e_detection'); "
                 + "sys.exit(20) if spec is None else None; "
                 + "import e_detection; "
+                + "import e_detection.cli; "
                 + "print('module=' + (getattr(e_detection, '__file__', '') or 'unknown'))");
 
             process.Start();
@@ -146,6 +148,7 @@ public sealed class DesktopDiagnosticsService
             {
                 return new PythonProbeResult(
                     true,
+                    false,
                     pythonMessage,
                     string.IsNullOrWhiteSpace(modulePath)
                         ? "检测核心可导入"
@@ -156,11 +159,13 @@ public sealed class DesktopDiagnosticsService
             var reason = string.IsNullOrWhiteSpace(error)
                 ? $"退出码 {process.ExitCode}"
                 : error.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? error;
+            var canRepair = HasBackendSource(backendRoot);
             var action = HasBackendSource(backendRoot)
-                ? $"检测核心不可导入。复制修复命令并在终端运行: {BuildPythonSetupCommand(executable, backendRoot)}"
+                ? "检测核心不可导入。可点击“修复检测组件”自动安装本地检测核心，或复制修复命令手动处理。"
                 : "检测核心不可导入。请将 Python 指向已安装 e_detection 的环境，或使用包含源码的开发目录运行。";
             return new PythonProbeResult(
                 false,
+                canRepair,
                 pythonMessage,
                 $"检测核心不可导入 · {reason}",
                 action);
@@ -180,6 +185,7 @@ public sealed class DesktopDiagnosticsService
 
             return new PythonProbeResult(
                 false,
+                false,
                 "Python 检查超时",
                 "检测核心未检查",
                 "请确认该 Python 可执行文件可以正常启动，然后重新检查状态。");
@@ -187,6 +193,7 @@ public sealed class DesktopDiagnosticsService
         catch (Exception ex)
         {
             return new PythonProbeResult(
+                false,
                 false,
                 $"Python 不可用: {ex.Message}",
                 "检测核心未检查",
@@ -213,7 +220,7 @@ public sealed class DesktopDiagnosticsService
     public static string BuildPythonSetupCommand(string executable, string backendRoot)
     {
         var python = string.IsNullOrWhiteSpace(executable) ? "python" : executable;
-        return $"{QuoteCommandArgument(python)} -m pip install -e {QuoteCommandArgument(backendRoot + "[dev]")}";
+        return $"{QuoteCommandArgument(python)} -m pip install -e {QuoteCommandArgument(backendRoot)}";
     }
 
     public static string BuildBlockStartAction(IReadOnlyList<string> issues) =>
