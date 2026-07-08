@@ -140,6 +140,8 @@ New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
 $installLog = Join-Path $smokeRoot "install.log"
 $updateLog = Join-Path $smokeRoot "update.log"
 $unsafeInstallLog = Join-Path $smokeRoot "unsafe-install.log"
+$nonProductInstallLog = Join-Path $smokeRoot "non-product-install.log"
+$falsePositiveProductInstallLog = Join-Path $smokeRoot "false-positive-product-install.log"
 $uninstallLog = Join-Path $smokeRoot "uninstall.log"
 $entryPoint = "EDetection.Desktop.exe"
 $installedExe = Join-Path $installFull $entryPoint
@@ -186,6 +188,66 @@ try {
         }
     }
 
+    $nonProductFull = Join-Path $smokeRoot "existing-user-folder"
+    $nonProductMarker = Join-Path $nonProductFull "important-user-file.txt"
+    New-Item -ItemType Directory -Force -Path $nonProductFull | Out-Null
+    Set-Content -Path $nonProductMarker -Value "must survive rejected install" -Encoding ASCII
+    $nonProductProcess = Start-Process `
+        -FilePath $installerFull `
+        -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$nonProductFull",
+            "/LOG=$nonProductInstallLog"
+        ) `
+        -Wait `
+        -PassThru `
+        -NoNewWindow
+    if ($nonProductProcess.ExitCode -eq 0) {
+        throw "Installer smoke failed: non-product install directory was accepted: $nonProductFull"
+    }
+
+    if (!(Test-Path $nonProductMarker)) {
+        throw "Installer smoke failed: non-product directory marker was removed: $nonProductMarker"
+    }
+
+    if (Test-Path (Join-Path $nonProductFull $entryPoint)) {
+        throw "Installer smoke failed: app was installed into rejected non-product directory: $nonProductFull"
+    }
+
+    $falsePositiveProductFull = Join-Path $smokeRoot "false-positive-product-folder"
+    $falsePositiveProductAssets = Join-Path $falsePositiveProductFull "Assets"
+    $falsePositiveProductMarker = Join-Path $falsePositiveProductAssets "important-user-file.txt"
+    New-Item -ItemType Directory -Force -Path $falsePositiveProductAssets | Out-Null
+    Set-Content -Path (Join-Path $falsePositiveProductFull "install-manifest.json") -Value '{"Product":"not E-Detection"}' -Encoding ASCII
+    Set-Content -Path $falsePositiveProductMarker -Value "must survive rejected install" -Encoding ASCII
+    $falsePositiveProductProcess = Start-Process `
+        -FilePath $installerFull `
+        -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/SP-",
+            "/DIR=$falsePositiveProductFull",
+            "/LOG=$falsePositiveProductInstallLog"
+        ) `
+        -Wait `
+        -PassThru `
+        -NoNewWindow
+    if ($falsePositiveProductProcess.ExitCode -eq 0) {
+        throw "Installer smoke failed: false-positive product directory was accepted: $falsePositiveProductFull"
+    }
+
+    if (!(Test-Path $falsePositiveProductMarker)) {
+        throw "Installer smoke failed: false-positive product directory marker was removed: $falsePositiveProductMarker"
+    }
+
+    if (Test-Path (Join-Path $falsePositiveProductFull $entryPoint)) {
+        throw "Installer smoke failed: app was installed into rejected false-positive product directory: $falsePositiveProductFull"
+    }
+
     Invoke-Native `
         -FilePath $installerFull `
         -Arguments @(
@@ -220,11 +282,19 @@ try {
         InstallerUpdateSmokeMarker = $settingsMarker
     } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
 
-    $staleTopLevelFile = Join-Path $installFull "obsolete-publish-file.txt"
+    $userOwnedTopLevelFile = Join-Path $installFull "user-owned-notes.txt"
+    $staleManifestTopLevelFile = Join-Path $installFull "obsolete-product-root-file.txt"
+    $installFilesManifest = Join-Path $installFull "install-files.txt"
     $staleRuntimeDirectory = Join-Path $installFull "python-runtime\obsolete-package"
     New-Item -ItemType Directory -Force -Path $staleRuntimeDirectory | Out-Null
-    Set-Content -Path $staleTopLevelFile -Value "stale top-level file" -Encoding ASCII
+    Set-Content -Path $userOwnedTopLevelFile -Value "user-owned file" -Encoding ASCII
+    Set-Content -Path $staleManifestTopLevelFile -Value "stale product file" -Encoding ASCII
     Set-Content -Path (Join-Path $staleRuntimeDirectory "stale.txt") -Value "stale runtime file" -Encoding ASCII
+    if (!(Test-Path $installFilesManifest)) {
+        throw "Installer smoke failed: install files manifest was not installed at $installFilesManifest"
+    }
+
+    Add-Content -Path $installFilesManifest -Value "obsolete-product-root-file.txt" -Encoding UTF8
 
     Set-Content -Path $installedExe -Value "corrupted by installer update smoke" -Encoding ASCII
     Invoke-Native `
@@ -240,8 +310,12 @@ try {
         -FailureMessage "Installer smoke failed: update/repair setup did not complete successfully."
 
     & $healthScript -PackagePath $installFull
-    if (Test-Path $staleTopLevelFile) {
-        throw "Installer smoke failed: stale top-level file was not removed during update: $staleTopLevelFile"
+    if (!(Test-Path $userOwnedTopLevelFile)) {
+        throw "Installer smoke failed: user-owned top-level file was removed during update: $userOwnedTopLevelFile"
+    }
+
+    if (Test-Path $staleManifestTopLevelFile) {
+        throw "Installer smoke failed: stale manifest top-level file was not removed during update: $staleManifestTopLevelFile"
     }
 
     if (Test-Path $staleRuntimeDirectory) {

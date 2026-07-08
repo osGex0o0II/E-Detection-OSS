@@ -27,6 +27,17 @@ $publishDir = Join-Path $artifactRoot "publish"
 $zipPath = Join-Path $artifactRoot "E-Detection.Desktop-$RuntimeIdentifier.zip"
 $downloadDir = Join-Path $artifactRoot "downloads"
 $runtimeRequirementsPath = Join-Path $repoRoot "desktop\requirements-runtime.lock"
+$installFilesManifestName = "install-files.txt"
+
+function Get-RelativePackageFiles([string]$Path) {
+    $rootFull = [System.IO.Path]::GetFullPath($Path)
+    Get-ChildItem -LiteralPath $rootFull -File -Recurse -Force |
+        ForEach-Object {
+            [System.IO.Path]::GetRelativePath($rootFull, $_.FullName)
+        } |
+        Where-Object { $_ -ne $installFilesManifestName } |
+        Sort-Object
+}
 
 if ([string]::IsNullOrWhiteSpace($DotNetPath)) {
     $localDotNet = Join-Path $repoRoot "build\dotnet\dotnet.exe"
@@ -276,20 +287,36 @@ foreach ($resource in $requiredWinUIResources) {
     }
 }
 
+$projectXml = [xml](Get-Content -Path $projectPath)
+$appVersion = ($projectXml.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+if ([string]::IsNullOrWhiteSpace($appVersion)) {
+    $appVersion = "unknown"
+}
+
 $gitCommit = ""
+$gitCommitFull = ""
+$gitDirty = "unknown"
 try {
     $gitCommit = (& git -C $repoRoot rev-parse --short HEAD).Trim()
+    $gitCommitFull = (& git -C $repoRoot rev-parse HEAD).Trim()
+    $dirtyOutput = (& git -C $repoRoot status --porcelain)
+    $gitDirty = if ([string]::IsNullOrWhiteSpace(($dirtyOutput -join ""))) { "false" } else { "true" }
 }
 catch {
     $gitCommit = "unknown"
+    $gitCommitFull = "unknown"
+    $gitDirty = "unknown"
 }
 
 $infoPath = Join-Path $publishDir "release-info.txt"
 @(
     "E-Detection Desktop"
+    "Version=$appVersion"
     "RuntimeIdentifier=$RuntimeIdentifier"
     "Configuration=$Configuration"
     "GitCommit=$gitCommit"
+    "GitCommitFull=$gitCommitFull"
+    "GitDirty=$gitDirty"
     "PublishedAt=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
     "EntryPoint=EDetection.Desktop.exe"
     "RecommendedInstaller=E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"
@@ -308,7 +335,7 @@ $installTextPath = Join-Path $publishDir "INSTALL.txt"
     "  Download and run E-Detection.Desktop-Setup-win-x64.exe from GitHub Releases."
     "  The setup wizard lets you choose the install location and creates normal Windows shortcuts."
     "  To update, run the newer setup wizard and follow the on-screen prompts."
-    "  To uninstall, use Windows Settings > Installed apps, or run the Start Menu uninstaller."
+    "  To uninstall, use Windows Settings > Installed apps, or run unins000.exe from the install folder."
     ""
     "Advanced portable install for the current Windows user:"
     "  powershell -ExecutionPolicy Bypass -File .\Install-Desktop.ps1"
@@ -340,6 +367,9 @@ foreach ($scriptName in $deliveryScripts) {
 if (!(Test-Path $installTextPath)) {
     throw "Publish failed: INSTALL.txt was not created in $publishDir"
 }
+
+$installFilesManifestPath = Join-Path $publishDir $installFilesManifestName
+Get-RelativePackageFiles $publishDir | Set-Content -Path $installFilesManifestPath -Encoding UTF8
 
 $smokeResultsPath = Join-Path $publishDir "smoke-results"
 if (Test-Path $smokeResultsPath) {

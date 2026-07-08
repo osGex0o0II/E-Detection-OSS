@@ -53,6 +53,7 @@ $requiredFiles = @(
     "Test-DesktopInstallSmoke.ps1",
     "Test-DesktopDiagnosticsRedactionSmoke.ps1",
     "release-info.txt",
+    "install-files.txt",
     "INSTALL.txt"
 )
 

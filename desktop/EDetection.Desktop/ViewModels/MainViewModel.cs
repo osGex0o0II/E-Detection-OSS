@@ -2722,7 +2722,7 @@ public partial class MainViewModel : ObservableObject
         if (result is { IsUpdateAvailable: true, HasInstallerDownload: true }
             && IsOfficialReleaseUrl(result.ReleaseUrl))
         {
-            await DownloadAndLaunchUpdateInstallerAsync(result);
+            await DownloadAndRevealUpdateInstallerAsync(result);
             return;
         }
 
@@ -2874,7 +2874,7 @@ public partial class MainViewModel : ObservableObject
         return UpdateFeedUrl;
     }
 
-    private async Task DownloadAndLaunchUpdateInstallerAsync(UpdateCheckResult result)
+    private async Task DownloadAndRevealUpdateInstallerAsync(UpdateCheckResult result)
     {
         IsDownloadingUpdateInstaller = true;
         UpdateStatusText = $"正在下载安装向导 {result.LatestVersion}...";
@@ -2883,12 +2883,8 @@ public partial class MainViewModel : ObservableObject
             var installerPath = await DownloadUpdateInstallerAsync(result);
             UpdateStatusText = $"安装向导已下载 {result.LatestVersion}";
             AddLog("更新", $"已下载更新安装向导: {installerPath}");
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = installerPath,
-                UseShellExecute = true,
-            });
-            ShowSettingsFeedback("安装向导已启动，请按界面提示完成更新。", InfoBarSeverity.Success);
+            OpenContainingFolder(installerPath);
+            ShowSettingsFeedback("安装向导已下载并通过摘要校验。请在打开的文件夹中手动运行安装向导完成更新。", InfoBarSeverity.Success);
         }
         catch (Exception ex) when (ex is HttpRequestException
                                    or IOException
@@ -2991,7 +2987,7 @@ public partial class MainViewModel : ObservableObject
             || !installerUrl.StartsWith(OfficialReleaseBaseUrl, StringComparison.OrdinalIgnoreCase)
             || !installerUri.AbsolutePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("为安全起见，只会自动运行官方 GitHub Release 中的安装向导。");
+            throw new InvalidOperationException("为安全起见，只会下载官方 GitHub Release 中的安装向导。");
         }
     }
 

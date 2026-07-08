@@ -50,21 +50,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
-Type: filesandordirs; Name: "{app}\Assets"
-Type: filesandordirs; Name: "{app}\core"
-Type: filesandordirs; Name: "{app}\e_detection"
-Type: filesandordirs; Name: "{app}\python-runtime"
-Type: filesandordirs; Name: "{app}\python-wheelhouse"
-Type: filesandordirs; Name: "{app}\Styles"
-Type: filesandordirs; Name: "{app}\Views"
-Type: files; Name: "{app}\*.dll"
-Type: files; Name: "{app}\*.exe"
-Type: files; Name: "{app}\*.json"
-Type: files; Name: "{app}\*.pri"
-Type: files; Name: "{app}\*.ps1"
-Type: files; Name: "{app}\*.toml"
-Type: files; Name: "{app}\*.txt"
-Type: files; Name: "{app}\*.xbf"
+Type: filesandordirs; Name: "{app}\Assets"; Check: ShouldCleanExistingProductDirectory
+Type: filesandordirs; Name: "{app}\core"; Check: ShouldCleanExistingProductDirectory
+Type: filesandordirs; Name: "{app}\e_detection"; Check: ShouldCleanExistingProductDirectory
+Type: filesandordirs; Name: "{app}\python-runtime"; Check: ShouldCleanExistingProductDirectory
+Type: filesandordirs; Name: "{app}\python-wheelhouse"; Check: ShouldCleanExistingProductDirectory
+Type: filesandordirs; Name: "{app}\Styles"; Check: ShouldCleanExistingProductDirectory
+Type: filesandordirs; Name: "{app}\Views"; Check: ShouldCleanExistingProductDirectory
 
 [Icons]
 Name: "{group}\E-Detection Desktop"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"
@@ -115,6 +107,111 @@ begin
     IsPathInside(ExpandedDir, ExpandConstant('{commonpf32}'));
 end;
 
+function LooksLikeExistingProductDirectory(Dir: string): Boolean;
+begin
+  Result :=
+    FileExists(AddBackslash(Dir) + '{#AppExeName}') and
+    (
+      FileExists(AddBackslash(Dir) + 'release-info.txt') or
+      FileExists(AddBackslash(Dir) + 'unins000.dat') or
+      FileExists(AddBackslash(Dir) + 'EDetection.Desktop.dll')
+    );
+end;
+
+function ShouldCleanExistingProductDirectory: Boolean;
+begin
+  Result := DirExists(ExpandConstant('{app}')) and LooksLikeExistingProductDirectory(ExpandConstant('{app}'));
+end;
+
+function IsSafeInstallManifestPath(RelativePath: string): Boolean;
+var
+  TargetPath: string;
+begin
+  Result :=
+    (RelativePath <> '') and
+    (ExtractFileDrive(RelativePath) = '') and
+    (Pos('..', RelativePath) = 0);
+
+  if Result then
+  begin
+    TargetPath := ExpandFileName(AddBackslash(ExpandConstant('{app}')) + RelativePath);
+    Result := IsPathInside(TargetPath, ExpandConstant('{app}'));
+  end;
+end;
+
+function ShouldPreserveInstallMarker(RelativePath: string): Boolean;
+begin
+  Result :=
+    (CompareText(RelativePath, '{#AppExeName}') = 0) or
+    (CompareText(RelativePath, 'EDetection.Desktop.dll') = 0) or
+    (CompareText(RelativePath, 'release-info.txt') = 0) or
+    (CompareText(RelativePath, 'install-files.txt') = 0) or
+    (CompareText(RelativePath, 'unins000.dat') = 0) or
+    (CompareText(RelativePath, 'unins000.exe') = 0);
+end;
+
+procedure DeletePreviousInstallManifestFiles;
+var
+  Files: TArrayOfString;
+  I: Integer;
+  RelativePath: string;
+  TargetPath: string;
+begin
+  if not ShouldCleanExistingProductDirectory then
+  begin
+    exit;
+  end;
+
+  if not LoadStringsFromFile(AddBackslash(ExpandConstant('{app}')) + 'install-files.txt', Files) then
+  begin
+    exit;
+  end;
+
+  for I := 0 to GetArrayLength(Files) - 1 do
+  begin
+    RelativePath := Trim(Files[I]);
+    if IsSafeInstallManifestPath(RelativePath) and (not ShouldPreserveInstallMarker(RelativePath)) then
+    begin
+      TargetPath := ExpandFileName(AddBackslash(ExpandConstant('{app}')) + RelativePath);
+      if FileExists(TargetPath) then
+      begin
+        DeleteFile(TargetPath);
+      end;
+    end;
+  end;
+end;
+
+function IsDirectoryEmpty(Dir: string): Boolean;
+var
+  FindRec: TFindRec;
+begin
+  Result := True;
+  if FindFirst(AddBackslash(Dir) + '*', FindRec) then
+  begin
+    try
+      repeat
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          Result := False;
+          break;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
+function IsInstallDirectoryAllowed(Dir: string): Boolean;
+begin
+  Result := (not DirExists(Dir)) or IsDirectoryEmpty(Dir) or LooksLikeExistingProductDirectory(Dir);
+end;
+
+function InstallDirectoryErrorMessage: string;
+begin
+  Result := '请选择空文件夹或现有 E-Detection Desktop 安装目录。安装向导不会安装到已经包含其他文件的普通文件夹，以避免覆盖或清理用户文件。';
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
@@ -131,6 +228,15 @@ begin
       end;
       Result := False;
     end;
+
+    if Result and (not IsInstallDirectoryAllowed(WizardDirValue)) then
+    begin
+      if not WizardSilent then
+      begin
+        MsgBox(InstallDirectoryErrorMessage, mbError, MB_OK);
+      end;
+      Result := False;
+    end;
   end;
 end;
 
@@ -140,5 +246,18 @@ begin
   if IsUnsafeInstallDirectory(WizardDirValue) then
   begin
     Result := '当前安装向导按普通用户权限安装。请选择用户目录下的应用文件夹，例如默认位置，避免安装到 Program Files、桌面、用户根目录或磁盘根目录。';
+  end;
+
+  if (Result = '') and (not IsInstallDirectoryAllowed(WizardDirValue)) then
+  begin
+    Result := InstallDirectoryErrorMessage;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    DeletePreviousInstallManifestFiles;
   end;
 end;

@@ -47,7 +47,7 @@ For release packaging, prefer the repo script:
 
 The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the local Python detection core plus install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
 
-GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.1.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
+GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.2.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Manual release runs check out the requested tag before building, so they can be used to republish assets for an existing tag when `replace_existing_assets` is intentionally enabled. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
 
 To build the setup wizard locally, install Inno Setup 6 and run:
 

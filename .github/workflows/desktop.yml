@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Optional release tag to publish, for example v0.1.0. Leave empty to only build."
+        description: "Optional release tag to publish, for example v0.2.0. Leave empty to only build."
         required: false
         type: string
       replace_existing_assets:
@@ -60,6 +60,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' && inputs.release_tag || github.ref }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
@@ -169,6 +172,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' && inputs.release_tag || github.ref }}
 
       - name: Download desktop artifact
         uses: actions/download-artifact@v6
@@ -184,10 +188,6 @@ jobs:
           REPLACE_EXISTING_ASSETS: ${{ github.event_name == 'workflow_dispatch' && inputs.replace_existing_assets == true && 'true' || 'false' }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
-          if ($env:GITHUB_EVENT_NAME -eq "workflow_dispatch" -and $env:GITHUB_REF -ne "refs/heads/main") {
-              throw "Manual Release publishing must be dispatched from main. Current ref: $env:GITHUB_REF."
-          }
-
           $tag = if ($env:GITHUB_REF_TYPE -eq "tag") {
               $env:GITHUB_REF_NAME
           }
@@ -210,8 +210,9 @@ jobs:
           }
 
           $global:LASTEXITCODE = 0
-          if ($tagSha -ne $env:GITHUB_SHA) {
-              throw "release_tag $tag points to $tagSha, but this workflow built $env:GITHUB_SHA. Dispatch the workflow from the tag or from main at the tagged commit."
+          $buildSha = (& git rev-parse HEAD).Trim()
+          if ($tagSha -ne $buildSha) {
+              throw "release_tag $tag points to $tagSha, but this workflow checked out $buildSha."
           }
 
           git fetch origin main --force
@@ -258,7 +259,7 @@ jobs:
 
           $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
           @(
-              "Windows x64 desktop build generated from commit $env:GITHUB_SHA."
+              "Windows x64 desktop build generated from commit $buildSha."
               ""
               "Recommended for most users: download and run E-Detection.Desktop-Setup-win-x64.exe."
               "Use the same setup wizard to install or update the desktop app. It supports choosing the install location and normal Windows uninstall."
