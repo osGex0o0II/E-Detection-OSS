@@ -145,16 +145,14 @@ if ($beforeProbe.ExitCode -eq 0) {
     throw "Temporary venv unexpectedly imports e_detection before repair."
 }
 
-$dependencyArgs = if ((Test-Path $wheelhousePath) -and (Test-Path $requirementsPath)) {
-    @("-m", "pip", "install", "--no-index", "--find-links", $wheelhousePath, "-r", $requirementsPath)
-}
-else {
-    @("-m", "pip", "install", "-r", $requirementsPath)
+if (!(Test-Path $wheelhousePath) -or !(Test-Path $requirementsPath)) {
+    throw "Environment repair smoke requires offline wheelhouse and requirements lock file."
 }
 
+$dependencyArgs = @("-m", "pip", "install", "--no-index", "--find-links", $wheelhousePath, "-r", $requirementsPath)
 $dependencyRepair = Invoke-Python $venvPython $dependencyArgs $backendRoot
 $repair = if ($dependencyRepair.ExitCode -eq 0) {
-    Invoke-Python $venvPython @("-m", "pip", "install", "--no-deps", "-e", $backendRoot) $backendRoot
+    Invoke-Python $venvPython @("-m", "pip", "install", "--no-index", "--find-links", $wheelhousePath, "--no-deps", "-e", $backendRoot) $backendRoot
 }
 else {
     $dependencyRepair

@@ -103,7 +103,8 @@ $deliveryScripts = @(
     "Test-DesktopEnvironmentRepairSmoke.ps1",
     "Test-DesktopBundledPythonSmoke.ps1",
     "Test-DesktopInstallSmoke.ps1",
-    "Test-DesktopDiagnosticsRedactionSmoke.ps1"
+    "Test-DesktopDiagnosticsRedactionSmoke.ps1",
+    "Test-DesktopSignatureStatus.ps1"
 )
 
 foreach ($scriptName in $deliveryScripts) {
@@ -325,6 +326,7 @@ $infoPath = Join-Path $publishDir "release-info.txt"
     "PythonRuntime=Includes CPython $BundledPythonVersion embeddable runtime in python-runtime"
     "PythonCore=Includes local e_detection source and dependencies installed into the bundled runtime"
     "OfflineWheelhouse=Included only for advanced custom Python repair paths"
+    "CodeSigning=Unsigned unless the release workflow signs artifacts with WINDOWS_CODE_SIGNING_PFX_BASE64"
 ) | Set-Content -Path $infoPath -Encoding UTF8
 
 $installTextPath = Join-Path $publishDir "INSTALL.txt"
@@ -353,6 +355,9 @@ $installTextPath = Join-Path $publishDir "INSTALL.txt"
     "The desktop app includes a bundled Python runtime for ordinary users."
     "No command-line Python setup is required for the standard installer."
     "Advanced users may still point the app at a custom Python executable from Settings."
+    "If Windows SmartScreen warns on first install, verify the download came from the official GitHub Release and compare the attached SHA-256 checksum."
+    "Checksum command:"
+    "  Get-FileHash .\E-Detection.Desktop-Setup-win-x64.exe -Algorithm SHA256"
     ""
     "Validate install/uninstall without keeping user artifacts:"
     "  powershell -ExecutionPolicy Bypass -File .\Test-DesktopInstallSmoke.ps1"

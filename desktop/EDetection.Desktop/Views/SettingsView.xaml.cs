@@ -711,7 +711,7 @@ public sealed partial class SettingsView : UserControl
         new("Windows 代理设置", "更新与网络", "Windows 系统 网络 代理 设置 ms-settings", "ProxySection"),
         new("软件更新", "更新与网络", "更新 版本 检查 通道 代理 更新源 release", "UpdatesSection"),
         new("更新代理", "更新与网络", "更新 网络代理 proxy", "UpdatesSection", TargetName: "UpdateProxyRow", ExpanderName: "AdvancedUpdateExpander"),
-        new("更新通道", "更新与网络", "更新 通道 稳定版 预览版 手动", "UpdatesSection", TargetName: "UpdateChannelRow", ExpanderName: "AdvancedUpdateExpander"),
+        new("更新通道", "更新与网络", "更新 通道 自动检查 手动检查", "UpdatesSection", TargetName: "UpdateChannelRow", ExpanderName: "AdvancedUpdateExpander"),
         new("更新源", "更新与网络", "更新源 feed release github", "UpdatesSection", TargetName: "UpdateFeedRow", ExpanderName: "AdvancedUpdateExpander"),
         new("维护", "集成与高级", "维护 应用状态 检测组件 python 设置存储", "AdvancedSection"),
         new("检测组件程序", "集成与高级", "维护 python 检测组件 程序 exe", "AdvancedSection", TargetName: "PythonExecutableRow", ExpanderName: "DiagnosticsDetailsExpander"),

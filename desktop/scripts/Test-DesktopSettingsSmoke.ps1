@@ -385,7 +385,7 @@ try {
         ProxyUserName = ""
         EnableUpdateChecks = $true
         UseProxyForUpdates = $true
-        SelectedUpdateChannelIndex = 2
+        SelectedUpdateChannelIndex = 1
         UpdateFeedUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/latest"
         SelectedLogRetentionIndex = 2
         SelectedRecentReportLimitIndex = 2

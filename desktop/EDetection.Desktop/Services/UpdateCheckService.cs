@@ -40,6 +40,7 @@ public sealed class UpdateCheckService
         var releaseUrl = GetString(root, "html_url");
         var releaseName = GetString(root, "name");
         var installerAsset = FindRecommendedInstallerAsset(root);
+        var checksumAsset = FindChecksumAsset(root);
         var publishedAt = TryGetDateTimeOffset(root, "published_at");
         return new UpdateCheckResult(
             NormalizeVersionText(tagName),
@@ -48,6 +49,8 @@ public sealed class UpdateCheckService
             installerAsset.Name,
             installerAsset.DownloadUrl,
             installerAsset.Digest,
+            checksumAsset.Name,
+            checksumAsset.DownloadUrl,
             publishedAt,
             IsNewer(tagName, currentVersion));
     }
@@ -158,6 +161,55 @@ public sealed class UpdateCheckService
         return selected.Score > 0
             ? (selected.Name ?? "", selected.DownloadUrl ?? "", selected.Digest ?? "")
             : ("", "", "");
+    }
+
+    private static (string Name, string DownloadUrl) FindChecksumAsset(JsonElement root)
+    {
+        if (!root.TryGetProperty("assets", out var assets)
+            || assets.ValueKind is not JsonValueKind.Array)
+        {
+            return ("", "");
+        }
+
+        var candidates = new List<(string Name, string DownloadUrl, int Score)>();
+        foreach (var asset in assets.EnumerateArray())
+        {
+            if (asset.ValueKind is not JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var name = GetString(asset, "name");
+            var downloadUrl = GetString(asset, "browser_download_url");
+            if (string.IsNullOrWhiteSpace(name)
+                || string.IsNullOrWhiteSpace(downloadUrl)
+                || !name.EndsWith(".sha256.txt", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var score = 10;
+            if (name.Contains("E-Detection.Desktop", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 30;
+            }
+
+            if (name.Contains("win-x64", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("x64", StringComparison.OrdinalIgnoreCase))
+            {
+                score += 20;
+            }
+
+            candidates.Add((name, downloadUrl, score));
+        }
+
+        var selected = candidates
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        return selected.Score > 0
+            ? (selected.Name ?? "", selected.DownloadUrl ?? "")
+            : ("", "");
     }
 
     private static int ScoreInstallerAsset(string name)

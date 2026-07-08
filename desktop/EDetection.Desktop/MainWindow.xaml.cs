@@ -383,7 +383,7 @@ public sealed partial class MainWindow : Window
             ShowWindow(_windowHandle, ShowWindowCommand.Restore);
             SetForegroundWindow(_windowHandle);
             ViewModel.AddRuntimeLog("托盘状态", "系统托盘不可用，已保持主窗口可见。");
-            return true;
+            return false;
         }
 
         if (savePlacement)

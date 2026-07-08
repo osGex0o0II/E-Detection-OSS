@@ -52,6 +52,7 @@ $requiredFiles = @(
     "Test-DesktopBundledPythonSmoke.ps1",
     "Test-DesktopInstallSmoke.ps1",
     "Test-DesktopDiagnosticsRedactionSmoke.ps1",
+    "Test-DesktopSignatureStatus.ps1",
     "release-info.txt",
     "install-files.txt",
     "INSTALL.txt"

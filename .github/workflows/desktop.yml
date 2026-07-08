@@ -7,11 +7,6 @@ on:
         description: "Optional release tag to publish, for example v0.2.0. Leave empty to only build."
         required: false
         type: string
-      replace_existing_assets:
-        description: "Replace assets on an existing Release. Leave false for normal releases."
-        required: false
-        default: false
-        type: boolean
       run_desktop_ui_smoke:
         description: "Run interactive desktop UI smoke tests. Use only on a runner with an interactive desktop."
         required: false
@@ -88,6 +83,19 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64
 
+      - name: Sign published app when certificate is configured
+        if: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && github.event_name != 'pull_request' }}
+        shell: pwsh
+        env:
+          WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
+          WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
+          WINDOWS_CODE_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODE_SIGNING_TIMESTAMP_URL }}
+        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Optional -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+
+      - name: Inspect published app signature
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+
       - name: Package health
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
@@ -132,9 +140,31 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64 -UnsafeInstallRootOverride "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
 
+      - name: Sign setup installer when certificate is configured
+        if: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && github.event_name != 'pull_request' }}
+        shell: pwsh
+        env:
+          WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
+          WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
+          WINDOWS_CODE_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODE_SIGNING_TIMESTAMP_URL }}
+        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Optional -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+
+      - name: Inspect setup installer signature
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+
       - name: Installer smoke
         shell: pwsh
         run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe -UnsafeInstallDirectory "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
+
+      - name: Refresh portable zip after signing
+        shell: pwsh
+        run: |
+          $zipPath = "./artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip"
+          if (Test-Path $zipPath) {
+              Remove-Item -LiteralPath $zipPath -Force
+          }
+          Compress-Archive -Path "./artifacts/desktop/win-x64/publish/*" -DestinationPath $zipPath
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v6
@@ -185,7 +215,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || '' }}
-          REPLACE_EXISTING_ASSETS: ${{ github.event_name == 'workflow_dispatch' && inputs.replace_existing_assets == true && 'true' || 'false' }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $false
           $tag = if ($env:GITHUB_REF_TYPE -eq "tag") {
@@ -257,12 +286,22 @@ jobs:
               "$(Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath.FullName | Select-Object -ExpandProperty Hash)  $($zipPath.Name)"
           ) | Set-Content -Path $shaPath -Encoding ASCII
 
+          $setupSignature = Get-AuthenticodeSignature -LiteralPath $setupPath.FullName
+          $signatureStatus = $setupSignature.Status.ToString()
+          $signatureLine = if ($signatureStatus -eq "Valid") {
+              "The setup installer is Authenticode signed by $($setupSignature.SignerCertificate.Subject)."
+          }
+          else {
+              "The setup installer is not Authenticode signed in this build. Windows SmartScreen may show an extra warning on first install."
+          }
+
           $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
           @(
               "Windows x64 desktop build generated from commit $buildSha."
               ""
               "Recommended for most users: download and run E-Detection.Desktop-Setup-win-x64.exe."
               "Use the same setup wizard to install or update the desktop app. It supports choosing the install location and normal Windows uninstall."
+              $signatureLine
               "Portable package for advanced users: E-Detection.Desktop-win-x64.zip"
               ""
               "Included checks:"
@@ -275,6 +314,7 @@ jobs:
               "- setup installer smoke"
               ""
               "SHA-256 checksums are attached as E-Detection.Desktop-win-x64.sha256.txt."
+              "Windows checksum command: Get-FileHash .\E-Detection.Desktop-Setup-win-x64.exe -Algorithm SHA256"
           ) | Set-Content -Path $notesPath -Encoding UTF8
 
           $releaseViewOutput = & gh release view $tag --repo $env:GITHUB_REPOSITORY --json id,tagName 2>&1
@@ -291,19 +331,7 @@ jobs:
           }
 
           if ($releaseExists) {
-              if ($env:REPLACE_EXISTING_ASSETS -ne "true") {
-                  throw "Release $tag already exists. Set replace_existing_assets=true only when intentionally replacing assets."
-              }
-
-              gh release upload $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --clobber
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to upload release asset for $tag."
-              }
-
-              gh release edit $tag --repo $env:GITHUB_REPOSITORY --title "E-Detection Desktop $tag" --notes-file $notesPath
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Failed to update release $tag."
-              }
+              throw "Release $tag already exists. Published release assets are immutable for desktop updates; create a new patch tag instead."
           }
           else {
               gh release create $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --verify-tag --title "E-Detection Desktop $tag" --notes-file $notesPath

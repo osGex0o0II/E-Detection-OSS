@@ -95,13 +95,14 @@ public sealed class DetectionEnvironmentRepairService
                 }
             }
 
-            if (installResults.Count == 0 || installResults[^1].ExitCode != 0)
+            if (installResults.Count == 0)
             {
-                installResults.Add(await RunProcessAsync(
-                    venvPython,
-                    ["-m", "pip", "install", "-r", requirements],
-                    request.BackendRoot,
-                    cancellationToken));
+                return new DetectionEnvironmentRepairResult(
+                    false,
+                    null,
+                    "离线检测依赖不可用",
+                    "安装包未包含兼容当前 Python 的离线依赖。请通过安装向导更新，或在设置中改用内置检测运行时。",
+                    "");
             }
 
             if (installResults[^1].ExitCode != 0)
@@ -110,24 +111,22 @@ public sealed class DetectionEnvironmentRepairService
                     false,
                     installResults[^1].ExitCode,
                     $"检测依赖安装失败 · 退出码 {installResults[^1].ExitCode}",
-                    "私有检测环境已创建，但依赖安装失败。请检查网络、代理或发布包中的离线依赖后重试。",
+                    "私有检测环境已创建，但离线依赖安装失败。请通过安装向导更新，或在设置中改用内置检测运行时。",
                     BuildOutputTail(installResults));
             }
 
-            var coreInstallArguments = useOfflineWheelhouse
-                ? new[]
-                {
-                    "-m",
-                    "pip",
-                    "install",
-                    "--no-index",
-                    "--find-links",
-                    wheelhouse,
-                    "--no-deps",
-                    "-e",
-                    request.BackendRoot,
-                }
-                : ["-m", "pip", "install", "--no-deps", "-e", request.BackendRoot];
+            var coreInstallArguments = new[]
+            {
+                "-m",
+                "pip",
+                "install",
+                "--no-index",
+                "--find-links",
+                wheelhouse,
+                "--no-deps",
+                "-e",
+                request.BackendRoot,
+            };
             var coreInstall = await RunProcessAsync(
                 venvPython,
                 coreInstallArguments,
@@ -159,7 +158,7 @@ public sealed class DetectionEnvironmentRepairService
                 false,
                 null,
                 "检测组件修复超时",
-                "修复过程超过 5 分钟未完成。请检查网络、代理或 Python 包安装状态后重试。",
+                "修复过程超过 5 分钟未完成。请检查 Python 包安装状态后重试。",
                 "");
         }
         catch (OperationCanceledException)

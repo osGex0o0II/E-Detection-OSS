@@ -163,6 +163,26 @@ function Test-AppPathsTargetsInstall {
     return $exeMatches -or $pathMatches
 }
 
+function Test-ShortcutTargetsInstall([string]$ShortcutPath) {
+    if (!(Test-Path $ShortcutPath)) {
+        return $false
+    }
+
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($ShortcutPath)
+        $targetPath = $shortcut.TargetPath
+        if ([string]::IsNullOrWhiteSpace($targetPath)) {
+            return $false
+        }
+
+        return Test-PathInsideDirectory (Resolve-FullPath $targetPath) $installFull
+    }
+    catch {
+        return $false
+    }
+}
+
 function Invoke-InnoUninstallerIfAvailable {
     if ($CleanupOnly) {
         return $false
@@ -200,7 +220,7 @@ if (Invoke-InnoUninstallerIfAvailable) {
 }
 
 foreach ($shortcut in @($desktopShortcut, $startMenuShortcut)) {
-    if (Test-Path $shortcut) {
+    if (Test-ShortcutTargetsInstall $shortcut) {
         if ($PSCmdlet.ShouldProcess($shortcut, "Remove shortcut")) {
             Remove-Item -LiteralPath $shortcut -Force
         }
@@ -263,7 +283,7 @@ if ($RemoveSettings -and (Test-Path $settingsDirectory)) {
 if (!$WhatIfPreference) {
     $remaining = @()
     foreach ($path in @($desktopShortcut, $startMenuShortcut)) {
-        if (Test-Path $path) {
+        if (Test-ShortcutTargetsInstall $path) {
             $remaining += $path
         }
     }

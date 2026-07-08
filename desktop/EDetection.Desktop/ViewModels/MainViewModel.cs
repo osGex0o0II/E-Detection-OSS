@@ -123,7 +123,7 @@ public partial class MainViewModel : ObservableObject
         ProxyUserName = saved.ProxyUserName;
         EnableUpdateChecks = saved.EnableUpdateChecks;
         UseProxyForUpdates = saved.UseProxyForUpdates;
-        SelectedUpdateChannelIndex = Math.Clamp(saved.SelectedUpdateChannelIndex, 0, 2);
+        SelectedUpdateChannelIndex = Math.Clamp(saved.SelectedUpdateChannelIndex, 0, 1);
         UpdateFeedUrl = saved.UpdateFeedUrl;
         UpdateStatusText = $"当前版本 {new AppInfoService().GetInfo().Version}";
         RefreshSecureCredentialStatus();
@@ -758,7 +758,7 @@ public partial class MainViewModel : ObservableObject
     public partial bool IsDownloadingUpdateInstaller { get; set; }
 
     public bool ShouldCheckForUpdatesOnStartup =>
-        EnableUpdateChecks && SelectedUpdateChannelIndex != 2;
+        EnableUpdateChecks && SelectedUpdateChannelIndex == 0;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
@@ -1246,7 +1246,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedUpdateChannelIndexChanged(int value)
     {
-        var normalized = Math.Clamp(value, 0, 2);
+            var normalized = Math.Clamp(value, 0, 1);
         if (normalized != value)
         {
             SelectedUpdateChannelIndex = normalized;
@@ -2381,7 +2381,9 @@ public partial class MainViewModel : ObservableObject
 
     private void AddLog(string kind, string message)
     {
-        RuntimeLogs.Add(kind, message);
+        RuntimeLogs.Add(
+            DiagnosticsRedactor.Redact(kind, PythonExecutable, PythonBackendService.ResolveBackendWorkingDirectory()),
+            DiagnosticsRedactor.Redact(message, PythonExecutable, PythonBackendService.ResolveBackendWorkingDirectory()));
     }
 
     public void AddRuntimeLog(string kind, string message) => AddLog(kind, message);
@@ -2884,7 +2886,7 @@ public partial class MainViewModel : ObservableObject
             UpdateStatusText = $"安装向导已下载 {result.LatestVersion}";
             AddLog("更新", $"已下载更新安装向导: {installerPath}");
             OpenContainingFolder(installerPath);
-            ShowSettingsFeedback("安装向导已下载并通过摘要校验。请在打开的文件夹中手动运行安装向导完成更新。", InfoBarSeverity.Success);
+            ShowSettingsFeedback("安装向导已下载，文件完整性校验通过。请在打开的文件夹中手动运行安装向导完成更新。", InfoBarSeverity.Success);
         }
         catch (Exception ex) when (ex is HttpRequestException
                                    or IOException
@@ -2960,7 +2962,7 @@ public partial class MainViewModel : ObservableObject
             throw new InvalidOperationException("安装向导下载为空。");
         }
 
-        VerifyUpdateInstallerDigest(partialPath, result.InstallerDigest);
+        await VerifyUpdateInstallerDigestAsync(partialPath, result, client);
 
         if (File.Exists(installerPath))
         {
@@ -2989,6 +2991,17 @@ public partial class MainViewModel : ObservableObject
         {
             throw new InvalidOperationException("为安全起见，只会下载官方 GitHub Release 中的安装向导。");
         }
+
+        if (!string.IsNullOrWhiteSpace(result.ChecksumDownloadUrl))
+        {
+            if (!Uri.TryCreate(result.ChecksumDownloadUrl, UriKind.Absolute, out var checksumUri)
+                || checksumUri.Scheme != Uri.UriSchemeHttps
+                || !checksumUri.ToString().StartsWith(OfficialReleaseBaseUrl, StringComparison.OrdinalIgnoreCase)
+                || !checksumUri.AbsolutePath.EndsWith(".sha256.txt", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("更新校验文件必须来自官方 GitHub Release。");
+            }
+        }
     }
 
     private static bool IsOfficialReleaseUrl(string url) =>
@@ -2996,23 +3009,21 @@ public partial class MainViewModel : ObservableObject
         && uri.Scheme == Uri.UriSchemeHttps
         && uri.ToString().StartsWith(OfficialReleaseBaseUrl, StringComparison.OrdinalIgnoreCase);
 
-    private static void VerifyUpdateInstallerDigest(string installerPath, string digest)
+    private static async Task VerifyUpdateInstallerDigestAsync(
+        string installerPath,
+        UpdateCheckResult result,
+        HttpClient client)
     {
-        if (string.IsNullOrWhiteSpace(digest))
+        var expected = TryGetSha256FromDigest(result.InstallerDigest);
+        if (string.IsNullOrWhiteSpace(expected)
+            && !string.IsNullOrWhiteSpace(result.ChecksumDownloadUrl))
+        {
+            expected = await DownloadExpectedSha256FromChecksumAsync(result, client);
+        }
+
+        if (string.IsNullOrWhiteSpace(expected))
         {
             throw new InvalidOperationException("更新源未提供安装包 SHA-256 摘要，已改为打开发布页面。");
-        }
-
-        const string prefix = "sha256:";
-        if (!digest.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("更新源返回了无法识别的安装包摘要。");
-        }
-
-        var expected = digest[prefix.Length..].Trim();
-        if (expected.Length != 64)
-        {
-            throw new InvalidOperationException("更新源返回的 SHA-256 摘要格式不正确。");
         }
 
         using var stream = File.OpenRead(installerPath);
@@ -3022,6 +3033,59 @@ public partial class MainViewModel : ObservableObject
             throw new InvalidOperationException("安装向导摘要校验失败，已阻止启动该更新。");
         }
     }
+
+    private static string TryGetSha256FromDigest(string digest)
+    {
+        if (string.IsNullOrWhiteSpace(digest))
+        {
+            return "";
+        }
+
+        const string prefix = "sha256:";
+        if (!digest.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return "";
+        }
+
+        var expected = digest[prefix.Length..].Trim();
+        return IsSha256Hex(expected) ? expected : "";
+    }
+
+    private static async Task<string> DownloadExpectedSha256FromChecksumAsync(
+        UpdateCheckResult result,
+        HttpClient client)
+    {
+        using var response = await client.GetAsync(result.ChecksumDownloadUrl);
+        response.EnsureSuccessStatusCode();
+        var checksumText = await response.Content.ReadAsStringAsync();
+        foreach (var rawLine in checksumText.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (line.Length < 66)
+            {
+                continue;
+            }
+
+            var parts = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2)
+            {
+                continue;
+            }
+
+            var hash = parts[0].Trim();
+            var fileName = Path.GetFileName(parts[^1].TrimStart('*'));
+            if (IsSha256Hex(hash)
+                && string.Equals(fileName, result.InstallerName, StringComparison.OrdinalIgnoreCase))
+            {
+                return hash;
+            }
+        }
+
+        throw new InvalidOperationException("更新校验文件中未找到安装向导的 SHA-256 摘要。");
+    }
+
+    private static bool IsSha256Hex(string value) =>
+        value.Length == 64 && value.All(Uri.IsHexDigit);
 
     private static string BuildUpdateInstallerFileName(string assetName, string latestVersion)
     {

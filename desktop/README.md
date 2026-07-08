@@ -47,13 +47,23 @@ For release packaging, prefer the repo script:
 
 The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the local Python detection core plus install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
 
-GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.2.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Manual release runs check out the requested tag before building, so they can be used to republish assets for an existing tag when `replace_existing_assets` is intentionally enabled. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
+GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.2.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Manual release runs check out the requested tag before building. Published release assets are treated as immutable; if an installer needs a fix, bump the patch version and publish a new tag so installed apps can detect the update. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
+
+Release builds can be Authenticode signed by adding repository secrets named `WINDOWS_CODE_SIGNING_PFX_BASE64` and `WINDOWS_CODE_SIGNING_PFX_PASSWORD`. Optional secret `WINDOWS_CODE_SIGNING_TIMESTAMP_URL` overrides the default timestamp server. When the certificate is not configured, CI still produces an unsigned OSS build and the release notes call out the expected Windows SmartScreen warning.
+
+The app's built-in update downloader verifies the installer SHA-256 value from the GitHub Release API and falls back to the attached `E-Detection.Desktop-win-x64.sha256.txt` file when needed. This is an integrity check for the downloaded file; formal release trust still depends on Authenticode signing and GitHub account/repository security.
 
 To build the setup wizard locally, install Inno Setup 6 and run:
 
 ```powershell
 .\desktop\scripts\Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64
 .\desktop\scripts\Test-DesktopInstallerSmoke.ps1
+```
+
+Inspect signing state for a local build:
+
+```powershell
+.\desktop\scripts\Test-DesktopSignatureStatus.ps1 -Path .\artifacts\desktop\win-x64\installer\E-Detection.Desktop-Setup-win-x64.exe
 ```
 
 The installer defaults to `%LOCALAPPDATA%\Programs\E-Detection Desktop`, does not require administrator privileges, creates Start Menu integration, offers an optional Desktop shortcut, appears in Windows installed apps, closes the running desktop app during update when needed, and lets the user choose another install directory from the setup wizard.
