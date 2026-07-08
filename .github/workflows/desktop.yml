@@ -147,13 +147,13 @@ jobs:
         shell: pwsh
         run: |
           @(
-              "## Desktop build completed"
-              ""
-              "This run uploaded workflow artifacts but did not publish a GitHub Release."
-              ""
-              "Release publishing only runs for:"
-              "- pushed tags matching `v*`"
-              "- manual workflow runs with `release_tag` set"
+              '## Desktop build completed'
+              ''
+              'This run uploaded workflow artifacts but did not publish a GitHub Release.'
+              ''
+              'Release publishing only runs for:'
+              '- pushed tags matching `v*`'
+              '- manual workflow runs with `release_tag` set'
           ) | Add-Content -Path $env:GITHUB_STEP_SUMMARY
 
   release:
