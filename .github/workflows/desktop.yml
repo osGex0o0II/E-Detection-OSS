@@ -59,6 +59,45 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' && inputs.release_tag || github.ref }}
 
+      - name: Validate release ref before repository scripts
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}
+        shell: pwsh
+        env:
+          RELEASE_TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || '' }}
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq "tag") {
+              $env:GITHUB_REF_NAME
+          }
+          else {
+              $env:RELEASE_TAG_INPUT
+          }
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+              throw "Release tag is required for release builds."
+          }
+
+          if ($tag -notmatch '^v\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+              throw "Release tag '$tag' must look like v1.2.3."
+          }
+
+          git fetch --tags --force
+          $tagSha = (& git rev-list -n 1 $tag 2>$null).Trim()
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($tagSha)) {
+              throw "Release tag $tag does not exist. Create and push the tag first, then rerun the workflow."
+          }
+
+          $global:LASTEXITCODE = 0
+          $buildSha = (& git rev-parse HEAD).Trim()
+          if ($tagSha -ne $buildSha) {
+              throw "release_tag $tag points to $tagSha, but this workflow checked out $buildSha."
+          }
+
+          git fetch origin main --force
+          & git merge-base --is-ancestor $tagSha origin/main
+          if ($LASTEXITCODE -ne 0) {
+              throw "Release tag $tag points to $tagSha, which is not contained in origin/main."
+          }
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
         with:
@@ -83,18 +122,24 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64
 
-      - name: Sign published app when certificate is configured
+      - name: Sign published app for release
         if: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && github.event_name != 'pull_request' }}
         shell: pwsh
         env:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
           WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
           WINDOWS_CODE_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODE_SIGNING_TIMESTAMP_URL }}
-        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Optional -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
 
       - name: Inspect published app signature
         shell: pwsh
-        run: ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+        run: |
+          $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
+          $arguments = @("-Path", "./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe")
+          if ($isReleaseBuild) {
+              $arguments += "-RequireSigned"
+          }
+          ./desktop/scripts/Test-DesktopSignatureStatus.ps1 @arguments
 
       - name: Package health
         shell: pwsh
@@ -140,18 +185,24 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64 -UnsafeInstallRootOverride "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
 
-      - name: Sign setup installer when certificate is configured
+      - name: Sign setup installer for release
         if: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && github.event_name != 'pull_request' }}
         shell: pwsh
         env:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
           WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
           WINDOWS_CODE_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODE_SIGNING_TIMESTAMP_URL }}
-        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Optional -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
 
       - name: Inspect setup installer signature
         shell: pwsh
-        run: ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+        run: |
+          $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
+          $arguments = @("-Path", "./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe")
+          if ($isReleaseBuild) {
+              $arguments += "-RequireSigned"
+          }
+          ./desktop/scripts/Test-DesktopSignatureStatus.ps1 @arguments
 
       - name: Installer smoke
         shell: pwsh
@@ -280,6 +331,20 @@ jobs:
               throw "Release asset was not found: E-Detection.Desktop-Setup-win-x64.exe"
           }
 
+          $portableVerifyPath = Join-Path $env:RUNNER_TEMP "E-Detection-PortableSignatureVerify"
+          if (Test-Path -LiteralPath $portableVerifyPath) {
+              Remove-Item -LiteralPath $portableVerifyPath -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $portableVerifyPath | Out-Null
+          Expand-Archive -LiteralPath $zipPath.FullName -DestinationPath $portableVerifyPath -Force
+          $portableAppPath = Get-ChildItem -Path $portableVerifyPath -Recurse -File -Filter "EDetection.Desktop.exe" | Select-Object -First 1
+          if ($null -eq $portableAppPath) {
+              throw "Portable release asset does not contain EDetection.Desktop.exe."
+          }
+
+          $releaseSignaturePaths = @($setupPath.FullName, $portableAppPath.FullName)
+          ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path $releaseSignaturePaths -RequireSigned
+
           $shaPath = Join-Path $env:RUNNER_TEMP "E-Detection.Desktop-win-x64.sha256.txt"
           @(
               "$(Get-FileHash -Algorithm SHA256 -LiteralPath $setupPath.FullName | Select-Object -ExpandProperty Hash)  $($setupPath.Name)"
@@ -288,12 +353,10 @@ jobs:
 
           $setupSignature = Get-AuthenticodeSignature -LiteralPath $setupPath.FullName
           $signatureStatus = $setupSignature.Status.ToString()
-          $signatureLine = if ($signatureStatus -eq "Valid") {
-              "The setup installer is Authenticode signed by $($setupSignature.SignerCertificate.Subject)."
+          if ($signatureStatus -ne "Valid") {
+              throw "Release setup installer must be Authenticode signed. Status=$signatureStatus."
           }
-          else {
-              "The setup installer is not Authenticode signed in this build. Windows SmartScreen may show an extra warning on first install."
-          }
+          $signatureLine = "The setup installer is Authenticode signed by $($setupSignature.SignerCertificate.Subject)."
 
           $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
           @(

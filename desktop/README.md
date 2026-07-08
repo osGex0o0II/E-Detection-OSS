@@ -47,9 +47,9 @@ For release packaging, prefer the repo script:
 
 The script writes a self-contained unpackaged build to `artifacts\desktop\win-x64\publish`, adds `release-info.txt` and `INSTALL.txt`, verifies the app icon and WinUI resources are present, copies the local Python detection core plus install/uninstall scripts, and creates `E-Detection.Desktop-win-x64.zip` unless `-NoZip` is passed.
 
-GitHub Actions builds the same Windows x64 package on pull requests and pushes to `main`. Push a version tag such as `v0.2.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Manual release runs check out the requested tag before building. Published release assets are treated as immutable; if an installer needs a fix, bump the patch version and publish a new tag so installed apps can detect the update. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
+GitHub Actions builds the Windows x64 package on pull requests and pushes to `main`. Those workflow artifacts are for development validation and may be unsigned. Push a version tag such as `v0.2.0`, or run the `desktop` workflow manually with a `release_tag`, to upload a standard setup wizard (`E-Detection.Desktop-Setup-win-x64.exe`) and the portable zip (`E-Detection.Desktop-win-x64.zip`) to GitHub Releases. Manual release runs check out the requested tag before building. Published release assets are treated as immutable; if an installer needs a fix, bump the patch version and publish a new tag so installed apps can detect the update. Most users should download the setup wizard and update by running the newer setup wizard from the app or the release page.
 
-Release builds can be Authenticode signed by adding repository secrets named `WINDOWS_CODE_SIGNING_PFX_BASE64` and `WINDOWS_CODE_SIGNING_PFX_PASSWORD`. Optional secret `WINDOWS_CODE_SIGNING_TIMESTAMP_URL` overrides the default timestamp server. When the certificate is not configured, CI still produces an unsigned OSS build and the release notes call out the expected Windows SmartScreen warning.
+Official GitHub Releases require Authenticode signing. Configure repository secrets named `WINDOWS_CODE_SIGNING_PFX_BASE64` and `WINDOWS_CODE_SIGNING_PFX_PASSWORD`; optional secret `WINDOWS_CODE_SIGNING_TIMESTAMP_URL` overrides the default timestamp server. If the signing secrets are missing or the setup wizard is not signed with a valid signature, the release workflow fails before publishing assets. Non-release CI artifacts can still be unsigned so contributors can build and test without access to the release certificate.
 
 The app's built-in update downloader verifies the installer SHA-256 value from the GitHub Release API and falls back to the attached `E-Detection.Desktop-win-x64.sha256.txt` file when needed. This is an integrity check for the downloaded file; formal release trust still depends on Authenticode signing and GitHub account/repository security.
 
@@ -103,7 +103,7 @@ The quick action palette is available from the title bar search button. It expos
 
 ## Installable User Build
 
-For ordinary Windows users, download `E-Detection.Desktop-Setup-win-x64.exe` from GitHub Releases, run it, choose the install location in the wizard if needed, and launch the app from the Start menu. To update, use the app's update settings or download the newer setup wizard and run it again.
+For ordinary Windows users, download `E-Detection.Desktop-Setup-win-x64.exe` from GitHub Releases, run it, choose the install location in the wizard if needed, and launch the app from the Start menu. Official Release installers are Authenticode-signed; development workflow artifacts may be unsigned and are not the recommended install path for ordinary users. To update, use the app's update settings or download the newer setup wizard and run it again.
 
 After publishing, the `publish` folder can still be used as a portable app or installed by script for development and advanced troubleshooting:
 
