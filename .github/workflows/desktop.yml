@@ -135,11 +135,12 @@ jobs:
         shell: pwsh
         run: |
           $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
-          $arguments = @("-Path", "./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe")
           if ($isReleaseBuild) {
-              $arguments += "-RequireSigned"
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe -RequireSigned
           }
-          ./desktop/scripts/Test-DesktopSignatureStatus.ps1 @arguments
+          else {
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+          }
 
       - name: Package health
         shell: pwsh
@@ -198,11 +199,12 @@ jobs:
         shell: pwsh
         run: |
           $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
-          $arguments = @("-Path", "./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe")
           if ($isReleaseBuild) {
-              $arguments += "-RequireSigned"
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe -RequireSigned
           }
-          ./desktop/scripts/Test-DesktopSignatureStatus.ps1 @arguments
+          else {
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+          }
 
       - name: Installer smoke
         shell: pwsh
