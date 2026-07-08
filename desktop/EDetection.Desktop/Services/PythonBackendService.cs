@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using EDetection.Desktop.Models;
 
@@ -139,11 +140,17 @@ public sealed class PythonBackendService
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
             CreateNoWindow = true,
             WorkingDirectory = string.IsNullOrWhiteSpace(request.WorkingDirectory)
                 ? ResolveBackendWorkingDirectory()
                 : request.WorkingDirectory,
         };
+
+        startInfo.Environment["PYTHONUTF8"] = "1";
+        startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
+        startInfo.Environment["PYTHONUNBUFFERED"] = "1";
 
         startInfo.ArgumentList.Add("-m");
         startInfo.ArgumentList.Add("e_detection");

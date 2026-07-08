@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.json_events:
+        _configure_json_event_output()
         try:
             config = load_config(args.config)
             result = run_batch_detection(
@@ -119,6 +121,13 @@ def main(argv: list[str] | None = None) -> int:
 
 def _print_json_event(event: dict[str, Any]) -> None:
     print(json.dumps(event, ensure_ascii=False, sort_keys=True), flush=True)
+
+
+def _configure_json_event_output() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
 
 
 if __name__ == "__main__":

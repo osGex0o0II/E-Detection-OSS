@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -105,6 +108,37 @@ def test_cli_json_events_reports_invalid_config(tmp_path: Path, capsys):
             "message": f"配置文件无法解析: {config_path} (Expecting property name enclosed in double quotes)",
         }
     ]
+
+
+def test_cli_json_events_force_utf8_when_parent_encoding_is_narrow(tmp_path: Path):
+    config_path = tmp_path / "broken-config.json"
+    config_path.write_text("{not-json", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "e_detection",
+            "--json-events",
+            "--no-report",
+            "--config",
+            str(config_path),
+            str(tmp_path),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert b"UnicodeEncodeError" not in result.stderr
+    events = [json.loads(line) for line in result.stdout.decode("utf-8").splitlines()]
+    assert events[0]["event"] == "error"
+    assert events[0]["error_type"] == "ValueError"
 
 
 def test_run_batch_detection_emits_native_report_summary(tmp_path: Path, monkeypatch):
