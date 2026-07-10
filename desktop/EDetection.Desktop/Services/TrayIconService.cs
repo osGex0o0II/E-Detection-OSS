@@ -211,7 +211,7 @@ public sealed class TrayIconService : IDisposable
             | NotifyIconFlags.Tip);
         data.CallbackMessage = CallbackMessage;
         data.Icon = ResolveCurrentIconHandle();
-        data.Tip = "E-Detection Desktop";
+        data.Tip = "EDetection";
         _iconAdded = ShellNotifyIcon(NotifyIconMessage.Add, ref data);
 
         if (!_iconAdded)

@@ -8,13 +8,13 @@ public sealed class DesktopHealthService
 {
     private static readonly string[] CommonRequiredPackageFiles =
     [
-        "EDetection.Desktop.exe",
+        "EDetection.exe",
         "config.json",
         Path.Combine("Assets", "Icons", "app.ico"),
         Path.Combine("Assets", "Icons", "running.ico"),
         "App.xbf",
         "MainWindow.xbf",
-        "EDetection.Desktop.pri",
+        "EDetection.pri",
         Path.Combine("Styles", "Common.xbf"),
         Path.Combine("Views", "AppShellView.xbf"),
         Path.Combine("Views", "DetectionWorkbenchView.xbf"),
@@ -117,7 +117,7 @@ public sealed class DesktopHealthService
 
     private static string BuildInstallText()
     {
-        var appPathsKey = @"Software\Microsoft\Windows\CurrentVersion\App Paths\EDetection.Desktop.exe";
+        var appPathsKey = @"Software\Microsoft\Windows\CurrentVersion\App Paths\EDetection.exe";
         using var key = Registry.CurrentUser.OpenSubKey(appPathsKey, writable: false);
         var registeredPath = key?.GetValue("") as string;
         var processPath = Environment.ProcessPath ?? "";

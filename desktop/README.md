@@ -1,6 +1,6 @@
-# E-Detection Desktop
+# EDetection
 
-`desktop/` 包含 E-Detection 的 **C# + .NET 10 + WinUI 3** 原生桌面应用。检测、CSV 解析、规则执行、报告生成和事件处理均在进程内完成，不依赖 Python 或外部运行时桥接。
+`desktop/` 包含 EDetection 的 **C# + .NET 10 + WinUI 3** 原生桌面应用。检测、CSV 解析、规则执行、报告生成和事件处理均在进程内完成，不依赖 Python 或外部运行时桥接。
 
 ## 主要组件
 

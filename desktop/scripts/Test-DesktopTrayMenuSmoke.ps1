@@ -13,7 +13,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 
 if ([string]::IsNullOrWhiteSpace($PackagePath)) {
-    $PackagePath = if (Test-Path (Join-Path $scriptDir "EDetection.Desktop.exe")) {
+    $PackagePath = if (Test-Path (Join-Path $scriptDir "EDetection.exe")) {
         $scriptDir
     }
     else {
@@ -36,7 +36,7 @@ if ([string]::IsNullOrWhiteSpace($SourceRoot)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = if (Test-Path (Join-Path $scriptDir "EDetection.Desktop.exe")) {
+    $OutputDirectory = if (Test-Path (Join-Path $scriptDir "EDetection.exe")) {
         Join-Path $scriptDir "smoke-results\tray-menu"
     }
     else {
@@ -92,9 +92,9 @@ foreach ($token in $requiredMainWindowTokens) {
     }
 }
 
-$entryPoint = Join-Path $packageFull "EDetection.Desktop.exe"
+$entryPoint = Join-Path $packageFull "EDetection.exe"
 if (!(Test-Path $entryPoint)) {
-    $missing += "Package:EDetection.Desktop.exe"
+    $missing += "Package:EDetection.exe"
 }
 
 $runningIcon = Join-Path $packageFull "Assets\Icons\running.ico"

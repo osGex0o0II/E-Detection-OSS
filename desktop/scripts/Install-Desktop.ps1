@@ -21,8 +21,8 @@ function Get-RelativePathCompat([string]$Root, [string]$Path) {
     return [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pathUri).ToString()).Replace('/', '\')
 }
 
-$productName = "E-Detection Desktop"
-$entryPoint = "EDetection.Desktop.exe"
+$productName = "EDetection"
+$entryPoint = "EDetection.exe"
 $shortcutName = "$productName.lnk"
 $installManifestName = "install-manifest.json"
 
@@ -148,7 +148,7 @@ if ([string]::IsNullOrWhiteSpace($SourcePath)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
-    $InstallDirectory = Join-Path $env:LOCALAPPDATA "Programs\E-Detection Desktop"
+    $InstallDirectory = Join-Path $env:LOCALAPPDATA "Programs\EDetection"
 }
 
 $sourceFull = Resolve-FullPath ((Resolve-Path $SourcePath).Path)
@@ -173,7 +173,7 @@ if (!$installInPlace) {
             $hasExistingFiles = $null -ne (Get-ChildItem -LiteralPath $installFull -Force | Select-Object -First 1)
             $looksLikeProductDirectory = Test-ProductDirectory $installFull
             if ($hasExistingFiles -and !$looksLikeProductDirectory) {
-                throw "Install failed: '$installFull' already exists and does not look like an E-Detection Desktop install directory."
+                throw "Install failed: '$installFull' already exists and does not look like an EDetection install directory."
             }
 
             Remove-PreviousInstallFiles $installFull

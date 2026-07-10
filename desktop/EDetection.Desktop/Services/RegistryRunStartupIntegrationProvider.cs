@@ -7,7 +7,8 @@ namespace EDetection.Desktop.Services;
 public sealed class RegistryRunStartupIntegrationProvider : IStartupIntegrationProvider
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string EntryName = "E-Detection Desktop";
+    private const string EntryName = "EDetection";
+    private const string LegacyEntryName = "E-Detection Desktop";
     private const string StartupArgument = App.BackgroundStartupArgument;
     private const string ProviderName = "HKCU Run";
 
@@ -45,10 +46,12 @@ public sealed class RegistryRunStartupIntegrationProvider : IStartupIntegrationP
                 EntryName,
                 $"{Quote(ResolveExecutablePath())} {StartupArgument}",
                 RegistryValueKind.String);
+            runKey.DeleteValue(LegacyEntryName, throwOnMissingValue: false);
         }
         else
         {
             runKey.DeleteValue(EntryName, throwOnMissingValue: false);
+            runKey.DeleteValue(LegacyEntryName, throwOnMissingValue: false);
         }
     }
 

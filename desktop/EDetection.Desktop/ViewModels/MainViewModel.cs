@@ -3300,7 +3300,7 @@ public partial class MainViewModel : ObservableObject
 
     private static string BuildUpdateInstallerFileName(string assetName, string latestVersion)
     {
-        var fallback = $"E-Detection.Desktop-Setup-win-x64-{latestVersion}.exe";
+        var fallback = $"EDetection-Setup-win-x64-{latestVersion}.exe";
         var fileName = Path.GetFileName(string.IsNullOrWhiteSpace(assetName) ? fallback : assetName);
         if (string.IsNullOrWhiteSpace(fileName))
         {

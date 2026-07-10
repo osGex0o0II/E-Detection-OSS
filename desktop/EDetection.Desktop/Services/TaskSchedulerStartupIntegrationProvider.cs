@@ -8,7 +8,8 @@ namespace EDetection.Desktop.Services;
 
 public sealed class TaskSchedulerStartupIntegrationProvider : IStartupIntegrationProvider
 {
-    private const string TaskName = "E-Detection Desktop Autostart";
+    private const string TaskName = "EDetection Autostart";
+    private const string LegacyTaskName = "E-Detection Desktop Autostart";
     private const string StartupArgument = App.BackgroundStartupArgument;
     private const string ProviderName = "Task Scheduler";
     private const int CommandTimeoutMilliseconds = 10000;
@@ -58,8 +59,11 @@ public sealed class TaskSchedulerStartupIntegrationProvider : IStartupIntegratio
         if (!enabled)
         {
             DeleteTaskIfExists();
+            DeleteTaskIfExists(LegacyTaskName);
             return;
         }
+
+        DeleteTaskIfExists(LegacyTaskName);
 
         var executablePath = ResolveExecutablePath();
         var tempPath = Path.Combine(
@@ -98,15 +102,15 @@ public sealed class TaskSchedulerStartupIntegrationProvider : IStartupIntegratio
             executablePath,
             registeredCommand);
 
-    private static void DeleteTaskIfExists()
+    private static void DeleteTaskIfExists(string taskName = TaskName)
     {
-        var query = RunSchtasks("/Query", "/TN", TaskName);
+        var query = RunSchtasks("/Query", "/TN", taskName);
         if (query.ExitCode != 0)
         {
             return;
         }
 
-        var delete = RunSchtasks("/Delete", "/TN", TaskName, "/F");
+        var delete = RunSchtasks("/Delete", "/TN", taskName, "/F");
         if (delete.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -128,7 +132,7 @@ public sealed class TaskSchedulerStartupIntegrationProvider : IStartupIntegratio
                 new XElement(
                     ns + "RegistrationInfo",
                     new XElement(ns + "Author", "E-Detection OSS"),
-                    new XElement(ns + "Description", "Start E-Detection Desktop hidden in the tray after user sign-in.")),
+                    new XElement(ns + "Description", "Start EDetection hidden in the tray after user sign-in.")),
                 new XElement(
                     ns + "Triggers",
                     new XElement(

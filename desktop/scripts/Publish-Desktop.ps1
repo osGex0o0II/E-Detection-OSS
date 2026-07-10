@@ -24,8 +24,8 @@ $projectPath = Join-Path $repoRoot "desktop\EDetection.Desktop\EDetection.Deskto
 $solutionPath = Join-Path $repoRoot "desktop\EDetection.Desktop.slnx"
 $artifactRoot = Join-Path $repoRoot "artifacts\desktop\$RuntimeIdentifier"
 $publishDir = Join-Path $artifactRoot "publish"
-$zipPath = Join-Path $artifactRoot "E-Detection.Desktop-$RuntimeIdentifier.zip"
-$installerName = "E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"
+$zipPath = Join-Path $artifactRoot "EDetection-$RuntimeIdentifier.zip"
+$installerName = "EDetection-Setup-$RuntimeIdentifier.exe"
 $installFilesManifestName = "install-files.txt"
 
 function Get-RelativePackageFiles([string]$Path) {
@@ -76,9 +76,9 @@ if ($LASTEXITCODE -ne 0) {
     throw "Publish failed: dotnet publish exited with $LASTEXITCODE."
 }
 
-$exePath = Join-Path $publishDir "EDetection.Desktop.exe"
+$exePath = Join-Path $publishDir "EDetection.exe"
 if (!(Test-Path $exePath)) {
-    throw "Publish failed: EDetection.Desktop.exe was not found in $publishDir"
+    throw "Publish failed: EDetection.exe was not found in $publishDir"
 }
 
 $iconPath = Join-Path $publishDir "Assets\Icons\app.ico"
@@ -129,7 +129,7 @@ Copy-Item -LiteralPath $configSourcePath -Destination (Join-Path $publishDir "co
 $requiredWinUIResources = @(
     "App.xbf",
     "MainWindow.xbf",
-    "EDetection.Desktop.pri",
+    "EDetection.pri",
     "Styles\Common.xbf",
     "Views\AppShellView.xbf",
     "Views\DetectionWorkbenchView.xbf",
@@ -167,7 +167,7 @@ catch {
 
 $infoPath = Join-Path $publishDir "release-info.txt"
 @(
-    "E-Detection Desktop"
+    "EDetection"
     "Version=$appVersion"
     "RuntimeIdentifier=$RuntimeIdentifier"
     "Configuration=$Configuration"
@@ -176,7 +176,7 @@ $infoPath = Join-Path $publishDir "release-info.txt"
     "GitCommitFull=$gitCommitFull"
     "GitDirty=$gitDirty"
     "PublishedAt=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
-    "EntryPoint=EDetection.Desktop.exe"
+    "EntryPoint=EDetection.exe"
     "RecommendedInstaller=$installerName"
     "InstallScript=Install-Desktop.ps1"
     "UninstallScript=Uninstall-Desktop.ps1"
@@ -186,7 +186,7 @@ $infoPath = Join-Path $publishDir "release-info.txt"
 
 $installTextPath = Join-Path $publishDir "INSTALL.txt"
 @(
-    "E-Detection Desktop"
+    "EDetection"
     ""
     "Recommended for most Windows users:"
     "  Download and run $installerName from GitHub Releases."
@@ -201,7 +201,7 @@ $installTextPath = Join-Path $publishDir "INSTALL.txt"
     "  powershell -ExecutionPolicy Bypass -File .\Install-Desktop.ps1 -NoDesktopShortcut -NoStartMenuShortcut"
     ""
     "Advanced install to a custom location:"
-    "  powershell -ExecutionPolicy Bypass -File .\Install-Desktop.ps1 -InstallDirectory ""D:\Apps\E-Detection Desktop"""
+    "  powershell -ExecutionPolicy Bypass -File .\Install-Desktop.ps1 -InstallDirectory ""D:\Apps\EDetection"""
     ""
     "Advanced portable uninstall:"
     "  powershell -ExecutionPolicy Bypass -File .\Uninstall-Desktop.ps1"
@@ -242,6 +242,11 @@ if (Test-Path $smokeResultsPath) {
 }
 
 if (!$NoZip) {
+    $legacyZipPaths = Get-ChildItem -LiteralPath $artifactRoot -File -Filter "E-Detection.Desktop-$RuntimeIdentifier*.zip"
+    foreach ($legacyZipPath in $legacyZipPaths) {
+        Remove-Item -LiteralPath $legacyZipPath.FullName -Force
+    }
+
     if (Test-Path $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
     }

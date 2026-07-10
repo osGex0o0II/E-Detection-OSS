@@ -46,7 +46,7 @@ Assert-Contains $workflow "run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeId
 Assert-Contains $workflow "run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish" "workflow must validate the published package."
 Assert-Contains $workflow "run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish" "workflow must validate portable installation."
 Assert-Contains $workflow "run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64" "workflow must build the native installer."
-Assert-Contains $workflow "run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe" "workflow must validate installer upgrade behavior."
+Assert-Contains $workflow "run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe" "workflow must validate installer upgrade behavior."
 Assert-Contains $workflow 'if ($portableBackend -ne "native")' "release job must reject a non-native portable package."
 Assert-Contains $workflow '& $portableHealthScript -PackagePath $portablePackageRoot' "release job must re-run package health after download."
 Assert-Contains $workflow 'needs: winui-build' "release job must depend on the native build."
@@ -57,8 +57,8 @@ foreach ($removedWorkflowToken in @("actions/setup-python", "pip install", "pypr
 
 Assert-Contains $publish '"DetectionBackend=native"' "release-info must identify the native backend."
 Assert-Contains $publish '"PackageContents=Native C# + .NET runtime only"' "release-info must describe native-only contents."
-Assert-Contains $publish '$zipPath = Join-Path $artifactRoot "E-Detection.Desktop-$RuntimeIdentifier.zip"' "publish must use the stable native archive name."
-Assert-Contains $publish '$installerName = "E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"' "publish must use the stable native installer name."
+Assert-Contains $publish '$zipPath = Join-Path $artifactRoot "EDetection-$RuntimeIdentifier.zip"' "publish must use the stable native archive name."
+Assert-Contains $publish '$installerName = "EDetection-Setup-$RuntimeIdentifier.exe"' "publish must use the stable native installer name."
 foreach ($removedPublishToken in @("PackageProfile", "python-runtime", "python-wheelhouse", "BundledPython", "PythonPath", "SkipPythonWheelhouse")) {
     Assert-NotContains $publish $removedPublishToken "publish must not retain '$removedPublishToken'."
 }

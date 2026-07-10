@@ -1,5 +1,5 @@
-#define AppName "E-Detection Desktop"
-#define AppExeName "EDetection.Desktop.exe"
+#define AppName "EDetection"
+#define AppExeName "EDetection.exe"
 #ifndef AppVersion
 #define AppVersion "0.1.0"
 #endif
@@ -24,13 +24,13 @@ AppPublisher=E-Detection OSS
 AppPublisherURL=https://github.com/osGex0o0II/E-Detection-OSS
 AppSupportURL=https://github.com/osGex0o0II/E-Detection-OSS/issues
 AppUpdatesURL=https://github.com/osGex0o0II/E-Detection-OSS/releases/latest
-DefaultDirName={localappdata}\Programs\E-Detection Desktop
+DefaultDirName={localappdata}\Programs\EDetection
 DefaultGroupName=E-Detection
 AllowNoIcons=yes
 DisableDirPage=no
 DisableProgramGroupPage=no
 OutputDir={#OutputDir}
-OutputBaseFilename=E-Detection.Desktop-Setup-{#RuntimeIdentifier}
+OutputBaseFilename=EDetection-Setup-{#RuntimeIdentifier}
 SetupIconFile={#SourceDir}\Assets\Icons\app.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2
@@ -41,7 +41,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
-CloseApplicationsFilter={#AppExeName}
+CloseApplicationsFilter={#AppExeName},EDetection.Desktop.exe
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -59,8 +59,8 @@ Type: filesandordirs; Name: "{app}\Styles"; Check: ShouldCleanExistingProductDir
 Type: filesandordirs; Name: "{app}\Views"; Check: ShouldCleanExistingProductDirectory
 
 [Icons]
-Name: "{group}\E-Detection Desktop"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"
-Name: "{autodesktop}\E-Detection Desktop"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"; Tasks: desktopicon
+Name: "{group}\EDetection"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"
+Name: "{autodesktop}\EDetection"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\Assets\Icons\app.ico"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\App Paths\{#AppExeName}"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName}"; Flags: uninsdeletekey
@@ -110,11 +110,21 @@ end;
 function LooksLikeExistingProductDirectory(Dir: string): Boolean;
 begin
   Result :=
-    FileExists(AddBackslash(Dir) + '{#AppExeName}') and
     (
-      FileExists(AddBackslash(Dir) + 'release-info.txt') or
-      FileExists(AddBackslash(Dir) + 'unins000.dat') or
-      FileExists(AddBackslash(Dir) + 'EDetection.Desktop.dll')
+      FileExists(AddBackslash(Dir) + '{#AppExeName}') and
+      (
+        FileExists(AddBackslash(Dir) + 'release-info.txt') or
+        FileExists(AddBackslash(Dir) + 'unins000.dat') or
+        FileExists(AddBackslash(Dir) + 'EDetection.dll')
+      )
+    ) or
+    (
+      FileExists(AddBackslash(Dir) + 'EDetection.Desktop.exe') and
+      (
+        FileExists(AddBackslash(Dir) + 'release-info.txt') or
+        FileExists(AddBackslash(Dir) + 'unins000.dat') or
+        FileExists(AddBackslash(Dir) + 'EDetection.Desktop.dll')
+      )
     );
 end;
 
@@ -143,7 +153,7 @@ function ShouldPreserveInstallMarker(RelativePath: string): Boolean;
 begin
   Result :=
     (CompareText(RelativePath, '{#AppExeName}') = 0) or
-    (CompareText(RelativePath, 'EDetection.Desktop.dll') = 0) or
+    (CompareText(RelativePath, 'EDetection.dll') = 0) or
     (CompareText(RelativePath, 'release-info.txt') = 0) or
     (CompareText(RelativePath, 'install-files.txt') = 0) or
     (CompareText(RelativePath, 'unins000.dat') = 0) or
@@ -209,7 +219,7 @@ end;
 
 function InstallDirectoryErrorMessage: string;
 begin
-  Result := '请选择空文件夹或现有 E-Detection Desktop 安装目录。安装向导不会安装到已经包含其他文件的普通文件夹，以避免覆盖或清理用户文件。';
+  Result := '请选择空文件夹或现有 EDetection 安装目录。安装向导不会安装到已经包含其他文件的普通文件夹，以避免覆盖或清理用户文件。';
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;

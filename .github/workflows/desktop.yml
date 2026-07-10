@@ -126,17 +126,17 @@ jobs:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
           WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
           WINDOWS_CODE_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODE_SIGNING_TIMESTAMP_URL }}
-        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.exe
 
       - name: Inspect published app signature
         shell: pwsh
         run: |
           $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
           if ($isReleaseBuild) {
-              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe -RequireSigned
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.exe -RequireSigned
           }
           else {
-              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.Desktop.exe
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.exe
           }
 
       - name: Package health
@@ -186,27 +186,27 @@ jobs:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
           WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
           WINDOWS_CODE_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODE_SIGNING_TIMESTAMP_URL }}
-        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+        run: ./desktop/scripts/Sign-DesktopArtifacts.ps1 -Path ./artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe
 
       - name: Inspect setup installer signature
         shell: pwsh
         run: |
           $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
           if ($isReleaseBuild) {
-              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe -RequireSigned
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe -RequireSigned
           }
           else {
-              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe
           }
 
       - name: Installer smoke
         shell: pwsh
-        run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe -UnsafeInstallDirectory "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
+        run: ./desktop/scripts/Test-DesktopInstallerSmoke.ps1 -InstallerPath ./artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe -UnsafeInstallDirectory "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
 
       - name: Refresh portable zip after signing
         shell: pwsh
         run: |
-          $zipPath = "./artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip"
+          $zipPath = "./artifacts/desktop/win-x64/EDetection-win-x64.zip"
           if (Test-Path $zipPath) {
               Remove-Item -LiteralPath $zipPath -Force
           }
@@ -215,10 +215,10 @@ jobs:
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v6
         with:
-          name: E-Detection.Desktop-win-x64
+          name: EDetection-win-x64
           path: |
-            artifacts/desktop/win-x64/E-Detection.Desktop-win-x64.zip
-            artifacts/desktop/win-x64/installer/E-Detection.Desktop-Setup-win-x64.exe
+            artifacts/desktop/win-x64/EDetection-win-x64.zip
+            artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe
           if-no-files-found: error
 
       - name: Explain build-only run
@@ -253,7 +253,7 @@ jobs:
       - name: Download desktop artifact
         uses: actions/download-artifact@v6
         with:
-          name: E-Detection.Desktop-win-x64
+          name: EDetection-win-x64
           path: release-artifacts
 
       - name: Publish GitHub release
@@ -309,14 +309,14 @@ jobs:
               throw "Desktop assembly/file versions must match $tagVersion.0. AssemblyVersion=$assemblyVersion FileVersion=$fileVersion."
           }
 
-          $zipPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "E-Detection.Desktop-win-x64.zip" | Select-Object -First 1
-          $setupPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "E-Detection.Desktop-Setup-win-x64.exe" | Select-Object -First 1
+          $zipPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "EDetection-win-x64.zip" | Select-Object -First 1
+          $setupPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "EDetection-Setup-win-x64.exe" | Select-Object -First 1
           if ($null -eq $zipPath) {
-              throw "Release asset was not found: E-Detection.Desktop-win-x64.zip"
+              throw "Release asset was not found: EDetection-win-x64.zip"
           }
 
           if ($null -eq $setupPath) {
-              throw "Release asset was not found: E-Detection.Desktop-Setup-win-x64.exe"
+              throw "Release asset was not found: EDetection-Setup-win-x64.exe"
           }
 
           $portableVerifyPath = Join-Path $env:RUNNER_TEMP "E-Detection-PortableSignatureVerify"
@@ -325,9 +325,9 @@ jobs:
           }
           New-Item -ItemType Directory -Path $portableVerifyPath | Out-Null
           Expand-Archive -LiteralPath $zipPath.FullName -DestinationPath $portableVerifyPath -Force
-          $portableAppPath = Get-ChildItem -Path $portableVerifyPath -Recurse -File -Filter "EDetection.Desktop.exe" | Select-Object -First 1
+          $portableAppPath = Get-ChildItem -Path $portableVerifyPath -Recurse -File -Filter "EDetection.exe" | Select-Object -First 1
           if ($null -eq $portableAppPath) {
-              throw "Portable release asset does not contain EDetection.Desktop.exe."
+              throw "Portable release asset does not contain EDetection.exe."
           }
 
           $portablePackageRoot = $portableAppPath.Directory.FullName
@@ -362,7 +362,7 @@ jobs:
           $releaseSignaturePaths = @($setupPath.FullName, $portableAppPath.FullName)
           ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path $releaseSignaturePaths -RequireSigned
 
-          $shaPath = Join-Path $env:RUNNER_TEMP "E-Detection.Desktop-win-x64.sha256.txt"
+          $shaPath = Join-Path $env:RUNNER_TEMP "EDetection-win-x64.sha256.txt"
           @(
               "$(Get-FileHash -Algorithm SHA256 -LiteralPath $setupPath.FullName | Select-Object -ExpandProperty Hash)  $($setupPath.Name)"
               "$(Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath.FullName | Select-Object -ExpandProperty Hash)  $($zipPath.Name)"
@@ -379,10 +379,10 @@ jobs:
           @(
               "Windows x64 desktop build generated from commit $buildSha."
               ""
-              "Recommended for most users: download and run E-Detection.Desktop-Setup-win-x64.exe."
+              "Recommended for most users: download and run EDetection-Setup-win-x64.exe."
               "Use the same setup wizard to install or update the desktop app. It supports choosing the install location and normal Windows uninstall."
               $signatureLine
-              "Portable package for advanced users: E-Detection.Desktop-win-x64.zip"
+              "Portable package for advanced users: EDetection-win-x64.zip"
               ""
               "Included checks:"
               "- dotnet restore/build"
@@ -392,8 +392,8 @@ jobs:
               "- install/uninstall smoke"
               "- setup installer smoke"
               ""
-              "SHA-256 checksums are attached as E-Detection.Desktop-win-x64.sha256.txt."
-              "Windows checksum command: Get-FileHash .\E-Detection.Desktop-Setup-win-x64.exe -Algorithm SHA256"
+              "SHA-256 checksums are attached as EDetection-win-x64.sha256.txt."
+              "Windows checksum command: Get-FileHash .\EDetection-Setup-win-x64.exe -Algorithm SHA256"
           ) | Set-Content -Path $notesPath -Encoding UTF8
 
           $releaseViewOutput = & gh release view $tag --repo $env:GITHUB_REPOSITORY --json id,tagName 2>&1
@@ -413,7 +413,7 @@ jobs:
               throw "Release $tag already exists. Published release assets are immutable for desktop updates; create a new patch tag instead."
           }
           else {
-              gh release create $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --verify-tag --title "E-Detection Desktop $tag" --notes-file $notesPath
+              gh release create $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --verify-tag --title "EDetection $tag" --notes-file $notesPath
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to create release $tag."
               }

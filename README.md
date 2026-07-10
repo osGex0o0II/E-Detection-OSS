@@ -1,6 +1,6 @@
-# E-Detection 电气参数异常检测系统
+# EDetection 电气参数异常检测系统
 
-E-Detection 是一个面向电力监控/SCADA CSV 运行日报的 Windows 原生检测应用。项目现已完成从旧 Python 实现到 **C# + .NET 10 + WinUI 3** 的重构；仓库和发布包仅保留原生检测后端。
+EDetection 是一个面向电力监控/SCADA CSV 运行日报的 Windows 原生检测应用。项目现已完成从旧 Python 实现到 **C# + .NET 10 + WinUI 3** 的重构；仓库和发布包仅保留原生检测后端。
 
 ## 当前能力
 

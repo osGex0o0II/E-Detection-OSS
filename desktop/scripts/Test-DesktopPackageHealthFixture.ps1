@@ -48,12 +48,12 @@ function Write-InstallFilesManifest([string]$Root) {
 
 function New-NativePackageFixture([string]$Root) {
     $commonRequiredFiles = @(
-        "EDetection.Desktop.exe",
+        "EDetection.exe",
         "Assets\Icons\app.ico",
         "Assets\Icons\running.ico",
         "App.xbf",
         "MainWindow.xbf",
-        "EDetection.Desktop.pri",
+        "EDetection.pri",
         "Styles\Common.xbf",
         "Views\AppShellView.xbf",
         "Views\DetectionWorkbenchView.xbf",

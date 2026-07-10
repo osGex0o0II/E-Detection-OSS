@@ -65,8 +65,8 @@ if (!$outputFull.StartsWith($artifactRootFull, [System.StringComparison]::Ordina
     throw "Refusing to clean installer output outside artifact root: $outputFull"
 }
 
-if (!(Test-Path (Join-Path $sourceFull "EDetection.Desktop.exe"))) {
-    throw "Installer build failed: EDetection.Desktop.exe was not found in $sourceFull"
+if (!(Test-Path (Join-Path $sourceFull "EDetection.exe"))) {
+    throw "Installer build failed: EDetection.exe was not found in $sourceFull"
 }
 
 if (!(Test-Path $installerScript)) {
@@ -126,7 +126,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Installer build failed with exit code $LASTEXITCODE."
 }
 
-$installerPath = Join-Path $outputFull "E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"
+$installerPath = Join-Path $outputFull "EDetection-Setup-$RuntimeIdentifier.exe"
 if (!(Test-Path $installerPath)) {
     throw "Installer build failed: expected installer was not found at $installerPath"
 }

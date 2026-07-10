@@ -11,8 +11,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$productName = "E-Detection Desktop"
-$entryPoint = "EDetection.Desktop.exe"
+$productName = "EDetection"
+$entryPoint = "EDetection.exe"
 $shortcutName = "$productName.lnk"
 $installManifestName = "install-manifest.json"
 
@@ -78,7 +78,7 @@ function Remove-InstalledFiles([string]$Path) {
     }
 
     if (!(Test-ProductDirectory $Path)) {
-        throw "Uninstall failed: '$Path' does not look like an E-Detection Desktop install directory."
+        throw "Uninstall failed: '$Path' does not look like an EDetection install directory."
     }
 
     $rootFull = Resolve-FullPath $Path
@@ -112,7 +112,7 @@ function Remove-InstalledFiles([string]$Path) {
 }
 
 if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
-    $InstallDirectory = Join-Path $env:LOCALAPPDATA "Programs\E-Detection Desktop"
+    $InstallDirectory = Join-Path $env:LOCALAPPDATA "Programs\EDetection"
 }
 
 $installFull = Resolve-FullPath $InstallDirectory
@@ -121,8 +121,8 @@ $startMenuFolder = Join-Path ([Environment]::GetFolderPath([Environment+SpecialF
 $startMenuShortcut = Join-Path $startMenuFolder $shortcutName
 $appPathsKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\$entryPoint"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$startupEntryName = "E-Detection Desktop"
-$startupTaskName = "E-Detection Desktop Autostart"
+$startupEntryName = "EDetection"
+$startupTaskName = "EDetection Autostart"
 $settingsDirectory = Join-Path $env:LOCALAPPDATA "E-Detection\Desktop"
 Assert-SafeInstallDirectory $installFull
 

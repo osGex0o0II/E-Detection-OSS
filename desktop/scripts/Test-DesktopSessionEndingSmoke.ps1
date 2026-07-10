@@ -16,21 +16,21 @@ $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 
 if (![string]::IsNullOrWhiteSpace($PackagePath) -and [string]::IsNullOrWhiteSpace($AppPath)) {
     $packageFull = [System.IO.Path]::GetFullPath((Resolve-Path $PackagePath).Path)
-    $AppPath = Join-Path $packageFull "EDetection.Desktop.exe"
+    $AppPath = Join-Path $packageFull "EDetection.exe"
 }
 
 if ([string]::IsNullOrWhiteSpace($AppPath)) {
-    $localAppPath = Join-Path $scriptDir "EDetection.Desktop.exe"
+    $localAppPath = Join-Path $scriptDir "EDetection.exe"
     $AppPath = if (Test-Path $localAppPath) {
         $localAppPath
     }
     else {
-        Join-Path $repoRoot "artifacts\desktop\win-x64\publish\EDetection.Desktop.exe"
+        Join-Path $repoRoot "artifacts\desktop\win-x64\publish\EDetection.exe"
     }
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-    $OutputDirectory = if (Test-Path (Join-Path $scriptDir "EDetection.Desktop.exe")) {
+    $OutputDirectory = if (Test-Path (Join-Path $scriptDir "EDetection.exe")) {
         Join-Path $scriptDir "smoke-results\session-ending"
     }
     else {

@@ -21,12 +21,12 @@ if ([string]::IsNullOrWhiteSpace($PackagePath)) {
 
 $packageFull = [System.IO.Path]::GetFullPath((Resolve-Path $PackagePath).Path)
 $requiredFiles = @(
-    "EDetection.Desktop.exe",
+    "EDetection.exe",
     "Assets\Icons\app.ico",
     "Assets\Icons\running.ico",
     "App.xbf",
     "MainWindow.xbf",
-    "EDetection.Desktop.pri",
+    "EDetection.pri",
     "Styles\Common.xbf",
     "Views\AppShellView.xbf",
     "Views\DetectionWorkbenchView.xbf",
@@ -124,7 +124,7 @@ $legacyCacheEntries = Get-ChildItem -LiteralPath $packageFull -Recurse -Force -E
         (!$_.PSIsContainer -and ($_.Name.EndsWith(".pyc", [System.StringComparison]::OrdinalIgnoreCase) -or $_.Name.EndsWith(".pyo", [System.StringComparison]::OrdinalIgnoreCase)))
     } | Select-Object -First 5 -ExpandProperty FullName
 
-$exePath = Join-Path $packageFull "EDetection.Desktop.exe"
+$exePath = Join-Path $packageFull "EDetection.exe"
 $exeVersion = if (Test-Path $exePath) { [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exePath).FileVersion } else { $null }
 $result = [pscustomobject]@{
     PackagePath = $packageFull

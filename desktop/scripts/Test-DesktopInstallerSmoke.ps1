@@ -140,7 +140,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 
 if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
-    $InstallerPath = Join-Path $repoRoot "artifacts\desktop\win-x64\installer\E-Detection.Desktop-Setup-win-x64.exe"
+    $InstallerPath = Join-Path $repoRoot "artifacts\desktop\win-x64\installer\EDetection-Setup-win-x64.exe"
 }
 
 $installerFull = Resolve-FullPath ((Resolve-Path $InstallerPath).Path)
@@ -161,12 +161,12 @@ $unsafeInstallLog = Join-Path $smokeRoot "unsafe-install.log"
 $nonProductInstallLog = Join-Path $smokeRoot "non-product-install.log"
 $falsePositiveProductInstallLog = Join-Path $smokeRoot "false-positive-product-install.log"
 $uninstallLog = Join-Path $smokeRoot "uninstall.log"
-$entryPoint = "EDetection.Desktop.exe"
+$entryPoint = "EDetection.exe"
 $installedExe = Join-Path $installFull $entryPoint
 $appPathsKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\$entryPoint"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$startupEntryName = "E-Detection Desktop"
-$startupTaskName = "E-Detection Desktop Autostart"
+$startupEntryName = "EDetection"
+$startupTaskName = "EDetection Autostart"
 $startupSnapshot = Get-RegistryValueSnapshot $runKey $startupEntryName
 $startupTaskSnapshot = Get-ScheduledTaskXml $startupTaskName
 $settingsDirectory = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "E-Detection\Desktop"

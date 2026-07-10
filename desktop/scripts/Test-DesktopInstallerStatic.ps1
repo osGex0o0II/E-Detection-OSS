@@ -29,9 +29,9 @@ $requiredLiterals = @(
     @{ Text = "#ifndef UnsafeInstallRootOverride"; Message = "UnsafeInstallRootOverride must be overrideable by installer smoke." },
     @{ Text = "#define UnsafeInstallRootOverride"; Message = "UnsafeInstallRootOverride preprocessor variable is required for installer smoke safety checks." },
     @{ Text = '#define UnsafeInstallRootOverride ""'; Message = "UnsafeInstallRootOverride default must be empty for production installers." },
-    @{ Text = 'DefaultDirName={localappdata}\Programs\E-Detection Desktop'; Message = "Installer must default to the per-user LocalAppData app directory." },
+    @{ Text = 'DefaultDirName={localappdata}\Programs\EDetection'; Message = "Installer must default to the per-user LocalAppData app directory." },
     @{ Text = "PrivilegesRequired=lowest"; Message = "Installer must remain per-user and avoid elevation by default." },
-    @{ Text = "OutputBaseFilename=E-Detection.Desktop-Setup-{#RuntimeIdentifier}"; Message = "Output filename must use the stable native runtime name." },
+    @{ Text = "OutputBaseFilename=EDetection-Setup-{#RuntimeIdentifier}"; Message = "Output filename must use the stable native runtime name." },
     @{ Text = "[InstallDelete]"; Message = "InstallDelete section is required to clean stale product directories." },
     @{ Text = 'Type: filesandordirs; Name: "{app}\core"; Check: ShouldCleanExistingProductDirectory'; Message = "InstallDelete must remove the retired core directory on upgrade." },
     @{ Text = 'Type: filesandordirs; Name: "{app}\e_detection"; Check: ShouldCleanExistingProductDirectory'; Message = "InstallDelete must remove the retired implementation directory on upgrade." },
@@ -80,7 +80,7 @@ Assert-MatchesRegex `
 
 Assert-MatchesRegex `
     $content `
-    "function\s+LooksLikeExistingProductDirectory[\s\S]*?FileExists\(AddBackslash\(Dir\) \+ '\{#AppExeName\}'\)[\s\S]*?release-info\.txt[\s\S]*?unins000\.dat[\s\S]*?EDetection\.Desktop\.dll" `
+    "function\s+LooksLikeExistingProductDirectory[\s\S]*?EDetection\.Desktop\.exe[\s\S]*?EDetection\.Desktop\.dll[\s\S]*?EDetection\.dll" `
     "Product directory detection must require the app executable and product marker files."
 
 Assert-MatchesRegex `

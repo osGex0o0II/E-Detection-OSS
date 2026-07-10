@@ -22,7 +22,7 @@ public sealed class UpdateCheckService
             ? new HttpClient()
             : new HttpClient(handler, disposeHandler: false);
         client.Timeout = RequestTimeout;
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("E-Detection-Desktop");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("EDetection");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         var endpoint = ResolveLatestReleaseEndpoint(feedUrl);
         using var response = await client.GetAsync(endpoint, cancellationToken).ConfigureAwait(false);
@@ -189,7 +189,7 @@ public sealed class UpdateCheckService
             }
 
             var score = 10;
-            if (name.Contains("E-Detection.Desktop", StringComparison.OrdinalIgnoreCase))
+            if (name.Contains("EDetection", StringComparison.OrdinalIgnoreCase))
             {
                 score += 30;
             }
@@ -214,7 +214,7 @@ public sealed class UpdateCheckService
 
     private static int ScoreInstallerAsset(string name)
     {
-        const string installerPrefix = "E-Detection.Desktop-Setup-";
+        const string installerPrefix = "EDetection-Setup-";
         if (!name.StartsWith(installerPrefix, StringComparison.OrdinalIgnoreCase)
             || (!name.Contains("win-x64", StringComparison.OrdinalIgnoreCase)
                 && !name.Contains("x64", StringComparison.OrdinalIgnoreCase)))
@@ -224,7 +224,7 @@ public sealed class UpdateCheckService
 
         var score = 0;
         // The production native installer keeps the stable unsuffixed name.
-        if (name.Equals("E-Detection.Desktop-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase))
+        if (name.Equals("EDetection-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase))
         {
             return 1000;
         }
@@ -234,7 +234,7 @@ public sealed class UpdateCheckService
             score += 500;
         }
 
-        if (name.Contains("E-Detection.Desktop", StringComparison.OrdinalIgnoreCase))
+        if (name.Contains("EDetection", StringComparison.OrdinalIgnoreCase))
         {
             score += 30;
         }

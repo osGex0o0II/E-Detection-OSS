@@ -18,7 +18,7 @@ public sealed class AppInfoService
 
         return new AppInfo(
             string.IsNullOrWhiteSpace(versionInfo.ProductName)
-                ? "E-Detection Desktop"
+                ? "EDetection"
                 : versionInfo.ProductName,
             version,
             string.IsNullOrWhiteSpace(versionInfo.FileDescription)
