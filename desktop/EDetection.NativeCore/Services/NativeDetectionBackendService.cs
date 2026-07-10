@@ -5,9 +5,9 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Text;
 using System.Text.Json;
-using EDetection.Desktop.Models;
+using EDetection.NativeCore.Models;
 
-namespace EDetection.Desktop.Services;
+namespace EDetection.NativeCore.Services;
 
 public sealed partial class NativeDetectionBackendService : IDetectionBackendService
 {

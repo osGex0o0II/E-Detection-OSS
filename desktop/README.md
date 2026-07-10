@@ -4,12 +4,12 @@
 
 ## 主要组件
 
-- `EDetection.Desktop/Services/NativeDetectionBackendService.cs`：原生 CSV 检测、事件和报告后端。
-- `EDetection.Desktop/Services/DetectionBackendServiceFactory.cs`：固定选择原生检测服务。
+- `EDetection.NativeCore/`：不依赖 WinUI 的原生 CSV 检测、事件、规则和报告核心；可在无交互 CI Runner 中运行。
+- `EDetection.Desktop/`：WinUI 3 应用壳，负责界面、系统集成和设置，不承载检测规则。
 - `EDetection.Desktop/Services/DesktopDiagnosticsService.cs`：输入、配置、输出目录与包完整性检查。
 - `EDetection.Desktop/Services/DesktopHealthService.cs`：应用、通知、启动集成、设置存储和包健康状态。
 - `EDetection.Desktop/Views` 与 `ViewModels`：检测工作台、设置、诊断、运行日志和报告历史。
-- `EDetection.Desktop.Tests/`：原生事件、规则、报告与设置迁移合同测试。
+- `EDetection.Desktop.Tests/`：仅引用 `EDetection.NativeCore` 的 `net10.0` 控制台冒烟测试；它会拒绝加载 WinUI 运行时。
 - `scripts/`：发布、便携安装、安装器、包健康和桌面烟测。
 
 ## 构建与测试

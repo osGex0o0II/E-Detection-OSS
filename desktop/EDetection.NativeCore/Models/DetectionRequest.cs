@@ -1,4 +1,4 @@
-namespace EDetection.Desktop.Models;
+namespace EDetection.NativeCore.Models;
 
 public sealed class DetectionRequest
 {

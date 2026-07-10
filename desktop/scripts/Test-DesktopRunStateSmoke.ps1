@@ -218,7 +218,7 @@ try {
     }
 
     $failureTitle = Wait-ForAutomationName $mainWindow.Handle "运行前检查未通过" $WaitSeconds
-    $diagnosticsAction = Wait-ForAutomationName $mainWindow.Handle "运行诊断" $WaitSeconds
+    $statusCheckAction = Wait-ForAutomationName $mainWindow.Handle "检查状态" $WaitSeconds
 
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $resultPath = Join-Path $outputFull "run-state-smoke-$timestamp.json"
@@ -227,7 +227,7 @@ try {
         ProcessId = $process.Id
         MainWindowTitle = $mainWindow.Title
         FailureTitle = $failureTitle
-        DiagnosticsAction = $diagnosticsAction
+        StatusCheckAction = $statusCheckAction
         Dpi = $dpi
         RequestedDipWidth = $Width
         RequestedDipHeight = $Height

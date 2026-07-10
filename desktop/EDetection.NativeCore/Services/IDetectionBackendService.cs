@@ -1,6 +1,6 @@
-using EDetection.Desktop.Models;
+using EDetection.NativeCore.Models;
 
-namespace EDetection.Desktop.Services;
+namespace EDetection.NativeCore.Services;
 
 public interface IDetectionBackendService
 {

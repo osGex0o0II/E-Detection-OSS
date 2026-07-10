@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace EDetection.Desktop.Models;
+namespace EDetection.NativeCore.Models;
 
 public sealed class ReportDetailPreview
 {

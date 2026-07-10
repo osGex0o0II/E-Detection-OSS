@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace EDetection.Desktop.Models;
+namespace EDetection.NativeCore.Models;
 
 public sealed class DetectionBackendEvent
 {

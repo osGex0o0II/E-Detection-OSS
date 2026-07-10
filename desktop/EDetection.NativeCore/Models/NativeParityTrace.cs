@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace EDetection.Desktop.Models;
+namespace EDetection.NativeCore.Models;
 
 /// <summary>
 /// Opt-in, privacy-preserving diagnostic data for comparing the native rule

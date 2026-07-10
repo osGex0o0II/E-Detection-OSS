@@ -1,4 +1,4 @@
-namespace EDetection.Desktop.Services;
+namespace EDetection.NativeCore.Services;
 
 public static class DetectionBackendServiceFactory
 {
