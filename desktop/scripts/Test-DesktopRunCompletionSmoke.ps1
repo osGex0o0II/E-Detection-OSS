@@ -189,7 +189,6 @@ try {
         InputDirectory = $inputDir
         OutputDirectory = ""
         ConfigPath = "config.json"
-        PythonExecutable = "python"
         WriteReport = $false
         CloseToTrayOnClose = $false
         StartMinimizedToTray = $false

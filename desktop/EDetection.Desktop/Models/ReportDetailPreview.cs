@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace EDetection.Desktop.Models;
@@ -20,6 +22,7 @@ public sealed class ReportDetailPreview
     public string? Date { get; set; }
 
     [JsonPropertyName("time")]
+    [JsonConverter(typeof(FlexibleStringJsonConverter))]
     public string? Time { get; set; }
 
     [JsonPropertyName("severity")]
@@ -36,6 +39,9 @@ public sealed class ReportDetailPreview
 
     [JsonPropertyName("recommended_action")]
     public string? RecommendedAction { get; set; }
+
+    [JsonIgnore]
+    public Dictionary<string, double> ReportValues { get; set; } = [];
 
     [JsonIgnore]
     public string LocationText
@@ -125,5 +131,39 @@ public sealed class ReportDetailPreview
             IssueValue,
             RecommendedAction);
         return haystack.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+    }
+}
+
+internal sealed class FlexibleStringJsonConverter : JsonConverter<string?>
+{
+    public override string? Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.Null => null,
+            JsonTokenType.String => reader.GetString(),
+            JsonTokenType.Number when reader.TryGetInt64(out var integer) => integer.ToString(CultureInfo.InvariantCulture),
+            JsonTokenType.Number when reader.TryGetDouble(out var number) => number.ToString(CultureInfo.InvariantCulture),
+            JsonTokenType.True => "true",
+            JsonTokenType.False => "false",
+            _ => reader.GetString(),
+        };
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer,
+        string? value,
+        JsonSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStringValue(value);
     }
 }

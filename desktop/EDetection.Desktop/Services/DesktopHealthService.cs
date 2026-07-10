@@ -6,21 +6,10 @@ namespace EDetection.Desktop.Services;
 
 public sealed class DesktopHealthService
 {
-    private static readonly string[] RequiredPackageFiles =
+    private static readonly string[] CommonRequiredPackageFiles =
     [
         "EDetection.Desktop.exe",
-        Path.Combine("python-runtime", "python.exe"),
-        "pyproject.toml",
         "config.json",
-        "requirements.txt",
-        "requirements-runtime.lock",
-        Path.Combine("core", "rules.py"),
-        Path.Combine("core", "rule_base.py"),
-        Path.Combine("e_detection", "__main__.py"),
-        Path.Combine("e_detection", "cli.py"),
-        Path.Combine("e_detection", "batch.py"),
-        Path.Combine("e_detection", "pipeline.py"),
-        Path.Combine("e_detection", "settings.py"),
         Path.Combine("Assets", "Icons", "app.ico"),
         Path.Combine("Assets", "Icons", "running.ico"),
         "App.xbf",
@@ -41,30 +30,32 @@ public sealed class DesktopHealthService
         "Test-DesktopStartupIntegrationSmoke.ps1",
         "Test-DesktopRunStateSmoke.ps1",
         "Test-DesktopRunCompletionSmoke.ps1",
+        "Test-DesktopNativeRunReportSmoke.ps1",
         "Test-DesktopSettingsSmoke.ps1",
-        "Test-DesktopBundledPythonSmoke.ps1",
         "Test-DesktopInstallSmoke.ps1",
+        "Test-DesktopDiagnosticsRedactionSmoke.ps1",
+        "Test-DesktopSignatureStatus.ps1",
         "release-info.txt",
+        "install-files.txt",
         "INSTALL.txt",
     ];
 
     public DesktopHealthSnapshot Build(
         StartupIntegrationSnapshot startupStatus,
-        SettingsService settings,
-        string pythonExecutable)
+        SettingsService settings)
     {
         var notificationText = BuildNotificationText();
         var startupText = startupStatus.StatusText;
         var settingsText = BuildSettingsText(settings);
         var packageText = BuildPackageText();
-        var pythonBridgeText = BuildPythonBridgeText(pythonExecutable);
+        const string backendText = "Native .NET 检测核心";
         var installText = BuildInstallText();
         var attentionCount = CountAttention(
             notificationText,
             startupText,
             settingsText,
             packageText,
-            pythonBridgeText,
+            backendText,
             installText);
 
         return new DesktopHealthSnapshot(
@@ -75,7 +66,7 @@ public sealed class DesktopHealthService
             startupText,
             settingsText,
             packageText,
-            pythonBridgeText,
+            backendText,
             installText);
     }
 
@@ -112,24 +103,16 @@ public sealed class DesktopHealthService
             : $"{settings.StoreStatusText} · 首次保存时创建";
     }
 
-    private static string BuildPackageText()
+    public static string BuildPackageText(string? baseDirectory = null)
     {
-        var missing = RequiredPackageFiles
-            .Where(file => !File.Exists(Path.Combine(AppContext.BaseDirectory, file)))
+        var packageRoot = baseDirectory ?? AppContext.BaseDirectory;
+        var requiredPackageFiles = CommonRequiredPackageFiles;
+        var missing = requiredPackageFiles
+            .Where(file => !File.Exists(Path.Combine(packageRoot, file)))
             .ToArray();
         return missing.Length == 0
-            ? $"包完整性可用 · {RequiredPackageFiles.Length}/{RequiredPackageFiles.Length}"
+            ? $"包完整性可用 · {requiredPackageFiles.Length}/{requiredPackageFiles.Length}"
             : $"包完整性缺失 {missing.Length} 项 · {string.Join(", ", missing.Take(3))}";
-    }
-
-    private static string BuildPythonBridgeText(string pythonExecutable)
-    {
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        var mode = DesktopDiagnosticsService.HasBackendSource(backendRoot)
-            ? "本地源码"
-            : "已发布组件";
-        var python = string.IsNullOrWhiteSpace(pythonExecutable) ? "python" : pythonExecutable;
-        return $"检测组件 · {mode} · {python}";
     }
 
     private static string BuildInstallText()

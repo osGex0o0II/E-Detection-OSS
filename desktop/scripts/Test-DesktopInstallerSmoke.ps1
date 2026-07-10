@@ -73,7 +73,14 @@ function Restore-RegistryValueSnapshot($Snapshot, [string]$KeyPath) {
 }
 
 function Get-ScheduledTaskXml([string]$TaskName) {
-    $output = & schtasks.exe /Query /TN $TaskName /XML 2>$null
+    try {
+        $output = & schtasks.exe /Query /TN $TaskName /XML 2>$null
+    }
+    catch {
+        $global:LASTEXITCODE = 0
+        return $null
+    }
+
     if ($LASTEXITCODE -ne 0) {
         $global:LASTEXITCODE = 0
         return $null
@@ -83,7 +90,12 @@ function Get-ScheduledTaskXml([string]$TaskName) {
 }
 
 function Remove-ScheduledTaskIfExists([string]$TaskName) {
-    & schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
+    try {
+        & schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
+    }
+    catch {
+    }
+
     if ($LASTEXITCODE -ne 0) {
         $global:LASTEXITCODE = 0
     }
@@ -109,7 +121,13 @@ function Restore-ScheduledTaskXml([string]$TaskName, [string]$TaskXml) {
 
 function New-SmokeScheduledStartupTask([string]$TaskName, [string]$ExecutablePath) {
     $taskCommand = "`"$ExecutablePath`" --background-startup"
-    & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR $taskCommand /F 2>$null | Out-Null
+    try {
+        & schtasks.exe /Create /TN $TaskName /SC ONLOGON /TR $taskCommand /F 2>$null | Out-Null
+    }
+    catch {
+        $global:LASTEXITCODE = 1
+    }
+
     if ($LASTEXITCODE -ne 0) {
         $global:LASTEXITCODE = 0
         return $false
@@ -277,10 +295,19 @@ try {
 
     New-Item -ItemType Directory -Force -Path $settingsDirectory | Out-Null
     $settingsMarker = "installer-update-smoke-$([Guid]::NewGuid().ToString('N'))"
-    [pscustomobject]@{
+    $legacyPythonExecutable = Join-Path $installFull "python-runtime\python.exe"
+    $settingsBeforeUpdate = [ordered]@{
         SettingsVersion = 8
         InstallerUpdateSmokeMarker = $settingsMarker
-    } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
+    }
+
+    # Simulate an upgrade from the retired implementation. The native
+    # installer must remove the former runtime directory without touching
+    # user settings or untracked user files.
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $legacyPythonExecutable) | Out-Null
+    Set-Content -Path $legacyPythonExecutable -Value "legacy runtime" -Encoding ASCII
+
+    $settingsBeforeUpdate | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
 
     $userOwnedTopLevelFile = Join-Path $installFull "user-owned-notes.txt"
     $staleManifestTopLevelFile = Join-Path $installFull "obsolete-product-root-file.txt"
@@ -309,7 +336,7 @@ try {
         ) `
         -FailureMessage "Installer smoke failed: update/repair setup did not complete successfully."
 
-    & $healthScript -PackagePath $installFull
+    & $healthScript -PackagePath $installFull -AllowUntrackedFiles
     if (!(Test-Path $userOwnedTopLevelFile)) {
         throw "Installer smoke failed: user-owned top-level file was removed during update: $userOwnedTopLevelFile"
     }
@@ -325,6 +352,10 @@ try {
     $settingsAfterUpdate = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
     if ($settingsAfterUpdate.InstallerUpdateSmokeMarker -ne $settingsMarker) {
         throw "Installer smoke failed: user settings were not preserved during update/repair install."
+    }
+
+    if (Test-Path $legacyPythonExecutable) {
+        throw "Installer smoke failed: native update did not remove retired runtime: $legacyPythonExecutable"
     }
 
     New-Item -Path $runKey -Force | Out-Null

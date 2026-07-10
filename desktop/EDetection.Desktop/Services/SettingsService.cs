@@ -6,16 +6,14 @@ namespace EDetection.Desktop.Services;
 public sealed class SettingsService
 {
     public const int CurrentSettingsVersion = SettingsServiceVersion.Current;
+    public const string SettingsDirectoryEnvironmentVariable = "EDETECTION_DESKTOP_SETTINGS_DIR";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
     };
 
-    public static readonly string SettingsDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "E-Detection",
-        "Desktop");
+    public static readonly string SettingsDirectory = ResolveSettingsDirectory();
 
     private static readonly string SettingsPath = Path.Combine(SettingsDirectory, "settings.json");
 
@@ -65,10 +63,7 @@ public sealed class SettingsService
 
     private static bool Migrate(AppSettings settings)
     {
-        if (settings.SettingsVersion == CurrentSettingsVersion)
-        {
-            return false;
-        }
+        var changed = settings.SettingsVersion != CurrentSettingsVersion;
 
         if (settings.SettingsVersion < 6)
         {
@@ -98,7 +93,21 @@ public sealed class SettingsService
 
         settings.SelectedPoetryLanguageIndex = Math.Clamp(settings.SelectedPoetryLanguageIndex, 0, 1);
         settings.SettingsVersion = CurrentSettingsVersion;
-        return true;
+        return changed;
+    }
+
+    private static string ResolveSettingsDirectory()
+    {
+        var overrideDirectory = Environment.GetEnvironmentVariable(SettingsDirectoryEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(overrideDirectory))
+        {
+            return Path.GetFullPath(overrideDirectory);
+        }
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "E-Detection",
+            "Desktop");
     }
 
     private static void CleanupStaleTemporaryFiles()

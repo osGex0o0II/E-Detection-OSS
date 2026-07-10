@@ -15,6 +15,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Get-RelativePathCompat([string]$Root, [string]$Path) {
+    $rootUri = New-Object System.Uri(([System.IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'))
+    $pathUri = New-Object System.Uri([System.IO.Path]::GetFullPath($Path))
+    return [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pathUri).ToString()).Replace('/', '\')
+}
+
 $productName = "E-Detection Desktop"
 $entryPoint = "EDetection.Desktop.exe"
 $shortcutName = "$productName.lnk"
@@ -94,7 +100,7 @@ function Get-RelativePackageFiles([string]$Path) {
     $rootFull = Resolve-FullPath $Path
     Get-ChildItem -LiteralPath $rootFull -File -Recurse -Force |
         ForEach-Object {
-            [System.IO.Path]::GetRelativePath($rootFull, $_.FullName)
+            Get-RelativePathCompat $rootFull $_.FullName
         } |
         Sort-Object
 }

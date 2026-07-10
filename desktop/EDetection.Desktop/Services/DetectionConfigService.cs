@@ -44,9 +44,7 @@ public sealed class DetectionConfigService
                 return targetPath;
             }
 
-            var bundledConfigPath = Path.Combine(
-                PythonBackendService.ResolveBackendWorkingDirectory(),
-                "config.json");
+            var bundledConfigPath = Path.Combine(AppContext.BaseDirectory, "config.json");
             var initialConfig = File.Exists(bundledConfigPath)
                 ? Load(bundledConfigPath)
                 : CreateDefault();
@@ -216,8 +214,14 @@ public sealed class DetectionConfigService
 
     public static string ResolveConfigPath(string path)
     {
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        return DesktopDiagnosticsService.ResolveAgainstBackend(path, backendRoot);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return DefaultUserConfigPath;
+        }
+
+        return Path.IsPathRooted(path)
+            ? path
+            : Path.Combine(AppContext.BaseDirectory, path);
     }
 
     public static bool IsBundledDefaultConfigPath(string path)
@@ -230,9 +234,7 @@ public sealed class DetectionConfigService
         try
         {
             var resolvedPath = Path.GetFullPath(ResolveConfigPath(path));
-            var bundledConfigPath = Path.GetFullPath(Path.Combine(
-                PythonBackendService.ResolveBackendWorkingDirectory(),
-                "config.json"));
+            var bundledConfigPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "config.json"));
             return string.Equals(
                 resolvedPath,
                 bundledConfigPath,

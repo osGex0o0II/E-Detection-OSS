@@ -24,8 +24,7 @@ $checks = @(
     '%LOCALAPPDATA%',
     '%APPDATA%',
     '%TEMP%',
-    '{backendRoot}',
-    '{python}',
+    '{app}',
     '{localPath}'
 )
 

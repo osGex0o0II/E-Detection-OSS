@@ -10,8 +10,6 @@ public sealed class AppSettings
 
     public string ConfigPath { get; set; } = "";
 
-    public string PythonExecutable { get; set; } = "";
-
     public bool WriteReport { get; set; } = true;
 
     public bool CloseToTrayOnClose { get; set; }
@@ -66,7 +64,7 @@ public sealed class AppSettings
 
     public int SelectedBackdropIndex { get; set; } = 0;
 
-    public bool EnablePoetryStatus { get; set; } = true;
+    public bool EnablePoetryStatus { get; set; }
 
     public string PoetryServiceUrl { get; set; } = "https://poetry.palemoky.com/";
 

@@ -8,9 +8,5 @@ public sealed class DetectionRequest
 
     public string? ConfigPath { get; init; }
 
-    public string PythonExecutable { get; init; } = "python";
-
     public bool WriteReport { get; init; } = true;
-
-    public string? WorkingDirectory { get; init; }
 }

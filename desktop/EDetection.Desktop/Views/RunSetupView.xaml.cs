@@ -58,15 +58,6 @@ public sealed partial class RunSetupView : UserControl
         }
     }
 
-    public async Task BrowsePythonExecutableAsync()
-    {
-        var file = await PickFileAsync(".exe");
-        if (file is not null && ViewModel is not null)
-        {
-            ViewModel.PythonExecutable = file.Path;
-        }
-    }
-
     private async void BrowseInputDirectory_Click(object sender, RoutedEventArgs e)
     {
         await BrowseInputDirectoryAsync();

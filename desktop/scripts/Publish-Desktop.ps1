@@ -7,16 +7,16 @@ param(
 
     [string]$DotNetPath = "",
 
-    [string]$PythonPath = "",
-
-    [string]$BundledPythonVersion = "3.13.14",
-
-    [switch]$SkipPythonWheelhouse,
-
     [switch]$NoZip
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-RelativePathCompat([string]$Root, [string]$Path) {
+    $rootUri = New-Object System.Uri(([System.IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'))
+    $pathUri = New-Object System.Uri([System.IO.Path]::GetFullPath($Path))
+    return [Uri]::UnescapeDataString($rootUri.MakeRelativeUri($pathUri).ToString()).Replace('/', '\')
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
@@ -25,15 +25,14 @@ $solutionPath = Join-Path $repoRoot "desktop\EDetection.Desktop.slnx"
 $artifactRoot = Join-Path $repoRoot "artifacts\desktop\$RuntimeIdentifier"
 $publishDir = Join-Path $artifactRoot "publish"
 $zipPath = Join-Path $artifactRoot "E-Detection.Desktop-$RuntimeIdentifier.zip"
-$downloadDir = Join-Path $artifactRoot "downloads"
-$runtimeRequirementsPath = Join-Path $repoRoot "desktop\requirements-runtime.lock"
+$installerName = "E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"
 $installFilesManifestName = "install-files.txt"
 
 function Get-RelativePackageFiles([string]$Path) {
     $rootFull = [System.IO.Path]::GetFullPath($Path)
     Get-ChildItem -LiteralPath $rootFull -File -Recurse -Force |
         ForEach-Object {
-            [System.IO.Path]::GetRelativePath($rootFull, $_.FullName)
+            Get-RelativePathCompat $rootFull $_.FullName
         } |
         Where-Object { $_ -ne $installFilesManifestName } |
         Sort-Object
@@ -65,13 +64,17 @@ Write-Host "Using dotnet: $DotNetPath"
 Write-Host "Restoring desktop solution..."
 & $DotNetPath restore $solutionPath
 
-Write-Host "Publishing $RuntimeIdentifier..."
+Write-Host "Publishing native .NET desktop app for $RuntimeIdentifier..."
 & $DotNetPath publish $projectPath `
     -c $Configuration `
     -r $RuntimeIdentifier `
     --self-contained true `
     --no-restore `
     -o $publishDir
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Publish failed: dotnet publish exited with $LASTEXITCODE."
+}
 
 $exePath = Join-Path $publishDir "EDetection.Desktop.exe"
 if (!(Test-Path $exePath)) {
@@ -88,7 +91,7 @@ if (!(Test-Path $runningIconPath)) {
     throw "Publish failed: Assets\Icons\running.ico was not copied to $publishDir"
 }
 
-$deliveryScripts = @(
+$commonDeliveryScripts = @(
     "Install-Desktop.ps1",
     "Uninstall-Desktop.ps1",
     "Test-DesktopPackageHealth.ps1",
@@ -98,14 +101,15 @@ $deliveryScripts = @(
     "Test-DesktopSessionEndingSmoke.ps1",
     "Test-DesktopRunStateSmoke.ps1",
     "Test-DesktopRunCompletionSmoke.ps1",
+    "Test-DesktopNativeRunReportSmoke.ps1",
     "Test-DesktopSettingsSmoke.ps1",
     "Test-DesktopStartupIntegrationSmoke.ps1",
-    "Test-DesktopEnvironmentRepairSmoke.ps1",
-    "Test-DesktopBundledPythonSmoke.ps1",
     "Test-DesktopInstallSmoke.ps1",
     "Test-DesktopDiagnosticsRedactionSmoke.ps1",
     "Test-DesktopSignatureStatus.ps1"
 )
+
+$deliveryScripts = $commonDeliveryScripts
 
 foreach ($scriptName in $deliveryScripts) {
     $scriptPath = Join-Path $scriptDir $scriptName
@@ -116,159 +120,11 @@ foreach ($scriptName in $deliveryScripts) {
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $publishDir $scriptName) -Force
 }
 
-$pythonCoreItems = @(
-    @{ Source = "core"; Destination = "core" },
-    @{ Source = "e_detection"; Destination = "e_detection" },
-    @{ Source = "pyproject.toml"; Destination = "pyproject.toml" },
-    @{ Source = "config.json"; Destination = "config.json" },
-    @{ Source = "requirements.txt"; Destination = "requirements.txt" },
-    @{ Source = "desktop\requirements-runtime.lock"; Destination = "requirements-runtime.lock" }
-)
-
-foreach ($item in $pythonCoreItems) {
-    $sourcePath = Join-Path $repoRoot $item.Source
-    if (!(Test-Path $sourcePath)) {
-        throw "Publish failed: Python core item $($item.Source) was not found in $repoRoot"
-    }
-
-    $destinationPath = Join-Path $publishDir $item.Destination
-    if (Test-Path $destinationPath) {
-        Remove-Item -LiteralPath $destinationPath -Recurse -Force
-    }
-
-    Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Recurse -Force
+$configSourcePath = Join-Path $repoRoot "config.json"
+if (!(Test-Path $configSourcePath)) {
+    throw "Publish failed: config.json was not found in $repoRoot"
 }
-
-$pythonVersionParts = $BundledPythonVersion.Split(".")
-if ($pythonVersionParts.Count -lt 2) {
-    throw "Publish failed: BundledPythonVersion must look like 3.13.14."
-}
-
-$pythonMajorMinor = "$($pythonVersionParts[0]).$($pythonVersionParts[1])"
-$pythonPthToken = "$($pythonVersionParts[0])$($pythonVersionParts[1])"
-$pythonArchitecture = if ($RuntimeIdentifier -eq "win-arm64") { "arm64" } else { "amd64" }
-$pipPlatform = if ($RuntimeIdentifier -eq "win-arm64") { "win_arm64" } else { "win_amd64" }
-$pipAbi = "cp$pythonPthToken"
-$runtimeZipName = "python-$BundledPythonVersion-embed-$pythonArchitecture.zip"
-$runtimeZipPath = Join-Path $downloadDir $runtimeZipName
-$runtimeUrl = "https://www.python.org/ftp/python/$BundledPythonVersion/$runtimeZipName"
-$runtimeDir = Join-Path $publishDir "python-runtime"
-$sitePackagesDir = Join-Path $runtimeDir "Lib\site-packages"
-$expectedRuntimeHashes = @{
-    "3.13.14|amd64" = "90b4e5b9898b72d744650524bff92377c367f44bd5fbd09e3148656c080ad907"
-    "3.13.14|arm64" = "8b5bfc935a24b55c17410aa0b21016ebeee225c96addf008d1d3cd83ff52eb43"
-}
-$runtimeHashKey = "$BundledPythonVersion|$pythonArchitecture"
-$expectedRuntimeHash = $expectedRuntimeHashes[$runtimeHashKey]
-if ([string]::IsNullOrWhiteSpace($expectedRuntimeHash)) {
-    throw "Publish failed: no SHA-256 pin is configured for bundled Python $runtimeHashKey."
-}
-
-New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
-if (!(Test-Path $runtimeZipPath)) {
-    Write-Host "Downloading bundled Python runtime: $runtimeUrl"
-    Invoke-WebRequest -Uri $runtimeUrl -OutFile $runtimeZipPath
-}
-
-$actualRuntimeHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $runtimeZipPath).Hash.ToLowerInvariant()
-if ($actualRuntimeHash -ne $expectedRuntimeHash) {
-    Remove-Item -LiteralPath $runtimeZipPath -Force -ErrorAction SilentlyContinue
-    throw "Publish failed: bundled Python runtime SHA-256 mismatch for $runtimeZipName. Expected $expectedRuntimeHash but got $actualRuntimeHash."
-}
-
-if (Test-Path $runtimeDir) {
-    Remove-Item -LiteralPath $runtimeDir -Recurse -Force
-}
-
-New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-Expand-Archive -LiteralPath $runtimeZipPath -DestinationPath $runtimeDir -Force
-New-Item -ItemType Directory -Force -Path $sitePackagesDir | Out-Null
-
-$pthPath = Join-Path $runtimeDir "python$pythonPthToken._pth"
-if (!(Test-Path $pthPath)) {
-    throw "Publish failed: bundled Python ._pth file was not found at $pthPath"
-}
-
-@(
-    "python$pythonPthToken.zip"
-    "."
-    "Lib\site-packages"
-    ".."
-    "import site"
-) | Set-Content -Path $pthPath -Encoding ASCII
-
-if (!$SkipPythonWheelhouse) {
-    $wheelhouseDir = Join-Path $publishDir "python-wheelhouse"
-    if (Test-Path $wheelhouseDir) {
-        Remove-Item -LiteralPath $wheelhouseDir -Recurse -Force
-    }
-
-    New-Item -ItemType Directory -Force -Path $wheelhouseDir | Out-Null
-    if ([string]::IsNullOrWhiteSpace($PythonPath)) {
-        $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-        if ($null -eq $pythonCommand) {
-            throw "Publish failed: python was not found. Install Python or pass -SkipPythonWheelhouse."
-        }
-
-        $PythonPath = $pythonCommand.Source
-    }
-
-    Write-Host "Downloading Python wheelhouse..."
-    & $PythonPath -m pip download `
-        --platform $pipPlatform `
-        --python-version $pythonMajorMinor `
-        --implementation cp `
-        --abi $pipAbi `
-        --only-binary=:all: `
-        --dest $wheelhouseDir `
-        -r $runtimeRequirementsPath
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "Publish failed: Python wheelhouse download failed with exit code $LASTEXITCODE."
-    }
-
-    if (-not (Get-ChildItem -LiteralPath $wheelhouseDir -File -Filter "*.whl" | Select-Object -First 1)) {
-        throw "Publish failed: Python wheelhouse did not contain any .whl files."
-    }
-
-    Write-Host "Installing wheels into bundled Python runtime..."
-    foreach ($wheel in Get-ChildItem -LiteralPath $wheelhouseDir -File -Filter "*.whl") {
-        Expand-Archive -LiteralPath $wheel.FullName -DestinationPath $sitePackagesDir -Force
-    }
-}
-else {
-    throw "Publish failed: bundled Python runtime requires python-wheelhouse. Remove -SkipPythonWheelhouse for release packages."
-}
-
-$bundledPythonExe = Join-Path $runtimeDir "python.exe"
-if (!(Test-Path $bundledPythonExe)) {
-    throw "Publish failed: bundled Python executable was not found at $bundledPythonExe"
-}
-
-$previousDontWriteBytecode = $env:PYTHONDONTWRITEBYTECODE
-$env:PYTHONDONTWRITEBYTECODE = "1"
-try {
-    & $bundledPythonExe -c "import sys, pandas, numpy, openpyxl, chardet, e_detection.cli; print(sys.executable)"
-}
-finally {
-    $env:PYTHONDONTWRITEBYTECODE = $previousDontWriteBytecode
-}
-if ($LASTEXITCODE -ne 0) {
-    throw "Publish failed: bundled Python runtime could not import required detection modules."
-}
-
-$pythonCleanupRoots = @(
-    (Join-Path $publishDir "core"),
-    (Join-Path $publishDir "e_detection"),
-    (Join-Path $publishDir "python-runtime")
-) | Where-Object { Test-Path $_ }
-
-Get-ChildItem -LiteralPath $pythonCleanupRoots -Recurse -Force |
-    Where-Object { $_.PSIsContainer -and $_.Name -eq "__pycache__" } |
-    Remove-Item -Recurse -Force
-
-Get-ChildItem -LiteralPath $pythonCleanupRoots -Recurse -Force -Include "*.pyc", "*.pyo" |
-    Remove-Item -Force
+Copy-Item -LiteralPath $configSourcePath -Destination (Join-Path $publishDir "config.json") -Force
 
 $requiredWinUIResources = @(
     "App.xbf",
@@ -315,17 +171,16 @@ $infoPath = Join-Path $publishDir "release-info.txt"
     "Version=$appVersion"
     "RuntimeIdentifier=$RuntimeIdentifier"
     "Configuration=$Configuration"
+    "DetectionBackend=native"
     "GitCommit=$gitCommit"
     "GitCommitFull=$gitCommitFull"
     "GitDirty=$gitDirty"
     "PublishedAt=$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')"
     "EntryPoint=EDetection.Desktop.exe"
-    "RecommendedInstaller=E-Detection.Desktop-Setup-$RuntimeIdentifier.exe"
+    "RecommendedInstaller=$installerName"
     "InstallScript=Install-Desktop.ps1"
     "UninstallScript=Uninstall-Desktop.ps1"
-    "PythonRuntime=Includes CPython $BundledPythonVersion embeddable runtime in python-runtime"
-    "PythonCore=Includes local e_detection source and dependencies installed into the bundled runtime"
-    "OfflineWheelhouse=Included only for advanced custom Python repair paths"
+    "PackageContents=Native C# + .NET runtime only"
     "CodeSigning=Development packages may be unsigned; official GitHub Releases require Authenticode signing"
 ) | Set-Content -Path $infoPath -Encoding UTF8
 
@@ -334,7 +189,7 @@ $installTextPath = Join-Path $publishDir "INSTALL.txt"
     "E-Detection Desktop"
     ""
     "Recommended for most Windows users:"
-    "  Download and run E-Detection.Desktop-Setup-win-x64.exe from GitHub Releases."
+    "  Download and run $installerName from GitHub Releases."
     "  The setup wizard lets you choose the install location and creates normal Windows shortcuts."
     "  To update, run the newer setup wizard and follow the on-screen prompts."
     "  To uninstall, use Windows Settings > Installed apps, or run unins000.exe from the install folder."
@@ -352,12 +207,10 @@ $installTextPath = Join-Path $publishDir "INSTALL.txt"
     "  powershell -ExecutionPolicy Bypass -File .\Uninstall-Desktop.ps1"
     "  If this command is run inside a setup-wizard install, it delegates to the Windows setup uninstaller."
     ""
-    "The desktop app includes a bundled Python runtime for ordinary users."
-    "No command-line Python setup is required for the standard installer."
-    "Advanced users may still point the app at a custom Python executable from Settings."
+    "This package runs the native C# + .NET detection backend."
     "Official GitHub Release installers are Authenticode signed. If Windows SmartScreen still warns on first install, verify the download came from the official GitHub Release and compare the attached SHA-256 checksum."
     "Checksum command:"
-    "  Get-FileHash .\E-Detection.Desktop-Setup-win-x64.exe -Algorithm SHA256"
+    "  Get-FileHash .\$installerName -Algorithm SHA256"
     ""
     "Validate install/uninstall without keeping user artifacts:"
     "  powershell -ExecutionPolicy Bypass -File .\Test-DesktopInstallSmoke.ps1"
@@ -387,13 +240,6 @@ $smokeResultsPath = Join-Path $publishDir "smoke-results"
 if (Test-Path $smokeResultsPath) {
     Remove-Item -LiteralPath $smokeResultsPath -Recurse -Force
 }
-
-Get-ChildItem -LiteralPath (Join-Path $publishDir "core"), (Join-Path $publishDir "e_detection"), (Join-Path $publishDir "python-runtime") -Recurse -Force |
-    Where-Object { $_.PSIsContainer -and $_.Name -eq "__pycache__" } |
-    Remove-Item -Recurse -Force
-
-Get-ChildItem -LiteralPath (Join-Path $publishDir "core"), (Join-Path $publishDir "e_detection"), (Join-Path $publishDir "python-runtime") -Recurse -Force -Include "*.pyc", "*.pyo" |
-    Remove-Item -Force
 
 if (!$NoZip) {
     if (Test-Path $zipPath) {

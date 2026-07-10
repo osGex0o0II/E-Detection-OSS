@@ -229,6 +229,7 @@ $startMenuShortcutSnapshot = Save-ShortcutSnapshot $startMenuShortcut $snapshotR
 
 $result = [ordered]@{
     PackagePath = $packageFull
+    DetectionBackend = "native"
     InstallDirectory = $installFull
     IncludeShortcuts = [bool]$IncludeShortcuts
     PackageHealthPassed = $false

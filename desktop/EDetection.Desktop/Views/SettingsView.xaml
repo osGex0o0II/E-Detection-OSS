@@ -45,12 +45,6 @@
                     </AutoSuggestBox.ItemTemplate>
                 </AutoSuggestBox>
                 <ListView x:Name="SettingsCategoryList" Grid.Row="1" SelectionMode="Single" HorizontalContentAlignment="Stretch" SelectionChanged="SettingsCategoryList_SelectionChanged">
-                    <ListViewItem Tag="AppearanceSection">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE790;" FontSize="15" />
-                            <TextBlock Text="外观" />
-                        </StackPanel>
-                    </ListViewItem>
                     <ListViewItem Tag="DefaultsSection">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <FontIcon Glyph="&#xE8B7;" FontSize="15" />
@@ -72,7 +66,7 @@
                     <ListViewItem Tag="LlmSection">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <FontIcon Glyph="&#xE713;" FontSize="15" />
-                            <TextBlock Text="集成与高级" />
+                            <TextBlock Text="智能助手与推送" />
                         </StackPanel>
                     </ListViewItem>
                     <ListViewItem Tag="ProxySection">
@@ -81,72 +75,16 @@
                             <TextBlock Text="更新与网络" />
                         </StackPanel>
                     </ListViewItem>
+                    <ListViewItem Tag="AppearanceSection">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE790;" FontSize="15" />
+                            <TextBlock Text="外观" />
+                        </StackPanel>
+                    </ListViewItem>
                 </ListView>
             </Grid>
             <ScrollViewer x:Name="SettingsScroll" Grid.Column="1" VerticalScrollBarVisibility="Auto" VerticalScrollMode="Enabled" HorizontalScrollBarVisibility="Disabled" HorizontalScrollMode="Disabled" ViewChanged="SettingsScroll_ViewChanged" SizeChanged="SettingsScroll_SizeChanged">
                 <StackPanel x:Name="SettingsContentStack" MaxWidth="900" HorizontalAlignment="Stretch" Spacing="18" Padding="0,0,20,24">
-                    <StackPanel x:Name="AppearanceSection" Spacing="8">
-                        <TextBlock Text="外观" Style="{StaticResource SectionTitleTextStyle}" />
-                        <Border Style="{StaticResource SettingsGroupStyle}">
-                            <StackPanel>
-                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200" />
-                                        <ColumnDefinition Width="*" MaxWidth="320" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="应用主题" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedThemeIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="应用主题">
-                                        <ComboBoxItem Content="跟随系统" />
-                                        <ComboBoxItem Content="浅色" />
-                                        <ComboBoxItem Content="深色" />
-                                    </ComboBox>
-                                </Grid>
-                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200" />
-                                        <ColumnDefinition Width="*" MaxWidth="320" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="窗口背景" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedBackdropIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="窗口背景">
-                                        <ComboBoxItem Content="Mica" />
-                                        <ComboBoxItem Content="Acrylic" />
-                                        <ComboBoxItem Content="无" />
-                                    </ComboBox>
-                                </Grid>
-                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200" />
-                                        <ColumnDefinition Width="*" MaxWidth="320" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="顶部诗词" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding EnablePoetryStatus, Mode=TwoWay}" AutomationProperties.Name="顶部诗词" />
-                                </Grid>
-                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="顶部诗词来源" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <TextBox Grid.Column="1" Text="{Binding PoetryServiceUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="https://poetry.palemoky.com/" AutomationProperties.Name="顶部诗词来源" />
-                                </Grid>
-                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200" />
-                                        <ColumnDefinition Width="*" MaxWidth="320" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="诗词语言" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedPoetryLanguageIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="诗词语言">
-                                        <ComboBoxItem Content="简体中文" />
-                                        <ComboBoxItem Content="繁体中文" />
-                                    </ComboBox>
-                                </Grid>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
                     <StackPanel x:Name="DefaultsSection" Spacing="8">
                         <TextBlock Text="检测" Style="{StaticResource SectionTitleTextStyle}" />
                         <Border Style="{StaticResource SettingsGroupStyle}">
@@ -360,7 +298,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="详细异常输出" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="详细异常输出（报告更大）" Style="{StaticResource SettingsRowTitleTextStyle}" ToolTipService.ToolTip="开启后会在报告中写入逐项异常详情，适合复核；报告文件会更大。" />
                                     <ToggleSwitch Grid.Column="1" IsOn="{Binding DetailOutputEnabled, Mode=TwoWay}" AutomationProperties.Name="详细异常输出" />
                                 </Grid>
                             </StackPanel>
@@ -375,7 +313,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="生成 Excel 报告" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="生成 Excel 报告（建议开启）" Style="{StaticResource SettingsRowTitleTextStyle}" ToolTipService.ToolTip="关闭后仅完成检测并显示摘要，不生成 Excel 文件。" />
                                     <ToggleSwitch Grid.Column="1" IsOn="{Binding WriteReport, Mode=TwoWay}" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="生成 Excel 报告" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
@@ -398,7 +336,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="清空报告历史" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <Button Grid.Column="1" Command="{Binding ClearRecentReportsCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="清空报告历史">
+                                    <Button Grid.Column="1" Click="ClearRecentReports_Click" HorizontalAlignment="Stretch" AutomationProperties.Name="清空报告历史">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
                                             <TextBlock Text="清空" />
@@ -432,7 +370,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="清空运行记录" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <Button Grid.Column="1" Command="{Binding ClearRuntimeLogsCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="清空运行记录">
+                                    <Button Grid.Column="1" Click="ClearRuntimeLogs_Click" HorizontalAlignment="Stretch" AutomationProperties.Name="清空运行记录">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
                                             <TextBlock Text="清空" />
@@ -451,7 +389,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="关闭后最小化到托盘" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="关闭按钮最小化到托盘" Style="{StaticResource SettingsRowTitleTextStyle}" ToolTipService.ToolTip="开启后，点击窗口关闭按钮不会退出程序。" />
                                     <ToggleSwitch Grid.Column="1" IsOn="{Binding CloseToTrayOnClose, Mode=TwoWay}" AutomationProperties.Name="关闭后最小化到托盘" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
@@ -504,7 +442,7 @@
                                         <ColumnDefinition Width="200" />
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="登录后自动启动" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <TextBlock Text="登录后自动启动" Style="{StaticResource SettingsRowTitleTextStyle}" ToolTipService.ToolTip="开启后会注册当前用户的 Windows 启动项。" />
                                     <Grid x:Name="StartupActionGrid" Grid.Column="1" ColumnSpacing="8" RowSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -535,7 +473,7 @@
                                     <ToggleSwitch Grid.Column="1" IsOn="{Binding EnableLlmAssistant, Mode=TwoWay}" AutomationProperties.Name="启用智能助手" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Expander x:Name="LlmConnectionExpander" Header="连接与凭据" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
+                                <Expander x:Name="LlmConnectionExpander" Header="连接与凭据（启用后生效）" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
                                     <StackPanel>
                                         <Grid x:Name="LlmEndpointRow" MinHeight="64" Padding="18,10" ColumnSpacing="20">
                                             <Grid.ColumnDefinitions>
@@ -617,7 +555,7 @@
                                     <ToggleSwitch Grid.Column="1" IsOn="{Binding EnableNtfyNotifications, Mode=TwoWay}" AutomationProperties.Name="启用 ntfy 推送" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                <Expander x:Name="NtfySettingsExpander" Header="推送服务配置" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
+                                <Expander x:Name="NtfySettingsExpander" Header="推送服务配置（启用后生效）" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
                                     <StackPanel>
                                         <Grid x:Name="NtfyServerRow" MinHeight="64" Padding="18,10" ColumnSpacing="20">
                                             <Grid.ColumnDefinitions>
@@ -730,25 +668,7 @@
                                                 <ColumnDefinition Width="*" MaxWidth="320" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="检测组件" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <TextBlock Grid.Column="1" Text="{Binding DesktopHealth.PythonBridgeText}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
-                                        </Grid>
-                                        <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
-                                        <Grid x:Name="PythonExecutableRow" MinHeight="64" Padding="18,10" ColumnSpacing="20">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="200" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="检测组件程序" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <Grid Grid.Column="1" ColumnSpacing="8">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBox Text="{Binding PythonExecutable, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditRunConfiguration}" PlaceholderText="留空使用默认检测组件" AutomationProperties.Name="检测组件程序" />
-                                                <Button Grid.Column="1" Click="BrowsePythonExecutable_Click" IsEnabled="{Binding CanEditRunConfiguration}" AutomationProperties.Name="选择检测组件程序" ToolTipService.ToolTip="选择检测组件程序">
-                                                    <FontIcon Glyph="&#xE756;" FontSize="14" />
-                                                </Button>
-                                            </Grid>
+                                            <TextBlock Grid.Column="1" Text="{Binding DesktopHealth.BackendText}" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                         </Grid>
                                         <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                         <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -783,7 +703,7 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="代理地址" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <TextBox Grid.Column="1" Text="{Binding ProxyAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="http://127.0.0.1:7890" AutomationProperties.Name="代理地址" />
+                                    <TextBox Grid.Column="1" Text="{Binding ProxyAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding EnableNetworkProxy}" PlaceholderText="http://127.0.0.1:7890" AutomationProperties.Name="代理地址" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -792,7 +712,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="需要认证" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding ProxyRequiresAuthentication, Mode=TwoWay}" AutomationProperties.Name="代理需要认证" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding ProxyRequiresAuthentication, Mode=TwoWay}" IsEnabled="{Binding EnableNetworkProxy}" AutomationProperties.Name="代理需要认证" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -801,7 +721,7 @@
                                         <ColumnDefinition Width="*" MaxWidth="320" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="用户名" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                    <TextBox Grid.Column="1" Text="{Binding ProxyUserName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="代理用户名" />
+                                    <TextBox Grid.Column="1" Text="{Binding ProxyUserName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanEditProxyCredentials}" AutomationProperties.Name="代理用户名" />
                                 </Grid>
                                 <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                 <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -816,11 +736,11 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <PasswordBox Password="{Binding PendingProxyPassword, Mode=TwoWay}" PlaceholderText="{Binding ProxyPasswordStatusText}" AutomationProperties.Name="代理密码" />
-                                        <Button Grid.Column="1" Command="{Binding SaveProxyPasswordCommand}" AutomationProperties.Name="保存代理密码" ToolTipService.ToolTip="保存到 Windows 凭据">
+                                        <PasswordBox Password="{Binding PendingProxyPassword, Mode=TwoWay}" IsEnabled="{Binding CanEditProxyCredentials}" PlaceholderText="{Binding ProxyPasswordStatusText}" AutomationProperties.Name="代理密码" />
+                                        <Button Grid.Column="1" Command="{Binding SaveProxyPasswordCommand}" IsEnabled="{Binding CanEditProxyCredentials}" AutomationProperties.Name="保存代理密码" ToolTipService.ToolTip="保存到 Windows 凭据">
                                             <FontIcon Glyph="&#xE74E;" FontSize="14" />
                                         </Button>
-                                        <Button Grid.Column="2" Command="{Binding ClearProxyPasswordCommand}" AutomationProperties.Name="清除代理密码" ToolTipService.ToolTip="清除已保存凭据">
+                                        <Button Grid.Column="2" Command="{Binding ClearProxyPasswordCommand}" IsEnabled="{Binding CanEditProxyCredentials}" AutomationProperties.Name="清除代理密码" ToolTipService.ToolTip="清除已保存凭据">
                                             <FontIcon Glyph="&#xE894;" FontSize="14" />
                                         </Button>
                                     </Grid>
@@ -837,7 +757,7 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-                                        <Button Command="{Binding TestNetworkProxyCommand}" HorizontalAlignment="Stretch" AutomationProperties.Name="测试网络代理">
+                                        <Button Command="{Binding TestNetworkProxyCommand}" IsEnabled="{Binding EnableNetworkProxy}" HorizontalAlignment="Stretch" AutomationProperties.Name="测试网络代理">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <FontIcon Glyph="&#xE968;" FontSize="14" />
                                                 <TextBlock Text="测试代理" />
@@ -910,7 +830,7 @@
                                                 <ColumnDefinition Width="*" MaxWidth="320" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="使用网络代理" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <ToggleSwitch Grid.Column="1" IsOn="{Binding UseProxyForUpdates, Mode=TwoWay}" AutomationProperties.Name="更新使用网络代理" />
+                                            <ToggleSwitch Grid.Column="1" IsOn="{Binding UseProxyForUpdates, Mode=TwoWay}" IsEnabled="{Binding EnableNetworkProxy}" AutomationProperties.Name="更新使用网络代理" />
                                         </Grid>
                                         <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
                                         <Grid x:Name="UpdateChannelRow" MinHeight="64" Padding="18,10" ColumnSpacing="20">
@@ -918,8 +838,8 @@
                                                 <ColumnDefinition Width="200" />
                                                 <ColumnDefinition Width="*" MaxWidth="320" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="更新通道" Style="{StaticResource SettingsRowTitleTextStyle}" />
-                                            <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedUpdateChannelIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="更新通道">
+                                            <TextBlock Text="检查方式" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                            <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedUpdateChannelIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="更新检查方式">
                                                 <ComboBoxItem Content="自动检查" />
                                                 <ComboBoxItem Content="仅手动检查" />
                                             </ComboBox>
@@ -932,6 +852,72 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="更新源" Style="{StaticResource SettingsRowTitleTextStyle}" />
                                             <TextBox Grid.Column="1" Text="{Binding UpdateFeedUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="更新源" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel x:Name="AppearanceSection" Spacing="8">
+                        <TextBlock Text="外观" Style="{StaticResource SectionTitleTextStyle}" />
+                        <Border Style="{StaticResource SettingsGroupStyle}">
+                            <StackPanel>
+                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="*" MaxWidth="320" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="应用主题" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedThemeIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="应用主题">
+                                        <ComboBoxItem Content="跟随系统" />
+                                        <ComboBoxItem Content="浅色" />
+                                        <ComboBoxItem Content="深色" />
+                                    </ComboBox>
+                                </Grid>
+                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
+                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="*" MaxWidth="320" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="窗口背景" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedBackdropIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="窗口背景">
+                                        <ComboBoxItem Content="Mica" />
+                                        <ComboBoxItem Content="Acrylic" />
+                                        <ComboBoxItem Content="无" />
+                                    </ComboBox>
+                                </Grid>
+                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
+                                <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="*" MaxWidth="320" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="顶部诗词" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                    <ToggleSwitch Grid.Column="1" IsOn="{Binding EnablePoetryStatus, Mode=TwoWay}" AutomationProperties.Name="顶部诗词" />
+                                </Grid>
+                                <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
+                                <Expander x:Name="PoetryOptionsExpander" Header="诗词显示选项（可选）" IsEnabled="{Binding EnablePoetryStatus}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Expanding="SettingsExpander_Expanding">
+                                    <StackPanel>
+                                        <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="200" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="诗词来源" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                            <TextBox Grid.Column="1" Text="{Binding PoetryServiceUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="https://poetry.palemoky.com/" AutomationProperties.Name="顶部诗词来源" />
+                                        </Grid>
+                                        <Border Height="1" Margin="18,0" Background="{ThemeResource SettingsRowDividerBrush}" />
+                                        <Grid MinHeight="64" Padding="18,10" ColumnSpacing="20">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="200" />
+                                                <ColumnDefinition Width="*" MaxWidth="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="诗词语言" Style="{StaticResource SettingsRowTitleTextStyle}" />
+                                            <ComboBox Grid.Column="1" SelectedIndex="{Binding SelectedPoetryLanguageIndex, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="诗词语言">
+                                                <ComboBoxItem Content="简体中文" />
+                                                <ComboBoxItem Content="繁体中文" />
+                                            </ComboBox>
                                         </Grid>
                                     </StackPanel>
                                 </Expander>
@@ -953,16 +939,16 @@
                 </Grid.ColumnDefinitions>
                 <InfoBar x:Name="SettingsFeedbackBar" IsOpen="{Binding IsSettingsFeedbackOpen, Mode=TwoWay}" Message="{Binding SettingsFeedbackText}" Severity="{Binding SettingsFeedbackSeverity}" IsIconVisible="True" IsClosable="True" MaxWidth="520" HorizontalAlignment="Left" VerticalAlignment="Center" />
                 <StackPanel x:Name="SettingsFooterActions" Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="10">
-                    <Button Command="{Binding ResetSettingsToDefaultsCommand}" MinWidth="120" AutomationProperties.Name="重置设置">
+                    <Button Click="ResetSettings_Click" MinWidth="120" AutomationProperties.Name="重置设置" ToolTipService.ToolTip="恢复默认值，不会删除已保存的凭据。">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE777;" FontSize="14" />
-                            <TextBlock Text="重置设置" />
+                            <TextBlock Text="恢复默认" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding SaveSettingsFromPageCommand}" Style="{StaticResource AccentButtonStyle}" MinWidth="128" AutomationProperties.Name="保存设置">
+                    <Button Command="{Binding SaveSettingsFromPageCommand}" Style="{StaticResource AccentButtonStyle}" MinWidth="156" AutomationProperties.Name="保存并校验检测设置" ToolTipService.ToolTip="保存当前设置并校验检测阈值文件。">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE74E;" FontSize="14" />
-                            <TextBlock Text="保存设置" />
+                            <TextBlock Text="保存并校验检测设置" />
                         </StackPanel>
                     </Button>
                 </StackPanel>

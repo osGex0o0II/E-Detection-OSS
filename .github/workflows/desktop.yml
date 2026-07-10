@@ -16,13 +16,8 @@ on:
     paths:
       - "desktop/**"
       - "desktop/scripts/**"
-      - "core/**"
-      - "e_detection/**"
       - "NuGet.Config"
       - "global.json"
-      - "pyproject.toml"
-      - "requirements.txt"
-      - "desktop/requirements-runtime.lock"
       - ".github/workflows/desktop.yml"
   push:
     branches:
@@ -32,13 +27,8 @@ on:
     paths:
       - "desktop/**"
       - "desktop/scripts/**"
-      - "core/**"
-      - "e_detection/**"
       - "NuGet.Config"
       - "global.json"
-      - "pyproject.toml"
-      - "requirements.txt"
-      - "desktop/requirements-runtime.lock"
       - ".github/workflows/desktop.yml"
 
 permissions:
@@ -98,15 +88,14 @@ jobs:
               throw "Release tag $tag points to $tagSha, which is not contained in origin/main."
           }
 
+      - name: Package health fixture
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopPackageHealthFixture.ps1
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
-
-      - name: Setup Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
 
       - name: Restore
         run: dotnet restore desktop/EDetection.Desktop.slnx
@@ -114,9 +103,17 @@ jobs:
       - name: Build
         run: dotnet build desktop/EDetection.Desktop.slnx -c Debug --no-restore
 
+      - name: Native backend console smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopNativeBackendSmoke.ps1 -NoBuild
+
       - name: Diagnostics redaction smoke
         shell: pwsh
         run: ./desktop/scripts/Test-DesktopDiagnosticsRedactionSmoke.ps1
+
+      - name: Release posture smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopReleasePosture.ps1
 
       - name: Publish
         shell: pwsh
@@ -146,14 +143,6 @@ jobs:
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
 
-      - name: Environment repair smoke
-        shell: pwsh
-        run: ./artifacts/desktop/win-x64/publish/Test-DesktopEnvironmentRepairSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
-
-      - name: Bundled Python smoke
-        shell: pwsh
-        run: ./artifacts/desktop/win-x64/publish/Test-DesktopBundledPythonSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
-
       - name: Startup visibility smoke
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_desktop_ui_smoke == true }}
         shell: pwsh
@@ -177,6 +166,10 @@ jobs:
       - name: Install smoke
         shell: pwsh
         run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish
+
+      - name: Installer static smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopInstallerStatic.ps1
 
       - name: Install Inno Setup
         shell: pwsh
@@ -307,16 +300,9 @@ jobs:
           $desktopVersion = ($desktopProject.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
           $assemblyVersion = ($desktopProject.Project.PropertyGroup.AssemblyVersion | Select-Object -First 1).Trim()
           $fileVersion = ($desktopProject.Project.PropertyGroup.FileVersion | Select-Object -First 1).Trim()
-          $pyprojectText = Get-Content -Path "pyproject.toml" -Raw
-          $pythonVersionMatch = [regex]::Match($pyprojectText, '(?m)^version\s*=\s*"([^"]+)"')
-          if (!$pythonVersionMatch.Success) {
-              throw "Could not read Python project version from pyproject.toml."
-          }
-
           $tagVersion = $tag.TrimStart("v")
-          $pythonVersion = $pythonVersionMatch.Groups[1].Value
-          if ($desktopVersion -ne $tagVersion -or $pythonVersion -ne $tagVersion) {
-              throw "Release version mismatch. tag=$tagVersion desktop=$desktopVersion python=$pythonVersion."
+          if ($desktopVersion -ne $tagVersion) {
+              throw "Release version mismatch. tag=$tagVersion desktop=$desktopVersion."
           }
 
           if ($assemblyVersion -ne "$tagVersion.0" -or $fileVersion -ne "$tagVersion.0") {
@@ -342,6 +328,35 @@ jobs:
           $portableAppPath = Get-ChildItem -Path $portableVerifyPath -Recurse -File -Filter "EDetection.Desktop.exe" | Select-Object -First 1
           if ($null -eq $portableAppPath) {
               throw "Portable release asset does not contain EDetection.Desktop.exe."
+          }
+
+          $portablePackageRoot = $portableAppPath.Directory.FullName
+          $portableReleaseInfoPath = Join-Path $portablePackageRoot "release-info.txt"
+          if (!(Test-Path -LiteralPath $portableReleaseInfoPath)) {
+              throw "Portable release asset does not contain release-info.txt."
+          }
+
+          $portableReleaseInfo = @{}
+          foreach ($line in Get-Content -LiteralPath $portableReleaseInfoPath) {
+              $separatorIndex = $line.IndexOf('=')
+              if ($separatorIndex -gt 0) {
+                  $portableReleaseInfo[$line.Substring(0, $separatorIndex)] = $line.Substring($separatorIndex + 1)
+              }
+          }
+
+          $portableBackend = [string]$portableReleaseInfo["DetectionBackend"]
+          if ($portableBackend -ne "native") {
+              throw "Production release asset must use the native backend. Actual=$portableBackend"
+          }
+
+          $portableHealthScript = Join-Path $portablePackageRoot "Test-DesktopPackageHealth.ps1"
+          if (!(Test-Path -LiteralPath $portableHealthScript)) {
+              throw "Portable release asset does not contain Test-DesktopPackageHealth.ps1."
+          }
+
+          & $portableHealthScript -PackagePath $portablePackageRoot
+          if ($LASTEXITCODE -ne 0) {
+              throw "Portable release package health failed after artifact download."
           }
 
           $releaseSignaturePaths = @($setupPath.FullName, $portableAppPath.FullName)
@@ -372,8 +387,7 @@ jobs:
               "Included checks:"
               "- dotnet restore/build"
               "- publish package health"
-              "- environment repair smoke"
-              "- bundled Python smoke"
+              "- native backend console smoke"
               "- startup visibility smoke when run_desktop_ui_smoke is enabled"
               "- install/uninstall smoke"
               "- setup installer smoke"

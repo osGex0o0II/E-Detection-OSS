@@ -20,10 +20,7 @@ public static class DiagnosticsRedactor
         @"(?<![\w%{}])\\\\[^\s\r\n\t<>|""']+",
         RegexOptions.Compiled);
 
-    public static string Redact(
-        string? text,
-        string? pythonExecutable = null,
-        string? backendRoot = null)
+    public static string Redact(string? text)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -34,7 +31,7 @@ public static class DiagnosticsRedactor
             text,
             match => $"{match.Groups["scheme"].Value}://<redacted>@");
 
-        foreach (var replacement in BuildPathReplacements(pythonExecutable, backendRoot))
+        foreach (var replacement in BuildPathReplacements())
         {
             redacted = ReplaceIgnoreCase(redacted, replacement.Source, replacement.Target);
         }
@@ -49,9 +46,7 @@ public static class DiagnosticsRedactor
         return redacted;
     }
 
-    private static IReadOnlyList<PathReplacement> BuildPathReplacements(
-        string? pythonExecutable,
-        string? backendRoot)
+    private static IReadOnlyList<PathReplacement> BuildPathReplacements()
     {
         var replacements = new List<PathReplacement>();
         AddSpecialFolder(replacements, Environment.SpecialFolder.UserProfile, "%USERPROFILE%");
@@ -62,11 +57,6 @@ public static class DiagnosticsRedactor
         AddEnvironmentPath(replacements, "ProgramFiles", "%ProgramFiles%");
         AddEnvironmentPath(replacements, "ProgramFiles(x86)", "%ProgramFiles(x86)%");
         AddPath(replacements, AppContext.BaseDirectory, "{app}");
-        AddPath(replacements, backendRoot, "{backendRoot}");
-        AddPath(replacements, pythonExecutable, "{python}");
-
-        var pythonDirectory = TryGetDirectoryName(pythonExecutable);
-        AddPath(replacements, pythonDirectory, "{pythonDir}");
 
         return replacements
             .GroupBy(item => item.Source, StringComparer.OrdinalIgnoreCase)
@@ -144,23 +134,6 @@ public static class DiagnosticsRedactor
         try
         {
             return Path.GetFullPath(path);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string? TryGetDirectoryName(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
-
-        try
-        {
-            return Path.GetDirectoryName(path);
         }
         catch
         {

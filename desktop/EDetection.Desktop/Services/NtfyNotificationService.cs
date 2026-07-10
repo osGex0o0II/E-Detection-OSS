@@ -62,9 +62,10 @@ public sealed class NtfyNotificationService(
     {
         if (request.Kind is DesktopNotificationKind.Update)
         {
+            var message = DiagnosticsRedactor.Redact(request.Message);
             return string.IsNullOrWhiteSpace(request.ActionUrl)
-                ? DiagnosticsRedactor.Redact(request.Message, settings.PythonExecutable, PythonBackendService.ResolveBackendWorkingDirectory())
-                : $"{DiagnosticsRedactor.Redact(request.Message, settings.PythonExecutable, PythonBackendService.ResolveBackendWorkingDirectory())}{Environment.NewLine}{request.ActionUrl}";
+                ? message
+                : $"{message}{Environment.NewLine}{request.ActionUrl}";
         }
 
         return request.Kind switch

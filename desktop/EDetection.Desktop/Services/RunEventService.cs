@@ -153,7 +153,7 @@ public sealed class RunEventService
         DetectionBackendEvent evt,
         RunEventState state)
     {
-        var failure = evt.Message ?? evt.ErrorType ?? "Python 检测核心返回错误。";
+        var failure = evt.Message ?? evt.ErrorType ?? "原生检测核心返回错误。";
         return new RunEventAction
         {
             StatusText = "检测失败",

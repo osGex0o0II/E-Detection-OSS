@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EDetection.Desktop.Models;
@@ -24,11 +26,9 @@ public partial class MainViewModel : ObservableObject
     private const string WindowsStartupAppsSettingsUri = "ms-settings:startupapps";
     private const string OfficialReleaseBaseUrl = "https://github.com/osGex0o0II/E-Detection-OSS/releases/";
 
-    private readonly PythonBackendService _backend;
     private readonly SettingsService _settings;
     private readonly DetectionConfigService _detectionConfig;
     private readonly DesktopDiagnosticsService _diagnostics;
-    private readonly DetectionEnvironmentRepairService _environmentRepair;
     private readonly RunEventService _runEvents;
     private readonly ReportDetailPreviewService _detailPreview;
     private readonly RunStateService _runState;
@@ -41,7 +41,6 @@ public partial class MainViewModel : ObservableObject
     private readonly PoetryStatusService _poetryStatus;
     private readonly Stopwatch _runStopwatch = new();
     private CancellationTokenSource? _runCts;
-    private CancellationTokenSource? _environmentRepairCts;
     private CancellationTokenSource? _cancelPromptCts;
     private bool _settingsLoaded;
     private bool _desktopNotificationSent;
@@ -51,11 +50,9 @@ public partial class MainViewModel : ObservableObject
     private string _lastNotifiedUpdateVersion = "";
 
     public MainViewModel(
-        PythonBackendService backend,
         SettingsService settings,
         DetectionConfigService detectionConfig,
         DesktopDiagnosticsService diagnostics,
-        DetectionEnvironmentRepairService environmentRepair,
         ReportHistoryService reportHistory,
         RuntimeLogService runtimeLogs,
         RunTelemetryService runTelemetry,
@@ -71,11 +68,9 @@ public partial class MainViewModel : ObservableObject
         PoetryStatusService? poetryStatus = null,
         DesktopHealthService? desktopHealth = null)
     {
-        _backend = backend;
         _settings = settings;
         _detectionConfig = detectionConfig;
         _diagnostics = diagnostics;
-        _environmentRepair = environmentRepair;
         _runEvents = runEvents;
         _detailPreview = detailPreview;
         _runState = runState;
@@ -93,14 +88,12 @@ public partial class MainViewModel : ObservableObject
         DesktopHealth = new DesktopHealthViewModel(
             desktopHealth ?? new DesktopHealthService(),
             _startup,
-            _settings,
-            () => PythonExecutable);
+            _settings);
         var saved = _settings.Load();
         InputDirectory = saved.InputDirectory;
         OutputDirectory = saved.OutputDirectory;
         ConfigPath = _detectionConfig.EnsureUserConfig(saved.ConfigPath);
         ApplyDetectionConfig(_detectionConfig.Load(ConfigPath));
-        PythonExecutable = PythonBackendService.ResolvePythonExecutable(saved.PythonExecutable);
         WriteReport = saved.WriteReport;
         CloseToTrayOnClose = saved.CloseToTrayOnClose;
         StartMinimizedToTray = saved.StartMinimizedToTray;
@@ -173,15 +166,15 @@ public partial class MainViewModel : ObservableObject
 
     public bool HasSelectedDetail => SelectedDetail is not null;
 
-    public bool IsIdle => !IsRunning && !IsRepairingDetectionEnvironment;
+    public bool IsIdle => !IsRunning;
 
-    public bool CanEditRunConfiguration => !IsRunning && !IsRepairingDetectionEnvironment;
+    public bool CanEditRunConfiguration => !IsRunning;
 
     public Visibility CancelCommandVisibility => IsRunning
         ? Visibility.Visible
         : Visibility.Collapsed;
 
-    public Visibility StatusProgressVisibility => IsRunning || IsRepairingDetectionEnvironment
+    public Visibility StatusProgressVisibility => IsRunning
         ? Visibility.Visible
         : Visibility.Collapsed;
 
@@ -329,7 +322,6 @@ public partial class MainViewModel : ObservableObject
 
     public Visibility WorkbenchActivityVisibility =>
         IsRunning
-        || IsRepairingDetectionEnvironment
         || IsCancelConfirmationPending
         || ShouldShowCompletionActions
         || HasActionableFailure
@@ -342,8 +334,6 @@ public partial class MainViewModel : ObservableObject
         ? "报告快照"
         : IsRunning
             ? "运行详情"
-            : IsRepairingDetectionEnvironment
-                ? "修复检测组件"
                 : HasActionableFailure
                     ? "处理建议"
                     : ShouldShowCompletionActions
@@ -362,8 +352,6 @@ public partial class MainViewModel : ObservableObject
         ? ReportHistoryStatusText
         : IsRunning
             ? CurrentFileText
-            : IsRepairingDetectionEnvironment
-                ? "正在修复"
                 : !string.IsNullOrWhiteSpace(ReportPath)
                     ? "报告已生成"
                     : "待开始";
@@ -371,7 +359,6 @@ public partial class MainViewModel : ObservableObject
     public Visibility WorkbenchStatusBadgeVisibility =>
         SelectedReport is not null
         || IsRunning
-        || IsRepairingDetectionEnvironment
         || !string.IsNullOrWhiteSpace(ReportPath)
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -383,11 +370,6 @@ public partial class MainViewModel : ObservableObject
             if (IsRunning)
             {
                 return "正在检测";
-            }
-
-            if (IsRepairingDetectionEnvironment)
-            {
-                return "正在修复检测组件";
             }
 
             if (StatusText == "无法开始检测")
@@ -428,11 +410,6 @@ public partial class MainViewModel : ObservableObject
                 return string.IsNullOrWhiteSpace(CurrentFileText)
                     ? "检测正在运行，完成后可在右侧查看结果。"
                     : CurrentFileText;
-            }
-
-            if (IsRepairingDetectionEnvironment)
-            {
-                return "应用正在安装本地检测核心，完成后会自动重新检查运行环境。";
             }
 
             if (StatusText == "无法开始检测" || StatusText == "检测失败")
@@ -533,9 +510,7 @@ public partial class MainViewModel : ObservableObject
 
     public string FirstRunConfigStepText => ConfigDiagnosticText;
 
-    public string FirstRunPythonStepText => BackendDiagnosticText.Contains("可导入", StringComparison.Ordinal)
-        ? BackendDiagnosticText
-        : PythonDiagnosticText;
+    public string FirstRunBackendStepText => BackendDiagnosticText;
 
     public string FirstRunOutputStepText => OutputDiagnosticText;
 
@@ -578,7 +553,6 @@ public partial class MainViewModel : ObservableObject
     public void PrepareForShellShutdown()
     {
         _isShellShutdownRequested = true;
-        _environmentRepairCts?.Cancel();
         _cancelPromptCts?.Cancel();
         _runCts?.Cancel();
 
@@ -630,10 +604,6 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
     [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
     public partial string ConfigPath { get; set; } = "config.json";
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
-    public partial string PythonExecutable { get; set; } = "python";
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StartCommand))]
@@ -702,13 +672,17 @@ public partial class MainViewModel : ObservableObject
     public partial bool IsSendingTestNtfyNotification { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditProxyCredentials))]
     public partial bool EnableNetworkProxy { get; set; }
 
     [ObservableProperty]
     public partial string ProxyAddress { get; set; } = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditProxyCredentials))]
     public partial bool ProxyRequiresAuthentication { get; set; }
+
+    public bool CanEditProxyCredentials => EnableNetworkProxy && ProxyRequiresAuthentication;
 
     [ObservableProperty]
     public partial string ProxyUserName { get; set; } = "";
@@ -781,23 +755,6 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(UseSelectedReportDirectoriesCommand))]
     [NotifyCanExecuteChangedFor(nameof(CopyCompletionSummaryCommand))]
     public partial bool IsRunning { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsIdle))]
-    [NotifyPropertyChangedFor(nameof(CanEditRunConfiguration))]
-    [NotifyPropertyChangedFor(nameof(StatusProgressVisibility))]
-    [NotifyPropertyChangedFor(nameof(WorkbenchActivityVisibility))]
-    [NotifyPropertyChangedFor(nameof(RunSetupReadinessText))]
-    [NotifyPropertyChangedFor(nameof(RunSetupReadinessDetailText))]
-    [NotifyPropertyChangedFor(nameof(WorkbenchActivityTitleText))]
-    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeText))]
-    [NotifyPropertyChangedFor(nameof(WorkbenchStatusBadgeVisibility))]
-    [NotifyPropertyChangedFor(nameof(FirstRunGuideSubtitleText))]
-    [NotifyPropertyChangedFor(nameof(DetectionEnvironmentRepairActionsVisibility))]
-    [NotifyCanExecuteChangedFor(nameof(StartCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RepairDetectionEnvironmentCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RefreshDiagnosticsCommand))]
-    public partial bool IsRepairingDetectionEnvironment { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShellStatus))]
@@ -1080,8 +1037,6 @@ public partial class MainViewModel : ObservableObject
 
     public string DiagnosticSummaryText => Diagnostics.SummaryText;
 
-    public string PythonDiagnosticText => Diagnostics.PythonText;
-
     public string BackendDiagnosticText => Diagnostics.BackendText;
 
     public string ConfigDiagnosticText => Diagnostics.ConfigText;
@@ -1113,15 +1068,6 @@ public partial class MainViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(CancelConfirmationVisibility))]
     [NotifyPropertyChangedFor(nameof(CancelButtonText))]
     public partial bool IsCancelConfirmationPending { get; set; }
-
-    public string PythonSetupCommandText => Diagnostics.PythonSetupCommandText;
-
-    public bool CanRepairDetectionEnvironment => Diagnostics.CanRepairDetectionEnvironment;
-
-    public Visibility DetectionEnvironmentRepairActionsVisibility =>
-        Diagnostics.CanRepairDetectionEnvironment || IsRepairingDetectionEnvironment
-            ? Visibility.Visible
-            : Visibility.Collapsed;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FailureActionBodyText))]
@@ -1286,14 +1232,6 @@ public partial class MainViewModel : ObservableObject
         }
 
         RefreshLocalDiagnostics();
-        RefreshFirstRunGuide();
-        SavePreferenceSettings();
-    }
-
-    partial void OnPythonExecutableChanged(string value)
-    {
-        RefreshLocalDiagnostics();
-        RefreshDesktopHealth();
         RefreshFirstRunGuide();
         SavePreferenceSettings();
     }
@@ -1666,13 +1604,9 @@ public partial class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(RunSetupReadinessText));
                 OnPropertyChanged(nameof(RunSetupReadinessDetailText));
                 break;
-            case nameof(DiagnosticsViewModel.PythonText):
-                OnPropertyChanged(nameof(PythonDiagnosticText));
-                OnPropertyChanged(nameof(FirstRunPythonStepText));
-                break;
             case nameof(DiagnosticsViewModel.BackendText):
                 OnPropertyChanged(nameof(BackendDiagnosticText));
-                OnPropertyChanged(nameof(FirstRunPythonStepText));
+                OnPropertyChanged(nameof(FirstRunBackendStepText));
                 OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
                 break;
             case nameof(DiagnosticsViewModel.ConfigText):
@@ -1694,15 +1628,6 @@ public partial class MainViewModel : ObservableObject
                 OnPropertyChanged(nameof(DiagnosticActionText));
                 OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
                 OnPropertyChanged(nameof(RunSetupReadinessDetailText));
-                break;
-            case nameof(DiagnosticsViewModel.PythonSetupCommandText):
-                OnPropertyChanged(nameof(PythonSetupCommandText));
-                CopyPythonSetupCommand.NotifyCanExecuteChanged();
-                break;
-            case nameof(DiagnosticsViewModel.CanRepairDetectionEnvironment):
-                OnPropertyChanged(nameof(CanRepairDetectionEnvironment));
-                OnPropertyChanged(nameof(DetectionEnvironmentRepairActionsVisibility));
-                RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
                 break;
         }
     }
@@ -1759,7 +1684,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private bool CanStart() => !IsRunning && !IsRepairingDetectionEnvironment;
+    private bool CanStart() => !IsRunning;
 
     [RelayCommand(CanExecute = nameof(CanStart))]
     private async Task StartAsync()
@@ -1790,9 +1715,7 @@ public partial class MainViewModel : ObservableObject
             InputDirectory = InputDirectory,
             OutputDirectory = string.IsNullOrWhiteSpace(OutputDirectory) ? null : OutputDirectory,
             ConfigPath = configPath,
-            PythonExecutable = string.IsNullOrWhiteSpace(PythonExecutable) ? "python" : PythonExecutable,
             WriteReport = WriteReport,
-            WorkingDirectory = PythonBackendService.ResolveBackendWorkingDirectory(),
         };
         ActiveRunSummaryText = BuildActiveRunSummaryText(request);
         StartRunTelemetry();
@@ -1807,7 +1730,8 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            var exitCode = await _backend.RunDetectionAsync(
+            var backend = DetectionBackendServiceFactory.CreateDefault();
+            var exitCode = await backend.RunDetectionAsync(
                 request,
                 progress,
                 _runCts.Token);
@@ -2323,34 +2247,529 @@ public partial class MainViewModel : ObservableObject
     {
         var lines = new List<string>
         {
-            "E-Detection 检测摘要",
-            $"状态: {StatusText}",
-            $"文件: {ProcessedSummary}",
-            $"异常文件: {AnomalyFiles}",
-            $"异常记录: {AnomalyRecords}",
-            $"跳过文件: {SkippedFiles}",
-            $"设备数: {ReportDeviceCount}",
-            $"传感器: {SensorOverviewText}",
-            $"耗时: {RunElapsedText}",
-            $"输入目录: {InputDirectory}",
-            $"报告: {(string.IsNullOrWhiteSpace(ReportPath) ? "未生成" : ReportPath)}",
+            BuildDetectionReportTitleText(),
+            "",
         };
 
-        var issueTypes = TopIssueTypes.Take(5).ToList();
-        if (issueTypes.Count > 0)
-        {
-            lines.Add("异常类型:");
-            lines.AddRange(issueTypes.Select(issue => $"- {issue.Name}: {issue.Count}"));
-        }
-
-        var devices = HighRiskDevices.Take(5).ToList();
-        if (devices.Count > 0)
-        {
-            lines.Add("高风险设备:");
-            lines.AddRange(devices.Select(device => $"- {device.Title}: {device.Subtitle}"));
-        }
+        var details = DetailPreview.ToList();
+        lines.Add(BuildPlainConclusionText(details));
+        lines.Add("");
+        lines.AddRange(BuildDetectionReportParagraphs(details));
+        lines.Add("");
+        lines.Add(BuildDetectionOverviewText());
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private string BuildDetectionReportTitleText()
+    {
+        var period = BuildDetectionPeriodText();
+        return string.IsNullOrWhiteSpace(period)
+            ? "E-Detection 检测汇报"
+            : $"E-Detection 检测汇报（{period}）";
+    }
+
+    private string BuildDetectionPeriodText()
+    {
+        var dates = DetailPreview
+            .Select(static detail => detail.Date)
+            .Select(TryNormalizeDateText)
+            .Where(static date => !string.IsNullOrWhiteSpace(date))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static date => date, StringComparer.Ordinal)
+            .ToList();
+
+        if (dates.Count == 0)
+        {
+            var inputDate = TryFindDateFromPath(InputDirectory);
+            if (!string.IsNullOrWhiteSpace(inputDate))
+            {
+                dates.Add(inputDate);
+            }
+        }
+
+        var dateText = dates.Count switch
+        {
+            0 => "",
+            1 => dates[0],
+            _ => $"{dates.First()}至{dates.Last()}",
+        };
+
+        var hourText = dates.Count > 1
+            ? ""
+            : BuildDetectionHourRangeText(preferFullDay: dates.Count == 1 && TotalFiles > 0);
+        if (string.IsNullOrWhiteSpace(dateText))
+        {
+            return hourText;
+        }
+
+        return string.IsNullOrWhiteSpace(hourText)
+            ? dateText
+            : $"{dateText}，{hourText}";
+    }
+
+    private string BuildDetectionHourRangeText(bool preferFullDay = false)
+    {
+        if (preferFullDay)
+        {
+            return "0-23时";
+        }
+
+        var hours = DetailPreview
+            .Select(static detail => detail.Time)
+            .Select(TryParseHour)
+            .Where(static hour => hour >= 0)
+            .Distinct()
+            .OrderBy(static hour => hour)
+            .ToList();
+
+        if (hours.Count > 0)
+        {
+            return $"{hours.First()}-{hours.Last()}时";
+        }
+
+        return TotalFiles > 0 ? "0-23时" : "";
+    }
+
+    private string BuildPlainConclusionText(IReadOnlyList<ReportDetailPreview> details)
+    {
+        if (AnomalyRecords <= 0)
+        {
+            return "简要结论：本次未见明显电气故障数据。";
+        }
+
+        var offlineDetails = details.Where(IsOfflineIssue).ToList();
+        var voltageDetails = details.Where(IsVoltageOrPtIssue).ToList();
+        var ctDetails = details.Where(IsCtIssue).ToList();
+        var sensorFaultDetails = details.Where(IsSensorFaultIssue).ToList();
+        var temperatureDetails = details.Where(detail => IsTemperatureIssue(detail) && !IsSensorFaultIssue(detail)).ToList();
+        var currentDetails = details.Where(IsCurrentIssue).ToList();
+        var constantDetails = details
+            .Where(IsConstantIssue)
+            .Where(detail => !IsOfflineIssue(detail)
+                             && !IsVoltageOrPtIssue(detail)
+                             && !IsCtIssue(detail)
+                             && !IsSensorFaultIssue(detail)
+                             && !IsTemperatureIssue(detail)
+                             && !IsCurrentIssue(detail))
+            .ToList();
+        var parts = new List<string>();
+
+        if (HasIssueEvidence(offlineDetails, IsOfflineIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(offlineDetails, IsOfflineIssueText)}通信/采集疑似中断");
+        }
+
+        if (HasIssueEvidence(voltageDetails, IsVoltageOrPtIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(voltageDetails, IsVoltageOrPtIssueText)}PT/电压采样异常");
+        }
+
+        if (HasIssueEvidence(ctDetails, IsCtIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(ctDetails, IsCtIssueText)}CT极性或相序疑似异常");
+        }
+
+        if (HasIssueEvidence(sensorFaultDetails, IsSensorFaultIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(sensorFaultDetails, IsSensorFaultIssueText)}温度传感器读数明显不合理");
+        }
+
+        if (HasIssueEvidence(temperatureDetails, IsTemperatureRunIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(temperatureDetails, IsTemperatureRunIssueText)}温度运行值需复核");
+        }
+
+        if (HasIssueEvidence(currentDetails, IsCurrentIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(currentDetails, IsCurrentIssueText)}电流偏大");
+        }
+
+        if (HasIssueEvidence(constantDetails, IsConstantIssueText))
+        {
+            parts.Add($"{BuildDeviceScopeTextForIssue(constantDetails, IsConstantIssueText)}数据恒定/冻结");
+        }
+
+        return parts.Count > 0
+            ? $"简要结论：本次主要发现{string.Join("；", parts.Take(4))}。"
+            : $"简要结论：本次发现 {AnomalyRecords} 条异常记录，建议优先查看高风险设备。";
+    }
+
+    private IReadOnlyList<string> BuildDetectionReportParagraphs(IReadOnlyList<ReportDetailPreview> details)
+    {
+        if (AnomalyRecords <= 0)
+        {
+            return [BuildNoAnomalyReportText()];
+        }
+
+        var paragraphs = new List<string>();
+        var offlineDetails = details.Where(IsOfflineIssue).ToList();
+        var voltageDetails = details.Where(IsVoltageOrPtIssue).ToList();
+        var ctDetails = details.Where(IsCtIssue).ToList();
+        var sensorFaultDetails = details.Where(IsSensorFaultIssue).ToList();
+        var temperatureDetails = details.Where(detail => IsTemperatureIssue(detail) && !IsSensorFaultIssue(detail)).ToList();
+        var currentDetails = details.Where(IsCurrentIssue).ToList();
+        var constantDetails = details
+            .Where(IsConstantIssue)
+            .Where(detail => !IsOfflineIssue(detail)
+                             && !IsVoltageOrPtIssue(detail)
+                             && !IsCtIssue(detail)
+                             && !IsSensorFaultIssue(detail)
+                             && !IsTemperatureIssue(detail)
+                             && !IsCurrentIssue(detail))
+            .ToList();
+        var describedDetails = offlineDetails
+            .Concat(voltageDetails)
+            .Concat(ctDetails)
+            .Concat(sensorFaultDetails)
+            .Concat(temperatureDetails)
+            .Concat(currentDetails)
+            .Concat(constantDetails)
+            .Distinct()
+            .ToList();
+        var otherDetails = details.Except(describedDetails).ToList();
+        var timeScope = BuildDetectionTimeScopeWord();
+
+        if (HasIssueEvidence(offlineDetails, IsOfflineIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(offlineDetails, IsOfflineIssueText)}{timeScope}通信/采集疑似中断，电压、电流等关键电气量无法有效读取。优先核查设备供电、通信链路、采集网关和点位接入状态。");
+        }
+
+        if (HasIssueEvidence(voltageDetails, IsVoltageOrPtIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(voltageDetails, IsVoltageOrPtIssueText)}{timeScope}电压采样异常，可能伴随数据恒定。优先核查 PT 二次接线、采样通道、变比配置和采集模块，再判断是否存在真实过压或欠压。");
+        }
+
+        if (HasIssueEvidence(ctDetails, IsCtIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(ctDetails, IsCtIssueText)}CT 极性或相序疑似异常，表现为电流方向、功率方向或相序关系不一致。建议由电气或自控人员核对 CT 二次接线、相序、倍率和点位配置。");
+        }
+
+        if (HasIssueEvidence(sensorFaultDetails, IsSensorFaultIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(sensorFaultDetails, IsSensorFaultIssueText)}出现明显不合理的传感器读数{BuildRepresentativeValueText(sensorFaultDetails)}，不宜直接按真实温度判断。优先核查温度探头、接线和采集通道。");
+        }
+
+        if (HasIssueEvidence(temperatureDetails, IsTemperatureRunIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(temperatureDetails, IsTemperatureRunIssueText)}{timeScope}温度运行值异常。建议结合现场负载、散热风扇、柜内通风和探头安装位置复核，再判断是否为设备发热。");
+        }
+
+        if (HasIssueEvidence(currentDetails, IsCurrentIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(currentDetails, IsCurrentIssueText)}{timeScope}电流偏大。可能为实际负荷偏高，也可能是互感器倍率或采集点配置不对，建议结合现场负载和额定容量复核。");
+        }
+
+        if (HasIssueEvidence(constantDetails, IsConstantIssueText))
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeTextForIssue(constantDetails, IsConstantIssueText)}{timeScope}数据长时间恒定，疑似采集冻结或历史数据未刷新。建议先确认设备是否停运，再检查通信、采集服务和历史库写入。");
+        }
+
+        if (otherDetails.Count > 0)
+        {
+            paragraphs.Add(
+                $"{BuildDeviceScopeText(otherDetails)}还有{BuildIssueTypeListText(otherDetails)}等问题，先按明细逐项核对现场状态。");
+        }
+
+        var sensorParagraph = BuildSensorStatusReportText();
+        if (!string.IsNullOrWhiteSpace(sensorParagraph))
+        {
+            paragraphs.Add(sensorParagraph);
+        }
+
+        return paragraphs.Count > 0 ? paragraphs : [BuildNoAnomalyReportText()];
+    }
+
+    private string BuildDetectionOverviewText()
+    {
+        var reportText = string.IsNullOrWhiteSpace(ReportPath)
+            ? "报告未生成"
+            : $"报告已生成：{Path.GetFileName(ReportPath)}";
+        var skippedText = SkippedFiles > 0 ? $"，跳过 {SkippedFiles} 份" : "";
+
+        return $"检测概况：完成 {ProcessedSummary} 份文件，异常文件 {AnomalyFiles} 个，异常记录 {AnomalyRecords} 条，涉及设备 {ReportDeviceCount} 台{skippedText}，耗时 {RunElapsedText}，{reportText}。";
+    }
+
+    private string BuildNoAnomalyReportText()
+    {
+        var sensorText = BuildSensorStatusReportText();
+        if (!string.IsNullOrWhiteSpace(sensorText))
+        {
+            return $"本时段未见明显电气异常记录。{sensorText}";
+        }
+
+        return "本时段未见明显电气异常记录，数据整体正常。";
+    }
+
+    private string BuildSensorStatusReportText()
+    {
+        var parts = new List<string>();
+        if (SensorOfflineDevices > 0)
+        {
+            parts.Add($"离线记录 {SensorOfflineDevices} 条");
+        }
+
+        if (SensorFaultRows > 0)
+        {
+            parts.Add($"故障 {SensorFaultRows} 条");
+        }
+
+        if (SensorMissingRows > 0)
+        {
+            parts.Add($"未配置 {SensorMissingRows} 条");
+        }
+
+        if (SensorSkippedRows > 0 && SensorSkippedRows != SkippedFiles)
+        {
+            parts.Add($"跳过 {SensorSkippedRows} 条");
+        }
+
+        return parts.Count > 0
+            ? $"传感器状态存在{string.Join("、", parts)}，建议先补齐点位配置，再处理离线和故障测点。"
+            : "";
+    }
+
+    private string BuildDetectionTimeScopeWord() =>
+        TotalFiles > 0 || string.Equals(BuildDetectionHourRangeText(), "0-23时", StringComparison.Ordinal)
+            ? "全天"
+            : "本时段内";
+
+    private string BuildDeviceScopeText(IReadOnlyList<ReportDetailPreview> details)
+    {
+        var deviceGroups = details
+            .Select(static detail => new
+            {
+                Building = string.IsNullOrWhiteSpace(detail.Building) ? "未知区域" : detail.Building.Trim(),
+                Transformer = string.IsNullOrWhiteSpace(detail.Transformer) ? "未知设备" : detail.Transformer.Trim(),
+            })
+            .Distinct()
+            .GroupBy(static item => item.Building, static item => item.Transformer)
+            .OrderByDescending(static group => group.Count())
+            .ThenBy(static group => group.Key, StringComparer.CurrentCulture)
+            .ToList();
+        var deviceCount = deviceGroups.Sum(static group => group.Distinct(StringComparer.CurrentCulture).Count());
+
+        if (deviceCount == 0)
+        {
+            return $"{details.Count} 条记录";
+        }
+
+        var groupTexts = deviceGroups
+            .Take(4)
+            .Select(static group =>
+            {
+                var transformers = group
+                    .Distinct(StringComparer.CurrentCulture)
+                    .OrderBy(static transformer => transformer, StringComparer.CurrentCulture)
+                    .Take(6)
+                    .ToList();
+                var suffix = group.Distinct(StringComparer.CurrentCulture).Count() > transformers.Count ? "等" : "";
+                return $"{group.Key}（{string.Join("、", transformers)}{suffix}）";
+            })
+            .ToList();
+        var moreText = deviceGroups.Count > groupTexts.Count ? "等" : "";
+
+        return $"{string.Join("、", groupTexts)}{moreText}共 {deviceCount} 台设备";
+    }
+
+    private bool HasIssueEvidence(IReadOnlyList<ReportDetailPreview> details, Func<string, bool> issueTextMatches) =>
+        details.Count > 0
+        || HighRiskDevices.Any(device => issueTextMatches(device.MainIssueTypes))
+        || TopIssueTypes.Any(issue => issueTextMatches(issue.Name));
+
+    private string BuildDeviceScopeTextForIssue(
+        IReadOnlyList<ReportDetailPreview> details,
+        Func<string, bool> issueTextMatches)
+    {
+        if (details.Count > 0)
+        {
+            return BuildDeviceScopeText(details);
+        }
+
+        var fallbackDetails = HighRiskDevices
+            .Where(device => issueTextMatches(device.MainIssueTypes))
+            .Select(static device => new ReportDetailPreview
+            {
+                Building = device.Building,
+                Transformer = device.Transformer,
+            })
+            .Take(8)
+            .ToList();
+
+        return fallbackDetails.Count > 0 ? BuildDeviceScopeText(fallbackDetails) : "相关设备";
+    }
+
+    private string BuildIssueTypeListText(IReadOnlyList<ReportDetailPreview> details)
+    {
+        var issueTypes = details
+            .SelectMany(static detail => SplitIssueTypes(detail.IssueType))
+            .Where(static issue => !string.IsNullOrWhiteSpace(issue))
+            .Select(static issue => issue.Trim())
+            .Where(static issue => !issue.StartsWith("+", StringComparison.Ordinal))
+            .Distinct(StringComparer.CurrentCulture)
+            .Take(3)
+            .ToList();
+
+        return issueTypes.Count > 0
+            ? string.Join("、", issueTypes)
+            : "未归类异常";
+    }
+
+    private string BuildRepresentativeValueText(IReadOnlyList<ReportDetailPreview> details)
+    {
+        var directValues = details
+            .Select(static detail => detail.IssueValue)
+            .Where(static value => !string.IsNullOrWhiteSpace(value) && value.Trim() != "-")
+            .Select(static value => value!.Trim());
+        var detailValues = details
+            .SelectMany(static detail => ExtractRepresentativeValues(detail.IssueDetail));
+        var values = directValues
+            .Concat(detailValues)
+            .Distinct(StringComparer.CurrentCulture)
+            .Take(3)
+            .ToList();
+
+        return values.Count > 0 ? $"（代表值：{string.Join("；", values)}）" : "";
+    }
+
+    private static bool IsOfflineIssue(ReportDetailPreview detail) =>
+        IsOfflineIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsVoltageOrPtIssue(ReportDetailPreview detail) =>
+        IsVoltageOrPtIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsCtIssue(ReportDetailPreview detail) =>
+        IsCtIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsTemperatureIssue(ReportDetailPreview detail) =>
+        IsTemperatureIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsSensorFaultIssue(ReportDetailPreview detail) =>
+        IsSensorFaultIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsCurrentIssue(ReportDetailPreview detail) =>
+        IsCurrentIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsConstantIssue(ReportDetailPreview detail) =>
+        IsConstantIssueText(BuildIssueSearchText(detail));
+
+    private static bool IsOfflineIssueText(string text) =>
+        ContainsAny(text, "设备离线", "通信中断", "通讯中断", "-1.0", "-1");
+
+    private static bool IsVoltageOrPtIssueText(string text) =>
+        ContainsAny(text, "电压", "PT", "电压互感器");
+
+    private static bool IsCtIssueText(string text) =>
+        ContainsAny(text, "CT极性", "CT", "功率方向", "接线相序");
+
+    private static bool IsTemperatureIssueText(string text) =>
+        ContainsAny(text, "温度");
+
+    private static bool IsTemperatureRunIssueText(string text) =>
+        IsTemperatureIssueText(text) && !IsSensorFaultIssueText(text);
+
+    private static bool IsSensorFaultIssueText(string text) =>
+        ContainsAny(text, "传感器故障", "传感器失效", "2867.2");
+
+    private static bool IsCurrentIssueText(string text) =>
+        ContainsAny(text, "电流过大", "电流过载", "电流偏大");
+
+    private static bool IsConstantIssueText(string text) =>
+        ContainsAny(text, "数据恒定", "数据冻结", "恒定不变");
+
+    private static string BuildIssueSearchText(ReportDetailPreview detail) =>
+        string.Join(" ", detail.IssueType, detail.IssueDetail, detail.IssueValue, detail.RecommendedAction);
+
+    private static bool ContainsAny(string text, params string[] needles) =>
+        needles.Any(needle => text.Contains(needle, StringComparison.CurrentCultureIgnoreCase));
+
+    private static IEnumerable<string> SplitIssueTypes(string? issueTypes) =>
+        (issueTypes ?? "")
+            .Split(['；', ';', '、', ',', '，', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static IEnumerable<string> ExtractRepresentativeValues(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            yield break;
+        }
+
+        foreach (Match match in Regex.Matches(text, @"-?\d+(?:\.\d+)?\s*(?:°C|℃|kV|V|A|kW|kvar)|-1\.0|0\.0"))
+        {
+            var value = match.Value.Trim();
+            if (value.Length > 0 && value.Any(char.IsDigit))
+            {
+                yield return value;
+            }
+        }
+    }
+
+    private static string TryNormalizeDateText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        var text = value.Trim();
+        string[] formats = ["yyyy-MM-dd", "yyyy/M/d", "yyyy.MM.dd", "yyyyMMdd", "yyyy年M月d日"];
+        if (DateTime.TryParseExact(text, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exactDate)
+            || DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.None, out exactDate))
+        {
+            return exactDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        return "";
+    }
+
+    private static string TryFindDateFromPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "";
+        }
+
+        var match = Regex.Match(path, @"(?<year>\d{4})[-_/年.]?(?<month>\d{1,2})[-_/月.]?(?<day>\d{1,2})");
+        if (!match.Success)
+        {
+            return "";
+        }
+
+        return int.TryParse(match.Groups["year"].Value, out var year)
+            && int.TryParse(match.Groups["month"].Value, out var month)
+            && int.TryParse(match.Groups["day"].Value, out var day)
+            && year >= 2000
+            && month is >= 1 and <= 12
+            && day is >= 1 and <= 31
+            ? $"{year:0000}-{month:00}-{day:00}"
+            : "";
+    }
+
+    private static int TryParseHour(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return -1;
+        }
+
+        if (DateTime.TryParse(value.Trim(), CultureInfo.CurrentCulture, DateTimeStyles.None, out var dateTime))
+        {
+            return dateTime.Hour;
+        }
+
+        var match = Regex.Match(value, @"^\s*(?<hour>\d{1,2})");
+        return match.Success
+            && int.TryParse(match.Groups["hour"].Value, out var hour)
+            && hour is >= 0 and <= 23
+                ? hour
+                : -1;
     }
 
     private bool CanOpenFirstAnomalySource()
@@ -2381,9 +2800,7 @@ public partial class MainViewModel : ObservableObject
 
     private void AddLog(string kind, string message)
     {
-        RuntimeLogs.Add(
-            DiagnosticsRedactor.Redact(kind, PythonExecutable, PythonBackendService.ResolveBackendWorkingDirectory()),
-            DiagnosticsRedactor.Redact(message, PythonExecutable, PythonBackendService.ResolveBackendWorkingDirectory()));
+        RuntimeLogs.Add(DiagnosticsRedactor.Redact(kind), DiagnosticsRedactor.Redact(message));
     }
 
     public void AddRuntimeLog(string kind, string message) => AddLog(kind, message);
@@ -2422,61 +2839,26 @@ public partial class MainViewModel : ObservableObject
         CopyFilteredLogsCommand.NotifyCanExecuteChanged();
     }
 
-    private async Task<bool> EnsureReadyToStartAsync()
+    private Task<bool> EnsureReadyToStartAsync()
     {
         RefreshLocalDiagnostics();
-
-        var issues = _diagnostics.ValidateRunInputs(
-            BuildDiagnosticsRequest(),
-            prepareOutputDirectory: true);
+        var issues = _diagnostics.ValidateRunInputs(BuildDiagnosticsRequest(), prepareOutputDirectory: true);
         if (issues.Count > 0)
         {
             BlockStart(issues);
-            return false;
-        }
-
-        RefreshLocalDiagnostics();
-        Diagnostics.MarkProbeInProgress("正在执行运行前就绪检查...");
-
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        var result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
-        ApplyPythonProbeResult(result);
-        if (!result.IsReady)
-        {
-            if (result.CanRepairDetectionEnvironment
-                && await TryAutoRepairDetectionEnvironmentAsync(backendRoot))
-            {
-                result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
-                ApplyPythonProbeResult(result);
-                if (result.IsReady)
-                {
-                    LastFailureText = "暂无失败";
-                    return true;
-                }
-            }
-
-            BlockStart(
-                "检测组件未就绪",
-                result.ActionMessage);
-            return false;
+            return Task.FromResult(false);
         }
 
         LastFailureText = "暂无失败";
-        return true;
+        AddLog("状态检查", "Native .NET 检测核心已就绪。");
+        return Task.FromResult(true);
     }
 
-    private bool CanRefreshDiagnostics() => !IsRepairingDetectionEnvironment;
-
-    [RelayCommand(CanExecute = nameof(CanRefreshDiagnostics))]
-    private async Task RefreshDiagnosticsAsync()
+    [RelayCommand]
+    private void RefreshDiagnostics()
     {
         RefreshLocalDiagnostics();
-        Diagnostics.MarkProbeInProgress("正在验证检测组件...");
-
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        var result = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
-        ApplyPythonProbeResult(result);
-        AddLog(result.IsReady ? "状态检查" : "状态提醒", $"{result.PythonMessage}；{result.BackendMessage}");
+        AddLog("状态检查", "Native .NET 检测核心已就绪。");
     }
 
     [RelayCommand]
@@ -2494,57 +2876,7 @@ public partial class MainViewModel : ObservableObject
             InputDirectory,
             OutputDirectory,
             DetectionConfigService.ResolveEffectiveConfigPath(ConfigPath),
-            PythonExecutable,
             WriteReport);
-
-    private void ApplyPythonProbeResult(PythonProbeResult result)
-    {
-        Diagnostics.ApplyPythonProbeResult(
-            result,
-            IsLocalInputReady(),
-            IsConfigReady(),
-            DateTime.Now);
-        RefreshFirstRunGuide();
-    }
-
-    private async Task<bool> TryAutoRepairDetectionEnvironmentAsync(string backendRoot)
-    {
-        var request = new DetectionEnvironmentRepairRequest(PythonExecutable, backendRoot);
-        if (!_environmentRepair.CanRepair(request))
-        {
-            return false;
-        }
-
-        IsRepairingDetectionEnvironment = true;
-        StatusText = "正在自动修复检测组件";
-        LastFailureText = "运行前检查发现检测组件未就绪，正在自动修复...";
-        Diagnostics.MarkRepairInProgress();
-        SetTaskbarProgress(TaskbarProgressKind.Indeterminate, 0);
-        AddLog("修复", "运行前检查发现检测组件未就绪，正在自动修复。");
-
-        try
-        {
-            var repairResult = await _environmentRepair.RepairAsync(request);
-            Diagnostics.ApplyRepairResult(repairResult);
-            AddLog(repairResult.Succeeded ? "修复" : "修复提醒", repairResult.SummaryMessage);
-            if (!string.IsNullOrWhiteSpace(repairResult.OutputTail))
-            {
-                AddLog("修复详情", repairResult.OutputTail);
-            }
-
-            ApplyRepairedPythonExecutable(repairResult);
-
-            return repairResult.Succeeded;
-        }
-        finally
-        {
-            IsRepairingDetectionEnvironment = false;
-            SetTaskbarProgress(TaskbarProgressKind.None, 0);
-            RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
-            StartCommand.NotifyCanExecuteChanged();
-            RefreshDiagnosticsCommand.NotifyCanExecuteChanged();
-        }
-    }
 
     private void RefreshFirstRunGuide()
     {
@@ -2553,7 +2885,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(FirstRunGuideSubtitleText));
         OnPropertyChanged(nameof(FirstRunInputStepText));
         OnPropertyChanged(nameof(FirstRunConfigStepText));
-        OnPropertyChanged(nameof(FirstRunPythonStepText));
+        OnPropertyChanged(nameof(FirstRunBackendStepText));
         OnPropertyChanged(nameof(FirstRunOutputStepText));
         OnPropertyChanged(nameof(RunSetupReadinessText));
         OnPropertyChanged(nameof(RunSetupReadinessDetailText));
@@ -2581,127 +2913,6 @@ public partial class MainViewModel : ObservableObject
     private bool IsConfigReady()
         => DetectionConfigService.ValidateConfigFile(
             DetectionConfigService.ResolveEffectiveConfigPath(ConfigPath)) is null;
-
-    private bool CanCopyPythonSetupCommand() =>
-        !string.IsNullOrWhiteSpace(PythonSetupCommandText);
-
-    [RelayCommand(CanExecute = nameof(CanCopyPythonSetupCommand))]
-    private void CopyPythonSetup()
-    {
-        CopyTextToClipboard(PythonSetupCommandText);
-        AddLog("修复", "已复制检测组件修复命令。");
-    }
-
-    private bool CanRepairDetectionEnvironmentCommand() =>
-        !IsRunning
-        && !IsRepairingDetectionEnvironment
-        && Diagnostics.CanRepairDetectionEnvironment;
-
-    [RelayCommand(CanExecute = nameof(CanRepairDetectionEnvironmentCommand))]
-    private async Task RepairDetectionEnvironmentAsync()
-    {
-        RefreshLocalDiagnostics();
-        var backendRoot = PythonBackendService.ResolveBackendWorkingDirectory();
-        var request = new DetectionEnvironmentRepairRequest(PythonExecutable, backendRoot);
-        if (!_environmentRepair.CanRepair(request))
-        {
-            Diagnostics.ApplyRepairResult(new DetectionEnvironmentRepairResult(
-                false,
-                null,
-                "当前环境不能自动修复",
-                "请先确认 Python 可执行文件有效，并使用包含本地检测核心源码的安装目录。",
-                ""));
-            BlockStart("检测组件未就绪", Diagnostics.ActionText);
-            RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
-            return;
-        }
-
-        _environmentRepairCts?.Cancel();
-        _environmentRepairCts?.Dispose();
-        _environmentRepairCts = new CancellationTokenSource();
-        var repairCts = _environmentRepairCts;
-
-        IsRepairingDetectionEnvironment = true;
-        StatusText = "正在修复检测组件";
-        LastFailureText = "正在安装本地检测核心，请稍候...";
-        Diagnostics.MarkRepairInProgress();
-        SetTaskbarProgress(TaskbarProgressKind.Indeterminate, 0);
-        AddLog("修复", "正在修复检测组件运行环境。");
-
-        try
-        {
-            var repairResult = await _environmentRepair.RepairAsync(request, repairCts.Token);
-            Diagnostics.ApplyRepairResult(repairResult);
-            AddLog(repairResult.Succeeded ? "修复" : "修复提醒", repairResult.SummaryMessage);
-            if (!string.IsNullOrWhiteSpace(repairResult.OutputTail))
-            {
-                AddLog("修复详情", repairResult.OutputTail);
-            }
-
-            ApplyRepairedPythonExecutable(repairResult);
-
-            Diagnostics.MarkProbeInProgress("修复完成，正在重新检查运行环境...");
-            var probeResult = await _diagnostics.ProbePythonAsync(PythonExecutable, backendRoot);
-            ApplyPythonProbeResult(probeResult);
-
-            if (probeResult.IsReady)
-            {
-                StatusText = "就绪";
-                LastFailureText = "暂无失败";
-                SetTaskbarProgress(TaskbarProgressKind.None, 0);
-                AddLog("状态检查", "检测组件已就绪，可以开始检测。");
-                ShowSettingsFeedback("检测组件修复完成，可以开始检测。", InfoBarSeverity.Success);
-                return;
-            }
-
-            BlockStart(
-                repairResult.Succeeded ? "检测组件复查仍未通过" : repairResult.SummaryMessage,
-                probeResult.ActionMessage);
-        }
-        catch (OperationCanceledException)
-        {
-            Diagnostics.ApplyRepairResult(new DetectionEnvironmentRepairResult(
-                false,
-                null,
-                "检测组件修复已取消",
-                "修复过程已停止，请重新检查运行环境。",
-                ""));
-            BlockStart("检测组件修复已取消", Diagnostics.ActionText);
-        }
-        finally
-        {
-            if (ReferenceEquals(_environmentRepairCts, repairCts))
-            {
-                _environmentRepairCts.Dispose();
-                _environmentRepairCts = null;
-            }
-
-            IsRepairingDetectionEnvironment = false;
-            RepairDetectionEnvironmentCommand.NotifyCanExecuteChanged();
-            StartCommand.NotifyCanExecuteChanged();
-            RefreshDiagnosticsCommand.NotifyCanExecuteChanged();
-        }
-    }
-
-    private void ApplyRepairedPythonExecutable(DetectionEnvironmentRepairResult repairResult)
-    {
-        if (!repairResult.Succeeded
-            || string.IsNullOrWhiteSpace(repairResult.RepairedPythonExecutable)
-            || !File.Exists(repairResult.RepairedPythonExecutable))
-        {
-            return;
-        }
-
-        PythonExecutable = repairResult.RepairedPythonExecutable;
-        SaveSettings();
-        AddLog("修复", $"已切换到应用私有检测环境: {repairResult.RepairedPythonExecutable}");
-    }
-
-    [RelayCommand]
-    private void OpenBackendDirectory()
-    {
-        OpenFolder(PythonBackendService.ResolveBackendWorkingDirectory());
-    }
 
     private bool CanOpenUpdateFeed() => !IsCheckingForUpdates && !IsDownloadingUpdateInstaller;
 
@@ -3117,9 +3328,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void CopyDiagnostics()
     {
-        CopyTextToClipboard(Diagnostics.BuildClipboardText(
-            PythonExecutable,
-            PythonBackendService.ResolveBackendWorkingDirectory()));
+        CopyTextToClipboard(Diagnostics.BuildClipboardText());
         AddLog("状态检查", "已复制脱敏诊断信息。");
     }
 
@@ -3337,7 +3546,6 @@ public partial class MainViewModel : ObservableObject
             InputDirectory = InputDirectory,
             OutputDirectory = OutputDirectory,
             ConfigPath = ConfigPath,
-            PythonExecutable = PythonExecutable,
             WriteReport = WriteReport,
             CloseToTrayOnClose = CloseToTrayOnClose,
             StartMinimizedToTray = StartMinimizedToTray,
@@ -3381,7 +3589,6 @@ public partial class MainViewModel : ObservableObject
         InputDirectory = defaults.InputDirectory;
         OutputDirectory = defaults.OutputDirectory;
         ConfigPath = _detectionConfig.EnsureUserConfig(defaults.ConfigPath);
-        PythonExecutable = PythonBackendService.ResolvePythonExecutable(defaults.PythonExecutable);
         WriteReport = defaults.WriteReport;
         CloseToTrayOnClose = defaults.CloseToTrayOnClose;
         StartMinimizedToTray = defaults.StartMinimizedToTray;

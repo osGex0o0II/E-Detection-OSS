@@ -214,7 +214,26 @@ public sealed class UpdateCheckService
 
     private static int ScoreInstallerAsset(string name)
     {
+        const string installerPrefix = "E-Detection.Desktop-Setup-";
+        if (!name.StartsWith(installerPrefix, StringComparison.OrdinalIgnoreCase)
+            || (!name.Contains("win-x64", StringComparison.OrdinalIgnoreCase)
+                && !name.Contains("x64", StringComparison.OrdinalIgnoreCase)))
+        {
+            return 0;
+        }
+
         var score = 0;
+        // The production native installer keeps the stable unsuffixed name.
+        if (name.Equals("E-Detection.Desktop-Setup-win-x64.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1000;
+        }
+
+        if (name.Contains("-native-default", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 500;
+        }
+
         if (name.Contains("E-Detection.Desktop", StringComparison.OrdinalIgnoreCase))
         {
             score += 30;

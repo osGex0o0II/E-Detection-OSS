@@ -7,8 +7,7 @@ namespace EDetection.Desktop.ViewModels;
 public sealed partial class DesktopHealthViewModel(
     DesktopHealthService health,
     StartupService startup,
-    SettingsService settings,
-    Func<string> pythonExecutable) : ObservableObject
+    SettingsService settings) : ObservableObject
 {
     [ObservableProperty]
     public partial string SummaryText { get; set; } = "应用状态待检查";
@@ -26,7 +25,7 @@ public sealed partial class DesktopHealthViewModel(
     public partial string PackageText { get; set; } = "包完整性待检查";
 
     [ObservableProperty]
-    public partial string PythonBridgeText { get; set; } = "检测组件待检查";
+    public partial string BackendText { get; set; } = "检测核心待检查";
 
     [ObservableProperty]
     public partial string InstallText { get; set; } = "安装形态待检查";
@@ -34,9 +33,7 @@ public sealed partial class DesktopHealthViewModel(
     public void Refresh()
     {
         var snapshot = health.Build(
-            startup.GetStatus(),
-            settings,
-            pythonExecutable());
+            startup.GetStatus(), settings);
         Apply(snapshot);
     }
 
@@ -47,7 +44,7 @@ public sealed partial class DesktopHealthViewModel(
         StartupText = snapshot.StartupText;
         SettingsText = snapshot.SettingsText;
         PackageText = snapshot.PackageText;
-        PythonBridgeText = snapshot.PythonBridgeText;
+        BackendText = snapshot.BackendText;
         InstallText = snapshot.InstallText;
     }
 }

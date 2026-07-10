@@ -1,9 +1,3 @@
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
 .claude/
 check_result.txt
 build/

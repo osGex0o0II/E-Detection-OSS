@@ -7,6 +7,9 @@ public sealed class ReportDeviceSummary
     [JsonPropertyName("building")]
     public string Building { get; set; } = "";
 
+    [JsonPropertyName("device_path")]
+    public string DevicePath { get; set; } = "根目录";
+
     [JsonPropertyName("transformer")]
     public string Transformer { get; set; } = "";
 
@@ -26,5 +29,5 @@ public sealed class ReportDeviceSummary
     public string Title => $"{Building} / {Transformer}";
 
     [JsonIgnore]
-    public string Subtitle => $"{Priority} · {HighestSeverity} · {AnomalyRecords} 条";
+    public string Subtitle => $"{Priority} · {HighestSeverity} · {AnomalyRecords} 条 · {DevicePath}";
 }

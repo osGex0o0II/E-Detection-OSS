@@ -16,6 +16,12 @@ public sealed class DetectionBackendEvent
     [JsonPropertyName("relative_path")]
     public string? RelativePath { get; set; }
 
+    [JsonPropertyName("building")]
+    public string? Building { get; set; }
+
+    [JsonPropertyName("transformer")]
+    public string? Transformer { get; set; }
+
     [JsonPropertyName("status")]
     public string? Status { get; set; }
 
@@ -30,6 +36,9 @@ public sealed class DetectionBackendEvent
 
     [JsonPropertyName("output_dir")]
     public string? OutputDirectory { get; set; }
+
+    [JsonPropertyName("write_report")]
+    public bool? WriteReport { get; set; }
 
     [JsonPropertyName("report_path")]
     public string? ReportPath { get; set; }
@@ -48,6 +57,12 @@ public sealed class DetectionBackendEvent
 
     [JsonPropertyName("anomaly_records")]
     public int? AnomalyRecords { get; set; }
+
+    [JsonPropertyName("anomaly_count")]
+    public int? AnomalyCount { get; set; }
+
+    [JsonPropertyName("anomaly_types")]
+    public string? AnomalyTypes { get; set; }
 
     [JsonPropertyName("skipped_files")]
     public int? SkippedFiles { get; set; }
@@ -75,4 +90,12 @@ public sealed class DetectionBackendEvent
 
     [JsonPropertyName("detail_preview")]
     public List<ReportDetailPreview>? DetailPreview { get; set; }
+
+    // This is deliberately opt-in and is emitted by the native backend only
+    // when EDETECTION_NATIVE_PARITY_TRACE is set.  Keeping null values out of
+    // the wire format preserves the regular event contract and release output.
+    [JsonPropertyName("native_parity_trace")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NativeParityTrace? NativeParityTrace { get; set; }
+
 }

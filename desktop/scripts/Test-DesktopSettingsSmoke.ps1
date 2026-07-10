@@ -10,7 +10,9 @@ param(
 
     [int]$Height = 1000,
 
-    [int]$WaitSeconds = 8
+    [int]$WaitSeconds = 8,
+
+    [switch]$SkipStartupIntegrationMutation
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,7 +53,9 @@ $sandboxDir = Join-Path $outputFull "sandbox-$timestamp"
 $inputDir = Join-Path $sandboxDir "input"
 New-Item -ItemType Directory -Force -Path $inputDir | Out-Null
 
-$settingsDirectory = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "E-Detection\Desktop"
+$settingsEnvironmentVariable = "EDETECTION_DESKTOP_SETTINGS_DIR"
+$previousSettingsOverride = $env:EDETECTION_DESKTOP_SETTINGS_DIR
+$settingsDirectory = Join-Path $sandboxDir "settings"
 $settingsPath = Join-Path $settingsDirectory "settings.json"
 $settingsExisted = Test-Path $settingsPath
 $settingsBackup = $null
@@ -74,7 +78,14 @@ if (Test-Path $runKeyPath) {
 $taskName = "E-Detection Desktop Autostart"
 
 function Get-StartupTaskXml {
-    $output = & schtasks.exe /Query /TN $taskName /XML 2>$null
+    try {
+        $output = & schtasks.exe /Query /TN $taskName /XML 2>$null
+    }
+    catch {
+        $global:LASTEXITCODE = 0
+        return $null
+    }
+
     if ($LASTEXITCODE -ne 0) {
         return $null
     }
@@ -83,7 +94,11 @@ function Get-StartupTaskXml {
 }
 
 function Remove-StartupTask {
-    & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+    try {
+        & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+    }
+    catch {
+    }
 }
 
 function Restore-StartupTask([string]$TaskXml) {
@@ -104,7 +119,7 @@ function Restore-StartupTask([string]$TaskXml) {
     }
 }
 
-$taskBackup = Get-StartupTaskXml
+$taskBackup = if ($SkipStartupIntegrationMutation) { $null } else { Get-StartupTaskXml }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -352,19 +367,22 @@ function Invoke-SettingsButtonByPosition([IntPtr]$RootHandle) {
 $process = $null
 
 try {
+    $env:EDETECTION_DESKTOP_SETTINGS_DIR = $settingsDirectory
     New-Item -ItemType Directory -Force -Path $settingsDirectory | Out-Null
-    if (!(Test-Path $runKeyPath)) {
-        New-Item -Path $runKeyPath -Force | Out-Null
+
+    if (!$SkipStartupIntegrationMutation) {
+        if (!(Test-Path $runKeyPath)) {
+            New-Item -Path $runKeyPath -Force | Out-Null
+        }
+
+        Remove-ItemProperty -Path $runKeyPath -Name $runEntryName -ErrorAction SilentlyContinue
+        Remove-StartupTask
     }
 
-    Remove-ItemProperty -Path $runKeyPath -Name $runEntryName -ErrorAction SilentlyContinue
-    Remove-StartupTask
-
-    [pscustomobject]@{
+    $seedSettings = [ordered]@{
         InputDirectory = $inputDir
         OutputDirectory = ""
         ConfigPath = "config.json"
-        PythonExecutable = "python"
         WriteReport = $false
         CloseToTrayOnClose = $true
         StartMinimizedToTray = $false
@@ -395,7 +413,8 @@ try {
         PoetryServiceUrl = "https://poetry.palemoky.com/"
         SelectedPoetryLanguageIndex = 0
         RecentReports = @()
-    } | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
+    }
+    [pscustomobject]$seedSettings | ConvertTo-Json | Set-Content -Path $settingsPath -Encoding UTF8
 
     $process = Start-Process -FilePath $appFull -WorkingDirectory (Split-Path -Parent $appFull) -PassThru
     $mainWindow = Wait-ForWindowTitle $process.Id "*E-Detection*" $WaitSeconds
@@ -426,6 +445,8 @@ try {
     $themeControl = Wait-ForAutomationName $mainWindow.Handle "应用主题" $WaitSeconds
     $backdropControl = Wait-ForAutomationName $mainWindow.Handle "窗口背景" $WaitSeconds
     $poetryToggle = Wait-ForAutomationName $mainWindow.Handle "顶部诗词" $WaitSeconds
+    $poetryOptionsExpander = Expand-AutomationElement $mainWindow.Handle "诗词显示选项（可选）" $WaitSeconds
+    Start-Sleep -Milliseconds 300
     $poetryServiceControl = Wait-ForAutomationName $mainWindow.Handle "顶部诗词来源" $WaitSeconds
     $poetryLanguageControl = Wait-ForAutomationName $mainWindow.Handle "诗词语言" $WaitSeconds
     $defaultsSection = Wait-ForAutomationName $mainWindow.Handle "检测" $WaitSeconds
@@ -469,13 +490,13 @@ try {
     $autoStartToggle = Wait-ForAutomationName $mainWindow.Handle "登录后自动启动" $WaitSeconds
     $openWindowsStartupSettingsButton = Wait-ForAutomationName $mainWindow.Handle "打开 Windows 启动应用设置" $WaitSeconds
     $llmSection = Wait-ForAutomationName $mainWindow.Handle "智能助手集成" $WaitSeconds
-    $llmConnectionExpander = Expand-AutomationElement $mainWindow.Handle "连接与凭据" $WaitSeconds
+    $llmConnectionExpander = Expand-AutomationElement $mainWindow.Handle "连接与凭据（启用后生效）" $WaitSeconds
     Start-Sleep -Milliseconds 300
     $llmEndpointControl = Wait-ForAutomationName $mainWindow.Handle "LLM 服务地址" $WaitSeconds
     $llmProxyToggle = Wait-ForAutomationName $mainWindow.Handle "LLM 使用网络代理" $WaitSeconds
     $llmTestButton = Wait-ForAutomationName $mainWindow.Handle "测试 LLM 连接" $WaitSeconds
     $ntfySection = Wait-ForAutomationName $mainWindow.Handle "外部消息推送" $WaitSeconds
-    $ntfySettingsExpander = Expand-AutomationElement $mainWindow.Handle "推送服务配置" $WaitSeconds
+    $ntfySettingsExpander = Expand-AutomationElement $mainWindow.Handle "推送服务配置（启用后生效）" $WaitSeconds
     Start-Sleep -Milliseconds 300
     $ntfyServerControl = Wait-ForAutomationName $mainWindow.Handle "ntfy 服务地址" $WaitSeconds
     $ntfyProxyToggle = Wait-ForAutomationName $mainWindow.Handle "ntfy 使用网络代理" $WaitSeconds
@@ -483,7 +504,6 @@ try {
     $diagnosticsSection = Wait-ForAutomationName $mainWindow.Handle "维护" $WaitSeconds
     $diagnosticsExpander = Expand-AutomationElement $mainWindow.Handle "维护详情" $WaitSeconds
     Start-Sleep -Milliseconds 300
-    $pythonExecutableControl = Wait-ForAutomationName $mainWindow.Handle "检测组件程序" $WaitSeconds
     $proxySection = Wait-ForAutomationName $mainWindow.Handle "网络连接" $WaitSeconds
     $proxyAddressControl = Wait-ForAutomationName $mainWindow.Handle "代理地址" $WaitSeconds
     $proxyTestButton = Wait-ForAutomationName $mainWindow.Handle "测试网络代理" $WaitSeconds
@@ -499,11 +519,11 @@ try {
     $recentLimitControl = Wait-ForAutomationName $mainWindow.Handle "报告历史保留" $WaitSeconds
     $logLimitControl = Wait-ForAutomationName $mainWindow.Handle "运行记录保留" $WaitSeconds
     $desktopHealthSection = Wait-ForAutomationName $mainWindow.Handle "应用状态" $WaitSeconds
-    $saveSettingsButton = Wait-ForAutomationName $mainWindow.Handle "保存设置" $WaitSeconds
+    $saveSettingsButton = Wait-ForAutomationName $mainWindow.Handle "保存并校验检测设置" $WaitSeconds
     $resetSettingsButton = Wait-ForAutomationName $mainWindow.Handle "重置设置" $WaitSeconds
     $settingsJson = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-    if ($settingsJson.SettingsVersion -ne 8) {
-        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '8'."
+    if ($settingsJson.SettingsVersion -ne 10) {
+        throw "Settings smoke failed: SettingsVersion was '$($settingsJson.SettingsVersion)', expected '10'."
     }
 
     $removedShortcutSettings = @(
@@ -524,6 +544,8 @@ try {
     $resultPath = Join-Path $outputFull "settings-smoke-$timestamp.json"
     [pscustomobject]@{
         AppPath = $appFull
+        SettingsDirectory = $settingsDirectory
+        SettingsPath = $settingsPath
         ProcessId = $process.Id
         MainWindowTitle = $mainWindow.Title
         SettingsTitle = $settingsTitle
@@ -531,6 +553,7 @@ try {
         ThemeControl = $themeControl
         BackdropControl = $backdropControl
         PoetryToggle = $poetryToggle
+        PoetryOptionsExpander = $poetryOptionsExpander
         PoetryServiceControl = $poetryServiceControl
         PoetryLanguageControl = $poetryLanguageControl
         DefaultsSection = $defaultsSection
@@ -583,7 +606,6 @@ try {
         NtfyTestButton = $ntfyTestButton
         DiagnosticsSection = $diagnosticsSection
         DiagnosticsExpander = $diagnosticsExpander
-        PythonExecutableControl = $pythonExecutableControl
         ProxySection = $proxySection
         ProxyAddressControl = $proxyAddressControl
         ProxyTestButton = $proxyTestButton
@@ -597,6 +619,7 @@ try {
         UpdateFeedControl = $updateFeedControl
         RemovedShortcutSettingsPersisted = @($removedShortcutSettings | Where-Object { $settingsJson.PSObject.Properties.Name -contains $_ })
         SettingsVersion = $settingsJson.SettingsVersion
+        SkipStartupIntegrationMutation = [bool]$SkipStartupIntegrationMutation
         DesktopHealthSection = $desktopHealthSection
         RecentLimitControl = $recentLimitControl
         LogLimitControl = $logLimitControl
@@ -632,14 +655,23 @@ finally {
         Remove-Item -LiteralPath $settingsPath -Force
     }
 
-    Remove-StartupTask
-    Restore-StartupTask $taskBackup
+    if (!$SkipStartupIntegrationMutation) {
+        Remove-StartupTask
+        Restore-StartupTask $taskBackup
 
-    if ($runEntryExisted) {
-        New-Item -Path $runKeyPath -Force | Out-Null
-        Set-ItemProperty -Path $runKeyPath -Name $runEntryName -Value $runEntryBackup
+        if ($runEntryExisted) {
+            New-Item -Path $runKeyPath -Force | Out-Null
+            Set-ItemProperty -Path $runKeyPath -Name $runEntryName -Value $runEntryBackup
+        }
+        else {
+            Remove-ItemProperty -Path $runKeyPath -Name $runEntryName -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($null -eq $previousSettingsOverride) {
+        Remove-Item -Path "Env:$settingsEnvironmentVariable" -ErrorAction SilentlyContinue
     }
     else {
-        Remove-ItemProperty -Path $runKeyPath -Name $runEntryName -ErrorAction SilentlyContinue
+        $env:EDETECTION_DESKTOP_SETTINGS_DIR = $previousSettingsOverride
     }
 }

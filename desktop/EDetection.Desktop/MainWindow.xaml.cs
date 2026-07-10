@@ -53,11 +53,9 @@ public sealed partial class MainWindow : Window
         _ntfyNotifications = new NtfyNotificationService(_credentials, _networkProxy);
         _llmAssistant = new LlmAssistantService(_credentials, _networkProxy);
         ViewModel = new MainViewModel(
-            new PythonBackendService(),
             new SettingsService(),
             new DetectionConfigService(),
             new DesktopDiagnosticsService(),
-            new DetectionEnvironmentRepairService(),
             new ReportHistoryService(),
             new RuntimeLogService(),
             new RunTelemetryService(),

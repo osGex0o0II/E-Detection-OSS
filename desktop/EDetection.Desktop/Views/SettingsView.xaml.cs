@@ -66,13 +66,9 @@ public sealed partial class SettingsView : UserControl
             SettingsScroll.UpdateLayout();
             SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
             _suppressScrollSync = false;
-            if (string.IsNullOrWhiteSpace(initialSectionName))
-            {
-                UpdateSelectedCategoryFromScroll();
-                return;
-            }
-
-            NavigateToSectionByName(initialSectionName);
+            NavigateToSectionByName(string.IsNullOrWhiteSpace(initialSectionName)
+                ? "DefaultsSection"
+                : initialSectionName);
         });
     }
 
@@ -116,6 +112,50 @@ public sealed partial class SettingsView : UserControl
 
     private void OpenDetectionRules_Click(object sender, RoutedEventArgs e) =>
         NavigateToDetectionRules();
+
+    private async void ResetSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (!await ConfirmActionAsync(
+                "恢复默认设置？",
+                "将恢复检测阈值、目录、窗口和网络偏好。已保存的 API Key、Token 与代理密码不会删除。",
+                "恢复默认"))
+        {
+            return;
+        }
+
+        ViewModel?.ResetSettingsToDefaultsCommand.Execute(null);
+    }
+
+    private async void ClearRecentReports_Click(object sender, RoutedEventArgs e)
+    {
+        if (await ConfirmActionAsync("清空报告历史？", "这会移除应用中的报告历史记录，不会删除磁盘上的 Excel 报告。", "清空历史"))
+        {
+            ViewModel?.ClearRecentReportsCommand.Execute(null);
+        }
+    }
+
+    private async void ClearRuntimeLogs_Click(object sender, RoutedEventArgs e)
+    {
+        if (await ConfirmActionAsync("清空运行记录？", "这会移除应用中的运行记录，无法恢复。", "清空记录"))
+        {
+            ViewModel?.ClearRuntimeLogsCommand.Execute(null);
+        }
+    }
+
+    private async Task<bool> ConfirmActionAsync(string title, string content, string primaryButtonText)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = content,
+            PrimaryButtonText = primaryButtonText,
+            CloseButtonText = "取消",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = XamlRoot,
+        };
+
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
 
     private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
@@ -221,7 +261,7 @@ public sealed partial class SettingsView : UserControl
         element.StartBringIntoView(new BringIntoViewOptions
         {
             AnimationDesired = true,
-            VerticalAlignmentRatio = 0.12,
+            VerticalAlignmentRatio = 0,
         });
         _ = ResumeScrollSyncAfterNavigationAsync(navigationVersion);
     }
@@ -649,7 +689,6 @@ public sealed partial class SettingsView : UserControl
 
     private FrameworkElement[] GetSettingSections() =>
     [
-        AppearanceSection,
         DefaultsSection,
         ThresholdsSection,
         DetectionRulesSection,
@@ -661,6 +700,7 @@ public sealed partial class SettingsView : UserControl
         AdvancedSection,
         ProxySection,
         UpdatesSection,
+        AppearanceSection,
     ];
 
     private static string GetCategorySectionName(string sectionName) =>
@@ -679,7 +719,7 @@ public sealed partial class SettingsView : UserControl
         new("外观", "外观", "外观 主题 背景 mica acrylic 深色 浅色 跟随系统 诗词", "AppearanceSection"),
         new("应用主题", "外观", "外观 主题 深色 浅色 跟随系统", "AppearanceSection"),
         new("窗口背景", "外观", "外观 背景 mica acrylic", "AppearanceSection"),
-        new("顶部诗词", "外观", "诗词 poetry palemoky 顶部 信息栏 来源", "AppearanceSection"),
+        new("顶部诗词", "外观", "诗词 poetry palemoky 顶部 信息栏 来源", "AppearanceSection", TargetName: "PoetryOptionsExpander", ExpanderName: "PoetryOptionsExpander"),
         new("检测目录", "检测", "检测 输入目录 报告目录 csv 路径", "DefaultsSection"),
         new("输入目录", "检测", "检测 输入目录 csv 路径", "DefaultsSection"),
         new("报告目录", "检测", "检测 报告目录 输出目录 路径", "DefaultsSection"),
@@ -701,20 +741,19 @@ public sealed partial class SettingsView : UserControl
         new("Windows 启动应用设置", "通知与窗口", "Windows 系统 启动 应用 设置 startupapps", "WindowSection"),
         new("桌面通知测试", "通知与窗口", "桌面通知 通知 测试 toast Windows 系统设置", "WindowSection"),
         new("Windows 通知设置", "通知与窗口", "Windows 系统 通知 设置 ms-settings", "WindowSection"),
-        new("智能助手", "集成与高级", "llm ai 智能助手 模型 api key 代理 测试", "LlmSection"),
-        new("LLM 服务地址", "集成与高级", "llm endpoint 服务地址 模型 api key", "LlmSection", TargetName: "LlmEndpointRow", ExpanderName: "LlmConnectionExpander"),
-        new("LLM API Key", "集成与高级", "llm api key 凭据 密钥", "LlmSection", TargetName: "LlmApiKeyRow", ExpanderName: "LlmConnectionExpander"),
-        new("消息推送", "集成与高级", "ntfy 通知 推送 主题 token 优先级 代理 测试", "NotificationsSection", TargetName: "NotificationsSection"),
-        new("ntfy 服务地址", "集成与高级", "ntfy 服务地址 topic token", "NotificationsSection", TargetName: "NtfyServerRow", ExpanderName: "NtfySettingsExpander"),
-        new("ntfy Token", "集成与高级", "ntfy token 凭据 推送", "NotificationsSection", TargetName: "NtfyTokenRow", ExpanderName: "NtfySettingsExpander"),
+        new("智能助手", "智能助手与推送", "llm ai 智能助手 模型 api key 代理 测试", "LlmSection"),
+        new("LLM 服务地址", "智能助手与推送", "llm endpoint 服务地址 模型 api key", "LlmSection", TargetName: "LlmEndpointRow", ExpanderName: "LlmConnectionExpander"),
+        new("LLM API Key", "智能助手与推送", "llm api key 凭据 密钥", "LlmSection", TargetName: "LlmApiKeyRow", ExpanderName: "LlmConnectionExpander"),
+        new("消息推送", "智能助手与推送", "ntfy 通知 推送 主题 token 优先级 代理 测试", "NotificationsSection", TargetName: "NotificationsSection"),
+        new("ntfy 服务地址", "智能助手与推送", "ntfy 服务地址 topic token", "NotificationsSection", TargetName: "NtfyServerRow", ExpanderName: "NtfySettingsExpander"),
+        new("ntfy Token", "智能助手与推送", "ntfy token 凭据 推送", "NotificationsSection", TargetName: "NtfyTokenRow", ExpanderName: "NtfySettingsExpander"),
         new("网络代理", "更新与网络", "代理 proxy 地址 认证 用户名 密码 测试 Windows 系统设置", "ProxySection"),
         new("Windows 代理设置", "更新与网络", "Windows 系统 网络 代理 设置 ms-settings", "ProxySection"),
         new("软件更新", "更新与网络", "更新 版本 检查 通道 代理 更新源 release", "UpdatesSection"),
         new("更新代理", "更新与网络", "更新 网络代理 proxy", "UpdatesSection", TargetName: "UpdateProxyRow", ExpanderName: "AdvancedUpdateExpander"),
-        new("更新通道", "更新与网络", "更新 通道 自动检查 手动检查", "UpdatesSection", TargetName: "UpdateChannelRow", ExpanderName: "AdvancedUpdateExpander"),
+        new("更新检查方式", "更新与网络", "更新 自动检查 手动检查", "UpdatesSection", TargetName: "UpdateChannelRow", ExpanderName: "AdvancedUpdateExpander"),
         new("更新源", "更新与网络", "更新源 feed release github", "UpdatesSection", TargetName: "UpdateFeedRow", ExpanderName: "AdvancedUpdateExpander"),
-        new("维护", "集成与高级", "维护 应用状态 检测组件 python 设置存储", "AdvancedSection"),
-        new("检测组件程序", "集成与高级", "维护 python 检测组件 程序 exe", "AdvancedSection", TargetName: "PythonExecutableRow", ExpanderName: "DiagnosticsDetailsExpander"),
+        new("维护", "智能助手与推送", "维护 应用状态 原生 检测核心 设置存储", "AdvancedSection"),
     ];
 
     private async void BrowseInputDirectory_Click(object sender, RoutedEventArgs e)
@@ -747,15 +786,6 @@ public sealed partial class SettingsView : UserControl
         if (file is not null && ViewModel is not null)
         {
             ViewModel.ConfigPath = file.Path;
-        }
-    }
-
-    private async void BrowsePythonExecutable_Click(object sender, RoutedEventArgs e)
-    {
-        var file = await PickFileAsync(".exe");
-        if (file is not null && ViewModel is not null)
-        {
-            ViewModel.PythonExecutable = file.Path;
         }
     }
 

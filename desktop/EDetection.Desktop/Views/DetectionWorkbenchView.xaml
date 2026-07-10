@@ -280,20 +280,6 @@
                                     <TextBlock Text="检查状态" />
                                 </StackPanel>
                             </Button>
-                            <Button Command="{Binding RepairDetectionEnvironmentCommand}"
-                                    Style="{StaticResource AccentButtonStyle}"
-                                    Visibility="{Binding DetectionEnvironmentRepairActionsVisibility}"
-                                    ToolTipService.ToolTip="修复检测组件">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <FontIcon Glyph="&#xE777;" FontSize="14" />
-                                    <TextBlock Text="修复检测组件" />
-                                </StackPanel>
-                            </Button>
-                            <Button Command="{Binding CopyPythonSetupCommand}"
-                                    Visibility="{Binding DetectionEnvironmentRepairActionsVisibility}"
-                                    ToolTipService.ToolTip="复制修复命令">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="14" />
-                            </Button>
                             <Button Command="{Binding CopyDiagnosticsCommand}"
                                     ToolTipService.ToolTip="复制状态详情">
                                 <FontIcon Glyph="&#xE8A5;" FontSize="14" />
@@ -333,11 +319,9 @@
                                    Text="{Binding WorkbenchReportDeviceCount}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
-                    <ListView Grid.Row="1"
-                              ItemsSource="{Binding WorkbenchHighRiskDevices}"
-                              MaxHeight="148"
-                              SelectionMode="None">
-                        <ListView.ItemTemplate>
+                    <ItemsRepeater Grid.Row="1"
+                                   ItemsSource="{Binding WorkbenchHighRiskDevices}">
+                        <ItemsRepeater.ItemTemplate>
                             <DataTemplate>
                                 <Grid ColumnSpacing="12" Padding="0,6">
                                     <Grid.ColumnDefinitions>
@@ -358,8 +342,8 @@
                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
                                 </Grid>
                             </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                 </Grid>
 
                 <StackPanel x:Name="IssueRankPanel" Grid.Column="1" Spacing="10">
