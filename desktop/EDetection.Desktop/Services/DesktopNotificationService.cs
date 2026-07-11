@@ -34,7 +34,7 @@ public sealed class DesktopNotificationService
             }
             else
             {
-                AppNotificationManager.Default.Register("EDetection", iconUri);
+                AppNotificationManager.Default.Register("E-Detection", iconUri);
             }
 
             _registered = true;
