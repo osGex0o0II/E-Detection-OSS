@@ -167,7 +167,7 @@ catch {
 
 $infoPath = Join-Path $publishDir "release-info.txt"
 @(
-    "EDetection"
+    "E-Detection"
     "Version=$appVersion"
     "RuntimeIdentifier=$RuntimeIdentifier"
     "Configuration=$Configuration"
@@ -181,12 +181,12 @@ $infoPath = Join-Path $publishDir "release-info.txt"
     "InstallScript=Install-Desktop.ps1"
     "UninstallScript=Uninstall-Desktop.ps1"
     "PackageContents=Native C# + .NET runtime only"
-    "CodeSigning=Development packages may be unsigned; official GitHub Releases require Authenticode signing"
+    "CodeSigning=Release assets are Authenticode signed when a signing certificate is configured; otherwise they are explicitly unsigned."
 ) | Set-Content -Path $infoPath -Encoding UTF8
 
 $installTextPath = Join-Path $publishDir "INSTALL.txt"
 @(
-    "EDetection"
+    "E-Detection"
     ""
     "Recommended for most Windows users:"
     "  Download and run $installerName from GitHub Releases."

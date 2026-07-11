@@ -119,8 +119,30 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64
 
-      - name: Sign published app for release
+      - name: Determine release signing mode
         if: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && github.event_name != 'pull_request' }}
+        shell: pwsh
+        env:
+          WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
+          WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
+        run: |
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_PASSWORD)
+          if ($hasCertificate -xor $hasPassword) {
+              throw "Code-signing configuration is incomplete. Configure both WINDOWS_CODE_SIGNING_PFX_BASE64 and WINDOWS_CODE_SIGNING_PFX_PASSWORD, or configure neither to publish an unsigned release."
+          }
+
+          $signReleaseArtifacts = if ($hasCertificate) { "true" } else { "false" }
+          "SIGN_RELEASE_ARTIFACTS=$signReleaseArtifacts" | Add-Content -Path $env:GITHUB_ENV
+          if ($hasCertificate) {
+              "## Release signing`n`nAuthenticode signing is enabled for this release." | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          }
+          else {
+              "## Unsigned release`n`nNo code-signing certificate is configured. The release assets are intentionally unsigned; Windows may show an Unknown Publisher or SmartScreen warning." | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Sign published app for release
+        if: ${{ env.SIGN_RELEASE_ARTIFACTS == 'true' }}
         shell: pwsh
         env:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
@@ -131,8 +153,7 @@ jobs:
       - name: Inspect published app signature
         shell: pwsh
         run: |
-          $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
-          if ($isReleaseBuild) {
+          if ("${{ env.SIGN_RELEASE_ARTIFACTS }}" -eq "true") {
               ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/publish/EDetection.exe -RequireSigned
           }
           else {
@@ -180,7 +201,7 @@ jobs:
         run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64 -UnsafeInstallRootOverride "$env:TEMP\E-Detection-Desktop-InstallerSmoke\UnsafeRoot"
 
       - name: Sign setup installer for release
-        if: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && github.event_name != 'pull_request' }}
+        if: ${{ env.SIGN_RELEASE_ARTIFACTS == 'true' }}
         shell: pwsh
         env:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
@@ -191,8 +212,7 @@ jobs:
       - name: Inspect setup installer signature
         shell: pwsh
         run: |
-          $isReleaseBuild = "${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '') }}" -eq "true"
-          if ($isReleaseBuild) {
+          if ("${{ env.SIGN_RELEASE_ARTIFACTS }}" -eq "true") {
               ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path ./artifacts/desktop/win-x64/installer/EDetection-Setup-win-x64.exe -RequireSigned
           }
           else {
@@ -242,6 +262,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
     permissions:
       contents: write
+    env:
+      WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
+      WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -305,8 +328,12 @@ jobs:
               throw "Release version mismatch. tag=$tagVersion desktop=$desktopVersion."
           }
 
-          if ($assemblyVersion -ne "$tagVersion.0" -or $fileVersion -ne "$tagVersion.0") {
-              throw "Desktop assembly/file versions must match $tagVersion.0. AssemblyVersion=$assemblyVersion FileVersion=$fileVersion."
+          if ($tagVersion -notmatch '^(?<numericVersion>\d+\.\d+\.\d+)(?:[-+].+)?$') {
+              throw "Release tag '$tag' does not contain a valid numeric version prefix."
+          }
+          $numericVersion = $Matches['numericVersion']
+          if ($assemblyVersion -ne "$numericVersion.0" -or $fileVersion -ne "$numericVersion.0") {
+              throw "Desktop assembly/file versions must match $numericVersion.0. AssemblyVersion=$assemblyVersion FileVersion=$fileVersion."
           }
 
           $zipPath = Get-ChildItem -Path release-artifacts -Recurse -File -Filter "EDetection-win-x64.zip" | Select-Object -First 1
@@ -359,8 +386,18 @@ jobs:
               throw "Portable release package health failed after artifact download."
           }
 
+          $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_BASE64)
+          $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_PASSWORD)
+          if ($hasCertificate -xor $hasPassword) {
+              throw "Code-signing configuration is incomplete. Configure both signing secrets, or neither for an unsigned release."
+          }
           $releaseSignaturePaths = @($setupPath.FullName, $portableAppPath.FullName)
-          ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path $releaseSignaturePaths -RequireSigned
+          if ($hasCertificate) {
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path $releaseSignaturePaths -RequireSigned
+          }
+          else {
+              ./desktop/scripts/Test-DesktopSignatureStatus.ps1 -Path $releaseSignaturePaths
+          }
 
           $shaPath = Join-Path $env:RUNNER_TEMP "EDetection-win-x64.sha256.txt"
           @(
@@ -370,10 +407,18 @@ jobs:
 
           $setupSignature = Get-AuthenticodeSignature -LiteralPath $setupPath.FullName
           $signatureStatus = $setupSignature.Status.ToString()
-          if ($signatureStatus -ne "Valid") {
+          if ($hasCertificate -and $signatureStatus -ne "Valid") {
               throw "Release setup installer must be Authenticode signed. Status=$signatureStatus."
           }
-          $signatureLine = "The setup installer is Authenticode signed by $($setupSignature.SignerCertificate.Subject)."
+          if (!$hasCertificate -and $signatureStatus -ne "NotSigned") {
+              throw "Unsigned release setup installer must not carry an unexpected signature state. Status=$signatureStatus."
+          }
+          $signatureLine = if ($hasCertificate) {
+              "The setup installer is Authenticode signed by $($setupSignature.SignerCertificate.Subject)."
+          }
+          else {
+              "The setup installer is intentionally unsigned because no code-signing certificate is configured. Windows may show an Unknown Publisher or SmartScreen warning."
+          }
 
           $notesPath = Join-Path $env:RUNNER_TEMP "desktop-release-notes.md"
           @(
@@ -413,7 +458,7 @@ jobs:
               throw "Release $tag already exists. Published release assets are immutable for desktop updates; create a new patch tag instead."
           }
           else {
-              gh release create $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --verify-tag --title "EDetection $tag" --notes-file $notesPath
+              gh release create $tag $setupPath.FullName $zipPath.FullName $shaPath --repo $env:GITHUB_REPOSITORY --verify-tag --title "E-Detection $tag" --notes-file $notesPath
               if ($LASTEXITCODE -ne 0) {
                   throw "Failed to create release $tag."
               }

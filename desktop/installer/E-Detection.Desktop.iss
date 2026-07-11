@@ -101,7 +101,9 @@ begin
     IsSamePath(ExpandedDir, DriveRoot) or
     ((UserProfile <> '') and IsSamePath(ExpandedDir, UserProfile)) or
     IsSamePath(ExpandedDir, ExpandConstant('{userdesktop}')) or
-    (('{#UnsafeInstallRootOverride}' <> '') and IsPathInside(ExpandedDir, '{#UnsafeInstallRootOverride}')) or
+    (('{#UnsafeInstallRootOverride}' <> '') and
+      (IsSamePath(ExpandedDir, '{#UnsafeInstallRootOverride}') or
+       IsPathInside(ExpandedDir, '{#UnsafeInstallRootOverride}'))) or
     IsPathInside(ExpandedDir, ExpandConstant('{autopf}')) or
     IsPathInside(ExpandedDir, ExpandConstant('{commonpf}')) or
     IsPathInside(ExpandedDir, ExpandConstant('{commonpf32}'));
