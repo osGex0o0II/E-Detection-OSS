@@ -7,6 +7,12 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 Console.Error.WriteLine("[native-smoke] stage=process_started target=net10.0");
 AssertNoUiRuntimeLoaded();
 
+if (args is ["--regression", var regressionName])
+{
+    await RegressionSuite.RunAsync(regressionName);
+    return;
+}
+
 if (args.Length is 1 or 2)
 {
     var inputDirectory = Path.GetFullPath(args[0]);
