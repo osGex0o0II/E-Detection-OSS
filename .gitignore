@@ -4,6 +4,7 @@ build/
 dist/
 artifacts/
 .tmp/
+.worktrees/
 bin/
 obj/
 E-Detection_extracted/
