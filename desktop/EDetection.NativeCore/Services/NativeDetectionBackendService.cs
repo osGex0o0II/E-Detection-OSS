@@ -94,7 +94,16 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         var config = configResult.Config;
         var parityTraceKey = GetParityTraceKey();
         var files = Directory
-            .EnumerateFiles(inputRoot, "*.csv", SearchOption.AllDirectories)
+            .EnumerateFiles(
+                inputRoot,
+                "*.csv",
+                new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    MatchCasing = MatchCasing.CaseInsensitive,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                })
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToList();
         var generatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
@@ -317,24 +326,38 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
                 currentUnbalanceEnabled = legacyCurrent.GetBoolean();
             }
 
-            return NativeConfigLoadResult.Success(
-                new NativeDetectionConfig(
-                    GetFiniteDouble(root, "V_MIN_THRESHOLD", config.VoltageMinThreshold),
-                    GetFiniteDouble(root, "V_MAX_THRESHOLD", config.VoltageMaxThreshold),
-                    GetFiniteDouble(root, "V_IMBALANCE_THRESHOLD", config.VoltageImbalanceThreshold),
-                    GetFiniteDouble(root, "I_MAX_THRESHOLD", config.CurrentMaxThreshold),
-                    GetFiniteDouble(root, "I_UNBALANCE_MAX_THRESHOLD", config.CurrentUnbalanceMaxThreshold),
-                    GetFiniteDouble(root, "I_MIN_ACTIVE_THRESHOLD", config.CurrentActiveMinThreshold),
-                    GetFiniteDouble(root, "P_ACTIVE_MIN_THRESHOLD", config.ActivePowerMinThreshold),
-                    GetFiniteDouble(root, "PF_MIN_THRESHOLD", config.PowerFactorMinThreshold),
-                    GetFiniteDouble(root, "T_MIN_THRESHOLD", config.TemperatureMinThreshold),
-                    GetFiniteDouble(root, "T_MAX_THRESHOLD", config.TemperatureMaxThreshold),
-                    currentOverloadEnabled,
-                    currentUnbalanceEnabled,
-                    GetBool(root, "power_factor", config.PowerFactorEnabled),
-                    GetBool(root, "detail_output", config.DetailOutputEnabled),
-                    GetPositiveInt(root, "FREEZE_COUNT_THRESHOLD", config.FreezeCountThreshold),
-                    GetFiniteDouble(root, "FREEZE_STD_THRESHOLD", config.FreezeStdThreshold)));
+            var loaded = new NativeDetectionConfig(
+                GetFiniteDouble(root, "V_MIN_THRESHOLD", config.VoltageMinThreshold),
+                GetFiniteDouble(root, "V_MAX_THRESHOLD", config.VoltageMaxThreshold),
+                GetFiniteDouble(root, "V_IMBALANCE_THRESHOLD", config.VoltageImbalanceThreshold),
+                GetFiniteDouble(root, "I_MAX_THRESHOLD", config.CurrentMaxThreshold),
+                GetFiniteDouble(root, "I_UNBALANCE_MAX_THRESHOLD", config.CurrentUnbalanceMaxThreshold),
+                GetFiniteDouble(root, "I_MIN_ACTIVE_THRESHOLD", config.CurrentActiveMinThreshold),
+                GetFiniteDouble(root, "P_ACTIVE_MIN_THRESHOLD", config.ActivePowerMinThreshold),
+                GetFiniteDouble(root, "PF_MIN_THRESHOLD", config.PowerFactorMinThreshold),
+                GetFiniteDouble(root, "T_MIN_THRESHOLD", config.TemperatureMinThreshold),
+                GetFiniteDouble(root, "T_MAX_THRESHOLD", config.TemperatureMaxThreshold),
+                currentOverloadEnabled,
+                currentUnbalanceEnabled,
+                GetBool(root, "power_factor", config.PowerFactorEnabled),
+                GetBool(root, "detail_output", config.DetailOutputEnabled),
+                GetPositiveInt(root, "FREEZE_COUNT_THRESHOLD", config.FreezeCountThreshold),
+                GetFiniteDouble(root, "FREEZE_STD_THRESHOLD", config.FreezeStdThreshold));
+            if (loaded.VoltageMinThreshold > loaded.VoltageMaxThreshold)
+            {
+                return NativeConfigLoadResult.Error(
+                    "ValueError",
+                    "配置文件数值无效: 电压下限不能高于电压上限。");
+            }
+
+            if (loaded.TemperatureMinThreshold > loaded.TemperatureMaxThreshold)
+            {
+                return NativeConfigLoadResult.Error(
+                    "ValueError",
+                    "配置文件数值无效: 温度下限不能高于温度上限。");
+            }
+
+            return NativeConfigLoadResult.Success(loaded);
         }
         catch (JsonException ex)
         {
@@ -1045,8 +1068,8 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
             var rowActivePowerValues = BuildRowNumericValues(cells, activePowerColumnGroups);
             var rowPowerFactorValues = BuildRowNumericValues(cells, powerFactorColumnGroups);
             var rowTemperatureValues = BuildRowNumericValues(cells, temperatureColumnGroups);
-            UpdateOfflineInvalidCounts(BuildRowMergedNumericValues(cells, voltageColumnGroups), offlineInvalidCounts);
-            UpdateOfflineInvalidCounts(BuildRowMergedNumericValues(cells, currentColumnGroups), offlineInvalidCounts);
+            UpdateOfflineInvalidCounts(cells, voltageColumnGroups, offlineInvalidCounts);
+            UpdateOfflineInvalidCounts(cells, currentColumnGroups, offlineInvalidCounts);
             // pandas' fillna(0) treats blank sensor cells as zero when
             // deciding whether a configured sensor is missing. Observe every
             // configured sensor for every data row, including blank cells.
@@ -2386,14 +2409,22 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         || type.Contains("缺失", StringComparison.Ordinal);
 
     private static void UpdateOfflineInvalidCounts(
-        IReadOnlyDictionary<string, double> rowValues,
+        IReadOnlyList<string> cells,
+        IReadOnlyList<NativeColumnGroup> columnGroups,
         Dictionary<string, int> counts)
     {
-        foreach (var (name, value) in rowValues)
+        foreach (var group in columnGroups)
         {
-            if (Math.Abs(value - -1.0) < 0.000_001 && counts.ContainsKey(name))
+            var values = group.Indexes
+                .Where(index => index < cells.Count)
+                .Select(index => TryParseDouble(cells[index], out var parsed) ? (double?)parsed : null)
+                .Where(static value => value.HasValue)
+                .Select(static value => value!.Value)
+                .ToList();
+            if ((values.Count == 0 || IsInvalidValue(values.Average()))
+                && counts.ContainsKey(group.Name))
             {
-                counts[name]++;
+                counts[group.Name]++;
             }
         }
     }
@@ -2688,9 +2719,26 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         return cells;
     }
 
-    private static bool TryParseDouble(string value, out double result) =>
-        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result)
-        || double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out result);
+    private static bool TryParseDouble(string value, out double result)
+    {
+        var parsed = double.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out result)
+            || double.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.CurrentCulture,
+                out result);
+        if (parsed && double.IsFinite(result))
+        {
+            return true;
+        }
+
+        result = 0;
+        return false;
+    }
 
     private static bool IsInvalidValue(double value) =>
         Math.Abs(value - -1.0) < 0.000_001

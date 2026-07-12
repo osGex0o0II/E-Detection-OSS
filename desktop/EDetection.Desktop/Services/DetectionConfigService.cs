@@ -159,9 +159,20 @@ public sealed class DetectionConfigService
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(resolvedPath));
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                ? null
-                : $"阈值配置文件格式错误: {resolvedPath}";
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return $"阈值配置文件格式错误: {resolvedPath}";
+            }
+
+            var root = document.RootElement;
+            var thresholds = new DetectionConfigSettings
+            {
+                VoltageMinThreshold = GetDouble(root, VoltageMinThresholdKey, 353.0),
+                VoltageMaxThreshold = GetDouble(root, VoltageMaxThresholdKey, 430.0),
+                TemperatureMinThreshold = GetDouble(root, TemperatureMinThresholdKey, 0.0),
+                TemperatureMaxThreshold = GetDouble(root, TemperatureMaxThresholdKey, 70.0),
+            };
+            return ValidateThresholdOrder(thresholds);
         }
         catch (JsonException ex)
         {
@@ -181,6 +192,12 @@ public sealed class DetectionConfigService
     {
         var resolvedPath = ResolveConfigPath(path);
         var normalized = Normalize(settings);
+        var thresholdIssue = ValidateThresholdOrder(normalized);
+        if (thresholdIssue is not null)
+        {
+            throw new ArgumentException(thresholdIssue, nameof(settings));
+        }
+
         var config = new Dictionary<string, object>
         {
             [VoltageMinThresholdKey] = normalized.VoltageMinThreshold,
@@ -267,6 +284,18 @@ public sealed class DetectionConfigService
         PowerFactorEnabled = settings.PowerFactorEnabled,
         DetailOutputEnabled = settings.DetailOutputEnabled,
     };
+
+    private static string? ValidateThresholdOrder(DetectionConfigSettings settings)
+    {
+        if (settings.VoltageMinThreshold > settings.VoltageMaxThreshold)
+        {
+            return "电压下限不能高于电压上限。";
+        }
+
+        return settings.TemperatureMinThreshold > settings.TemperatureMaxThreshold
+            ? "温度下限不能高于温度上限。"
+            : null;
+    }
 
     private static double GetDouble(JsonElement root, string key, double fallback)
     {

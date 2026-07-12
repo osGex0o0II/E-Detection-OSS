@@ -53,7 +53,13 @@ public sealed class DesktopDiagnosticsService
         if (!Directory.Exists(inputDirectory)) return $"输入目录不存在: {inputDirectory}";
         try
         {
-            return Directory.EnumerateFiles(inputDirectory, "*.csv", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MatchCasing = MatchCasing.CaseInsensitive }).Any()
+            return Directory.EnumerateFiles(inputDirectory, "*.csv", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                MatchCasing = MatchCasing.CaseInsensitive,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+            }).Any()
                 ? null : $"输入目录中未找到 CSV 文件: {inputDirectory}";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
