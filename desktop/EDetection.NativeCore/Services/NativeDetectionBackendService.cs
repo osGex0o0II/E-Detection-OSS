@@ -93,19 +93,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
 
         var config = configResult.Config;
         var parityTraceKey = GetParityTraceKey();
-        var files = Directory
-            .EnumerateFiles(
-                inputRoot,
-                "*.csv",
-                new EnumerationOptions
-                {
-                    RecurseSubdirectories = true,
-                    IgnoreInaccessible = true,
-                    MatchCasing = MatchCasing.CaseInsensitive,
-                    AttributesToSkip = FileAttributes.ReparsePoint,
-                })
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var files = EnumerateCsvFiles(inputRoot, cancellationToken);
         var generatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         var startedAt = DateTimeOffset.UtcNow;
         var normalFiles = 0;
@@ -141,7 +129,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
             var isHighVoltage = fileName.Contains("高压", StringComparison.OrdinalIgnoreCase);
             var analysis = isHighVoltage
                 ? NativeFileAnalysis.Skipped($"跳过高压设备: {fileName}")
-                : AnalyzeFile(path, fileName, relativePath, location, config, parityTraceKey);
+                : AnalyzeFile(path, fileName, relativePath, location, config, parityTraceKey, cancellationToken);
             if (parityTraceKey is not null && analysis.ParityTrace is null)
             {
                 analysis = analysis with
@@ -204,10 +192,15 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         if (anomalyRecords > 0 || sensorStatusRows.Count > 0 || skippedDetails > 0)
         {
             var sortedDetailPreview = detailPreview
-                .OrderBy(static detail => SeverityRank(detail.Severity))
+                .OrderBy(detail =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return SeverityRank(detail.Severity);
+                })
                 .ToList();
             reportDetails = sortedDetailPreview;
-            var deviceSummaries = BuildDeviceSummaries(sortedDetailPreview);
+            cancellationToken.ThrowIfCancellationRequested();
+            var deviceSummaries = BuildDeviceSummaries(sortedDetailPreview, cancellationToken);
             reportSummary = new DetectionBackendEvent
             {
                 EventName = "report_summary",
@@ -250,7 +243,8 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
                     reportSummary,
                     config,
                     reportDetails,
-                    sensorStatusRows.Concat(skippedStatusRows).ToList());
+                    sensorStatusRows.Concat(skippedStatusRows).ToList(),
+                    cancellationToken);
             }
             catch (Exception ex) when (ex is IOException
                                        or UnauthorizedAccessException
@@ -404,14 +398,42 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         }
     }
 
+    private static List<string> EnumerateCsvFiles(
+        string inputRoot,
+        CancellationToken cancellationToken)
+    {
+        var files = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(
+                     inputRoot,
+                     "*.csv",
+                     new EnumerationOptions
+                     {
+                         RecurseSubdirectories = true,
+                         IgnoreInaccessible = true,
+                         MatchCasing = MatchCasing.CaseInsensitive,
+                         AttributesToSkip = FileAttributes.ReparsePoint,
+                     }))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            files.Add(path);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        files.Sort(StringComparer.OrdinalIgnoreCase);
+        cancellationToken.ThrowIfCancellationRequested();
+        return files;
+    }
+
     private static string WriteNativeExcelReport(
         string outputRoot,
         string generatedAt,
         DetectionBackendEvent summary,
         NativeDetectionConfig config,
         IReadOnlyList<ReportDetailPreview> reportDetails,
-        IReadOnlyList<NativeSensorStatusRow> sensorRows)
+        IReadOnlyList<NativeSensorStatusRow> sensorRows,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(outputRoot);
         var reportPath = GetUniqueReportPath(outputRoot);
         using var archive = ZipFile.Open(reportPath, ZipArchiveMode.Create);
@@ -448,12 +470,14 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         AddZipEntry(archive, "xl/styles.xml", BuildStylesXml());
 
         var details = reportDetails;
-        AddZipEntry(archive, "xl/worksheets/sheet1.xml", BuildWorksheetXml(BuildOverviewRows(summary, generatedAt)));
-        AddZipEntry(archive, "xl/worksheets/sheet2.xml", BuildDetailWorksheetXml(details));
-        AddZipEntry(archive, "xl/worksheets/sheet3.xml", BuildWorksheetXml(BuildDeviceRows(details)));
-        AddZipEntry(archive, "xl/worksheets/sheet4.xml", BuildWorksheetXml(BuildIssueRows(details)));
-        AddZipEntry(archive, "xl/worksheets/sheet5.xml", BuildWorksheetXml(BuildSensorRows(sensorRows)));
-        AddZipEntry(archive, "xl/worksheets/sheet6.xml", BuildWorksheetXml(BuildConfigRows(config, summary, generatedAt)));
+        cancellationToken.ThrowIfCancellationRequested();
+        AddZipEntry(archive, "xl/worksheets/sheet1.xml", BuildWorksheetXml(BuildOverviewRows(summary, generatedAt), cancellationToken));
+        AddZipEntry(archive, "xl/worksheets/sheet2.xml", BuildDetailWorksheetXml(details, cancellationToken));
+        AddZipEntry(archive, "xl/worksheets/sheet3.xml", BuildWorksheetXml(BuildDeviceRows(details, cancellationToken), cancellationToken));
+        AddZipEntry(archive, "xl/worksheets/sheet4.xml", BuildWorksheetXml(BuildIssueRows(details, cancellationToken), cancellationToken));
+        AddZipEntry(archive, "xl/worksheets/sheet5.xml", BuildWorksheetXml(BuildSensorRows(sensorRows, cancellationToken), cancellationToken));
+        AddZipEntry(archive, "xl/worksheets/sheet6.xml", BuildWorksheetXml(BuildConfigRows(config, summary, generatedAt), cancellationToken));
+        cancellationToken.ThrowIfCancellationRequested();
         return reportPath;
     }
 
@@ -551,24 +575,29 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
 
     private static string BuildWorksheetXml(
         IEnumerable<IReadOnlyList<object?>> rows,
+        CancellationToken cancellationToken,
         Func<int, int, object?, int?>? styleSelector = null)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var materializedRows = rows.ToList();
+        cancellationToken.ThrowIfCancellationRequested();
         var maxColumns = materializedRows.Count == 0 ? 0 : materializedRows.Max(static row => row.Count);
         var maxRows = materializedRows.Count;
         var builder = new StringBuilder();
         builder.AppendLine("""<?xml version="1.0" encoding="UTF-8"?>""");
         builder.AppendLine("""<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">""");
         builder.AppendLine("""<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>""");
-        AppendColumns(builder, materializedRows, maxColumns);
+        AppendColumns(builder, materializedRows, maxColumns, cancellationToken);
         builder.AppendLine("<sheetData>");
 
         var rowIndex = 1;
         foreach (var row in materializedRows)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             builder.Append(CultureInfo.InvariantCulture, $"<row r=\"{rowIndex}\">");
             for (var columnIndex = 0; columnIndex < row.Count; columnIndex++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var value = row[columnIndex];
                 var styleIndex = rowIndex == 1
                     ? 1
@@ -590,11 +619,14 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         return builder.ToString();
     }
 
-    private static string BuildDetailWorksheetXml(IReadOnlyList<ReportDetailPreview> details)
+    private static string BuildDetailWorksheetXml(
+        IReadOnlyList<ReportDetailPreview> details,
+        CancellationToken cancellationToken)
     {
-        var rows = BuildDetailRows(details);
+        var rows = BuildDetailRows(details, cancellationToken);
         return BuildWorksheetXml(
             rows,
+            cancellationToken,
             (rowIndex, columnIndex, _) =>
             {
                 if (rowIndex < 2 || rowIndex - 2 >= details.Count)
@@ -618,7 +650,8 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
     private static void AppendColumns(
         StringBuilder builder,
         IReadOnlyList<IReadOnlyList<object?>> rows,
-        int maxColumns)
+        int maxColumns,
+        CancellationToken cancellationToken)
     {
         if (maxColumns == 0)
         {
@@ -628,9 +661,11 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         builder.AppendLine("<cols>");
         for (var columnIndex = 1; columnIndex <= maxColumns; columnIndex++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var width = 10;
             foreach (var row in rows)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (columnIndex - 1 < row.Count)
                 {
                     var value = row[columnIndex - 1]?.ToString() ?? "";
@@ -781,7 +816,9 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         return rows;
     }
 
-    private static IReadOnlyList<IReadOnlyList<object?>> BuildDetailRows(IReadOnlyList<ReportDetailPreview> details)
+    private static IReadOnlyList<IReadOnlyList<object?>> BuildDetailRows(
+        IReadOnlyList<ReportDetailPreview> details,
+        CancellationToken cancellationToken)
     {
         var rows = new List<IReadOnlyList<object?>>
         {
@@ -792,6 +829,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         };
         foreach (var detail in details)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             rows.Add(new object?[]
                 {
                     detail.Building,
@@ -814,14 +852,17 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         return rows;
     }
 
-    private static IReadOnlyList<IReadOnlyList<object?>> BuildDeviceRows(IReadOnlyList<ReportDetailPreview> details)
+    private static IReadOnlyList<IReadOnlyList<object?>> BuildDeviceRows(
+        IReadOnlyList<ReportDetailPreview> details,
+        CancellationToken cancellationToken)
     {
         var rows = new List<IReadOnlyList<object?>>
         {
             new object?[] { "建筑", "设备路径", "变压器", "异常记录数", "主要异常类型", "首次异常时间", "末次异常时间", "最高严重等级", "建议优先级" },
         };
-        foreach (var device in BuildDeviceSummaries(details))
+        foreach (var device in BuildDeviceSummaries(details, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             rows.Add(new object?[]
             {
                 device.Building,
@@ -839,7 +880,9 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         return rows;
     }
 
-    private static IReadOnlyList<IReadOnlyList<object?>> BuildIssueRows(IReadOnlyList<ReportDetailPreview> details)
+    private static IReadOnlyList<IReadOnlyList<object?>> BuildIssueRows(
+        IReadOnlyList<ReportDetailPreview> details,
+        CancellationToken cancellationToken)
     {
         var rows = new List<IReadOnlyList<object?>>
         {
@@ -847,6 +890,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         };
         foreach (var issue in BuildIssueTypeStatistics(details))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             rows.Add(new object?[] { "异常类型", issue.Name, issue.Count });
         }
 
@@ -854,6 +898,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
                      .GroupBy(static detail => string.IsNullOrWhiteSpace(detail.Building) ? "根目录" : detail.Building)
                      .OrderBy(static group => group.Key, StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             rows.Add(new object?[] { "建筑", group.Key, group.Count() });
         }
 
@@ -861,13 +906,16 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
                      .GroupBy(static detail => string.IsNullOrWhiteSpace(detail.Transformer) ? "未知" : detail.Transformer)
                      .OrderBy(static group => group.Key, StringComparer.Ordinal))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             rows.Add(new object?[] { "变压器", group.Key, group.Count() });
         }
 
         return rows;
     }
 
-    private static IReadOnlyList<IReadOnlyList<object?>> BuildSensorRows(IReadOnlyList<NativeSensorStatusRow> sensorRows)
+    private static IReadOnlyList<IReadOnlyList<object?>> BuildSensorRows(
+        IReadOnlyList<NativeSensorStatusRow> sensorRows,
+        CancellationToken cancellationToken)
     {
         var rows = new List<IReadOnlyList<object?>>
         {
@@ -875,6 +923,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         };
         foreach (var row in sensorRows)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             rows.Add(new object?[]
             {
                 row.SourceFile,
@@ -939,12 +988,13 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         string relativePath,
         NativeLocation location,
         NativeDetectionConfig config,
-        string? parityTraceKey)
+        string? parityTraceKey,
+        CancellationToken cancellationToken)
     {
         IReadOnlyList<string> lines;
         try
         {
-            lines = ReadCsvLines(path);
+            lines = ReadCsvLines(path, cancellationToken);
         }
         catch (Exception ex) when (ex is IOException
                                    or UnauthorizedAccessException
@@ -1050,6 +1100,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         var dataRows = 0;
         foreach (var line in lines.Skip(1))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(line))
             {
                 continue;
@@ -1102,9 +1153,10 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
             rowAnalyses.Add(new NativeRowAnalysis(rowTime, rowTypes, rowFreezeCoreValues, rowFreezeAuxValues, reportValues));
         }
 
-        var freezeRowTypes = DetectFreezeRowTypes(rowAnalyses, config);
+        var freezeRowTypes = DetectFreezeRowTypes(rowAnalyses, config, cancellationToken);
         for (var rowIndex = 0; rowIndex < rowAnalyses.Count; rowIndex++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var rowTypes = rowAnalyses[rowIndex]
                 .AnomalyTypes
                 .Concat(freezeRowTypes[rowIndex])
@@ -1141,6 +1193,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
 
             foreach (var type in detailTypes)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 detailPreview.Add(BuildDetailPreview(
                     fileName,
                     relativePath,
@@ -2262,7 +2315,8 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
 
     private static IReadOnlyList<IReadOnlyList<string>> DetectFreezeRowTypes(
         IReadOnlyList<NativeRowAnalysis> rows,
-        NativeDetectionConfig config)
+        NativeDetectionConfig config,
+        CancellationToken cancellationToken)
     {
         var result = rows
             .Select(static _ => new List<string>())
@@ -2274,15 +2328,21 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
 
         foreach (var column in new[] { "无功功率", "功率因数" })
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var values = rows.Select(row => GetOptionalValue(row.FreezeAuxValues, column)).ToList();
             if (values.All(static value => Math.Abs(value ?? 0) < 0.000_001))
             {
                 continue;
             }
 
-            var frozen = DetectFlatRun(values, config.FreezeCountThreshold, config.FreezeStdThreshold);
+            var frozen = DetectFlatRun(
+                values,
+                config.FreezeCountThreshold,
+                config.FreezeStdThreshold,
+                cancellationToken);
             for (var index = 0; index < frozen.Count; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (frozen[index])
                 {
                     result[index].Add("数据恒定");
@@ -2293,13 +2353,18 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         var coreMasks = new List<IReadOnlyList<bool>>();
         foreach (var column in new[] { "Uab", "Ubc", "Uca", "Ia", "Ib", "Ic", "有功功率" })
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var values = rows.Select(row => GetOptionalValue(row.FreezeCoreValues, column)).ToList();
             if (values.All(static value => Math.Abs(value ?? 0) < 0.000_001))
             {
                 continue;
             }
 
-            coreMasks.Add(DetectFlatRun(values, config.FreezeCountThreshold, config.FreezeStdThreshold));
+            coreMasks.Add(DetectFlatRun(
+                values,
+                config.FreezeCountThreshold,
+                config.FreezeStdThreshold,
+                cancellationToken));
         }
 
         if (coreMasks.Count == 0)
@@ -2309,6 +2374,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
 
         for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var frozenCount = coreMasks.Count(mask => mask[rowIndex]);
             if (frozenCount >= 2 && !IsStandbyRow(rows[rowIndex], config))
             {
@@ -2322,11 +2388,13 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
     private static IReadOnlyList<bool> DetectFlatRun(
         IReadOnlyList<double?> values,
         int countNeed,
-        double stdLimit)
+        double stdLimit,
+        CancellationToken cancellationToken)
     {
         var flat = new bool[values.Count];
         for (var index = 0; index < values.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (index == 0)
             {
                 flat[index] = true;
@@ -2355,6 +2423,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         var flatCount = 0;
         for (var index = 0; index < flat.Length; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (flat[index])
             {
                 flatCount++;
@@ -2471,24 +2540,47 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         }
     }
 
-    private static IReadOnlyList<string> ReadCsvLines(string path)
+    private static IReadOnlyList<string> ReadCsvLines(
+        string path,
+        CancellationToken cancellationToken)
     {
-        foreach (var encoding in GetCandidateEncodings(path))
+        foreach (var encoding in GetCandidateEncodings(path, cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                return File.ReadAllLines(path, encoding);
+                return ReadAllLines(path, encoding, cancellationToken);
             }
             catch (DecoderFallbackException)
             {
             }
         }
 
-        return File.ReadAllLines(path, Encoding.UTF8);
+        return ReadAllLines(path, Encoding.UTF8, cancellationToken);
     }
 
-    private static IEnumerable<Encoding> GetCandidateEncodings(string path)
+    private static IReadOnlyList<string> ReadAllLines(
+        string path,
+        Encoding encoding,
+        CancellationToken cancellationToken)
     {
+        var lines = new List<string>();
+        using var reader = new StreamReader(path, encoding, detectEncodingFromByteOrderMarks: true);
+        while (reader.ReadLine() is { } line)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lines.Add(line);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return lines;
+    }
+
+    private static IEnumerable<Encoding> GetCandidateEncodings(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         var encodings = new List<Encoding>();
         AddEncoding(encodings, DetectPreferredEncoding(path));
         foreach (var encoding in new[]
@@ -2499,6 +2591,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
                      new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
                  })
         {
+            cancellationToken.ThrowIfCancellationRequested();
             AddEncoding(encodings, encoding);
         }
 
@@ -2967,7 +3060,8 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
     private static partial Regex DatePattern();
 
     private static IReadOnlyList<ReportDeviceSummary> BuildDeviceSummaries(
-        IReadOnlyList<ReportDetailPreview> details)
+        IReadOnlyList<ReportDetailPreview> details,
+        CancellationToken cancellationToken)
     {
         return details
             .GroupBy(
@@ -2977,8 +3071,9 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
                     DevicePath = DevicePathFromRelativePath(detail.RelativePath),
                     Transformer = string.IsNullOrWhiteSpace(detail.Transformer) ? "未知" : detail.Transformer,
                 })
-            .Select(static group =>
+            .Select(group =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var severities = group.Select(static detail => detail.Severity ?? "").ToList();
                 var issueTypes = group
                     .SelectMany(static detail => SplitIssueTypes(detail.IssueType))

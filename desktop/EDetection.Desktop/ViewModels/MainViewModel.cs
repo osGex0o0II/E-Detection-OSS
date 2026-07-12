@@ -1731,7 +1731,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var backend = DetectionBackendServiceFactory.CreateDefault();
-            var exitCode = await backend.RunDetectionAsync(
+            var exitCode = await DetectionExecutionService.RunAsync(
+                backend,
                 request,
                 progress,
                 _runCts.Token);

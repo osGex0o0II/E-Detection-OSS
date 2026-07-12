@@ -8,6 +8,8 @@ internal static partial class RegressionSuite
         new Dictionary<string, Func<Task>>(StringComparer.OrdinalIgnoreCase)
         {
             ["blank-key-values"] = BlankKeyValuesAsync,
+            ["backend-runs-on-worker-thread"] = BackendRunsOnWorkerThreadAsync,
+            ["cancellation-interrupts-large-file"] = CancellationInterruptsLargeFileAsync,
             ["harness"] = HarnessAsync,
             ["inverted-temperature-thresholds"] = InvertedTemperatureThresholdsAsync,
             ["inverted-voltage-thresholds"] = InvertedVoltageThresholdsAsync,
@@ -70,6 +72,62 @@ internal static partial class RegressionSuite
             TestSupport.True(
                 result.AnomalyTypes?.Contains("设备离线", StringComparison.Ordinal) is true,
                 "Blank key measurements must produce an offline anomaly.");
+        }
+        finally
+        {
+            TestSupport.DeleteFixtureDirectory(root);
+        }
+    }
+
+    private static Task BackendRunsOnWorkerThreadAsync()
+    {
+        var callerThreadId = Environment.CurrentManagedThreadId;
+        var backend = new RecordingBackend();
+        var exitCode = DetectionExecutionService.RunAsync(
+                backend,
+                new DetectionRequest { InputDirectory = Path.GetTempPath(), WriteReport = false },
+                new CollectingProgress<DetectionBackendEvent>([]),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        TestSupport.Equal(0, exitCode, "The execution service must preserve the backend exit code.");
+        TestSupport.True(
+            backend.ThreadId != callerThreadId,
+            "The detection backend must not run on the caller/UI thread.");
+        return Task.CompletedTask;
+    }
+
+    private static async Task CancellationInterruptsLargeFileAsync()
+    {
+        var root = TestSupport.CreateFixtureDirectory("LargeFileCancellation");
+        try
+        {
+            var csvPath = Path.Combine(root, "large.csv");
+            await using (var writer = new StreamWriter(csvPath, append: false, Encoding.UTF8))
+            {
+                await writer.WriteLineAsync("time,Uab,Ubc,Uca,Ia,Ib,Ic");
+                for (var index = 0; index < 300_000; index++)
+                {
+                    await writer.WriteLineAsync($"{index},380,381,379,10,11,9");
+                }
+            }
+
+            using var cancellation = new CancellationTokenSource();
+            var run = new NativeDetectionBackendService().RunDetectionAsync(
+                new DetectionRequest { InputDirectory = root, WriteReport = false },
+                new CollectingProgress<DetectionBackendEvent>([]),
+                cancellation.Token);
+            cancellation.CancelAfter(TimeSpan.FromMilliseconds(100));
+
+            try
+            {
+                await run.WaitAsync(TimeSpan.FromSeconds(5));
+                throw new InvalidOperationException(
+                    "Cancellation during a large single-file analysis must throw OperationCanceledException.");
+            }
+            catch (OperationCanceledException)
+            {
+            }
         }
         finally
         {
@@ -181,5 +239,19 @@ internal static partial class RegressionSuite
             new CollectingProgress<DetectionBackendEvent>(events),
             cancellationToken);
         return (exitCode, events);
+    }
+
+    private sealed class RecordingBackend : IDetectionBackendService
+    {
+        public int ThreadId { get; private set; }
+
+        public Task<int> RunDetectionAsync(
+            DetectionRequest request,
+            IProgress<DetectionBackendEvent> progress,
+            CancellationToken cancellationToken)
+        {
+            ThreadId = Environment.CurrentManagedThreadId;
+            return Task.FromResult(0);
+        }
     }
 }
