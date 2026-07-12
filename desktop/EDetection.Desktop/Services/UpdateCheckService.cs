@@ -77,8 +77,7 @@ public sealed class UpdateCheckService
 
     private static bool IsNewer(string latestVersion, string currentVersion)
     {
-        if (!TryParseVersion(latestVersion, out var latest)
-            || !TryParseVersion(currentVersion, out var current))
+        if (!SemanticVersionComparer.TryCompare(latestVersion, currentVersion, out var comparison))
         {
             return !string.Equals(
                 NormalizeVersionText(latestVersion),
@@ -86,26 +85,7 @@ public sealed class UpdateCheckService
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        return latest.CompareTo(current) > 0;
-    }
-
-    private static bool TryParseVersion(string value, out Version version)
-    {
-        var normalized = NormalizeVersionText(value);
-        var metadataIndex = normalized.IndexOfAny(['-', '+']);
-        if (metadataIndex >= 0)
-        {
-            normalized = normalized[..metadataIndex];
-        }
-
-        if (Version.TryParse(normalized, out var parsed))
-        {
-            version = parsed;
-            return true;
-        }
-
-        version = new Version(0, 0, 0);
-        return false;
+        return comparison > 0;
     }
 
     private static string NormalizeVersionText(string value)

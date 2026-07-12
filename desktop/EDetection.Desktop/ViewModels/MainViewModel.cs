@@ -957,7 +957,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PoetryStatusVisibility))]
     [NotifyCanExecuteChangedFor(nameof(RefreshPoetryStatusCommand))]
-    public partial bool EnablePoetryStatus { get; set; } = true;
+    public partial bool EnablePoetryStatus { get; set; }
 
     [ObservableProperty]
     public partial string PoetryServiceUrl { get; set; } = "https://poetry.palemoky.com/";
@@ -1321,9 +1321,11 @@ public partial class MainViewModel : ObservableObject
         IsRefreshingPoetryStatus = true;
         try
         {
+            using var handler = _networkProxy.BuildHandler(this, useProxy: true);
             var snapshot = await _poetryStatus.GetRandomAsync(
                 PoetryServiceUrl,
-                SelectedPoetryLanguageIndex);
+                SelectedPoetryLanguageIndex,
+                handler);
             PoetryStatusText = snapshot.Text;
             PoetryStatusSourceText = string.IsNullOrWhiteSpace(snapshot.Source)
                 ? "诗泉"

@@ -14,15 +14,17 @@ public sealed class PoetryStatusService
     public async Task<PoetryStatusSnapshot> GetRandomAsync(
         string serviceUrl,
         int languageIndex,
+        HttpMessageHandler? handler = null,
         CancellationToken cancellationToken = default)
     {
-        var endpoint = BuildEndpoint(serviceUrl, languageIndex);
         try
         {
-            using var client = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(8),
-            };
+            var endpoint = BuildEndpoint(serviceUrl, languageIndex);
+            EndpointSecurity.RequireHttpsOrLocal(endpoint, "诗词服务地址");
+            using var client = handler is null
+                ? new HttpClient()
+                : new HttpClient(handler, disposeHandler: false);
+            client.Timeout = TimeSpan.FromSeconds(8);
             var response = await client.GetFromJsonAsync<PoetryResponse>(endpoint, cancellationToken);
             var poem = response?.Data;
             var line = poem?.Content?.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
@@ -45,6 +47,7 @@ public sealed class PoetryStatusService
         catch (Exception ex) when (ex is HttpRequestException
                                    or TaskCanceledException
                                    or OperationCanceledException
+                                   or InvalidOperationException
                                    or NotSupportedException
                                    or System.Text.Json.JsonException
                                    or UriFormatException)

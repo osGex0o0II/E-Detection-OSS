@@ -19,6 +19,7 @@ internal static partial class RegressionSuite
             ["non-finite-key-values"] = NonFiniteKeyValuesAsync,
             ["report-publication-failure-is-clean"] = ReportPublicationFailureIsCleanAsync,
             ["reparse-child-is-not-followed"] = ReparseChildIsNotFollowedAsync,
+            ["semantic-version-precedence"] = SemanticVersionPrecedenceAsync,
         };
 
     public static async Task RunAsync(string name)
@@ -239,6 +240,18 @@ internal static partial class RegressionSuite
         {
             TestSupport.DeleteFixtureDirectory(root);
         }
+    }
+
+    private static Task SemanticVersionPrecedenceAsync()
+    {
+        TestSupport.True(SemanticVersionComparer.Compare("2.0.1", "2.0.1-fix") > 0, "A stable version must outrank its prerelease.");
+        TestSupport.True(SemanticVersionComparer.Compare("2.0.1-fix", "2.0.1") < 0, "A prerelease must rank below its stable version.");
+        TestSupport.Equal(0, SemanticVersionComparer.Compare("2.0.1+build.7", "2.0.1+build.9"), "Build metadata must not affect precedence.");
+        TestSupport.True(SemanticVersionComparer.Compare("2.0.1-rc.10", "2.0.1-rc.2") > 0, "Numeric prerelease identifiers must compare numerically.");
+        TestSupport.True(SemanticVersionComparer.Compare("2.0.1-1", "2.0.1-beta") < 0, "Numeric prerelease identifiers must rank below text identifiers.");
+        TestSupport.True(SemanticVersionComparer.Compare("2.0.1-alpha", "2.0.1-alpha.1") < 0, "A shorter equal prerelease must rank lower.");
+        TestSupport.True(SemanticVersionComparer.Compare("v2.0.2", "2.0.1") > 0, "A leading release-tag v must be accepted.");
+        return Task.CompletedTask;
     }
 
     private static async Task NonFiniteKeyValuesAsync()

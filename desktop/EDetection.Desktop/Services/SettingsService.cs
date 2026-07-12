@@ -81,7 +81,6 @@ public sealed class SettingsService
 
         if (settings.SettingsVersion < 8)
         {
-            settings.EnablePoetryStatus = true;
             settings.PoetryServiceUrl = "https://poetry.palemoky.com/";
             settings.SelectedPoetryLanguageIndex = 0;
         }
