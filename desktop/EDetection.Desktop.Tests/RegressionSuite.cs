@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Text;
+using System.Xml.Linq;
 using EDetection.NativeCore.Models;
 using EDetection.NativeCore.Services;
 
@@ -10,10 +12,12 @@ internal static partial class RegressionSuite
             ["blank-key-values"] = BlankKeyValuesAsync,
             ["backend-runs-on-worker-thread"] = BackendRunsOnWorkerThreadAsync,
             ["cancellation-interrupts-large-file"] = CancellationInterruptsLargeFileAsync,
+            ["chronological-device-times"] = ChronologicalDeviceTimesAsync,
             ["harness"] = HarnessAsync,
             ["inverted-temperature-thresholds"] = InvertedTemperatureThresholdsAsync,
             ["inverted-voltage-thresholds"] = InvertedVoltageThresholdsAsync,
             ["non-finite-key-values"] = NonFiniteKeyValuesAsync,
+            ["report-publication-failure-is-clean"] = ReportPublicationFailureIsCleanAsync,
             ["reparse-child-is-not-followed"] = ReparseChildIsNotFollowedAsync,
         };
 
@@ -135,6 +139,108 @@ internal static partial class RegressionSuite
         }
     }
 
+    private static async Task ChronologicalDeviceTimesAsync()
+    {
+        var root = TestSupport.CreateFixtureDirectory("ChronologicalDeviceTimes");
+        var output = Path.Combine(root, "reports");
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(root, "20260712_1TM.csv"),
+                "time,Uab,Ubc,Uca\n01:00,340,380,380\n23:00,200,380,380\n",
+                Encoding.UTF8);
+            var (exitCode, events) = await RunBackendAsync(
+                root,
+                outputDirectory: output,
+                writeReport: true);
+            TestSupport.Equal(0, exitCode, "The chronology fixture must produce a report.");
+            var reportPath = events.Single(e => e.EventName == "report_written").ReportPath
+                ?? throw new InvalidOperationException("The report-written event must include a path.");
+
+            using var archive = ZipFile.OpenRead(reportPath);
+            var entry = archive.GetEntry("xl/worksheets/sheet3.xml")
+                ?? throw new InvalidOperationException("The report must contain the device summary worksheet.");
+            using var stream = entry.Open();
+            var worksheet = XDocument.Load(stream);
+            TestSupport.Equal(
+                "2026-07-12 01:00",
+                ReadWorksheetCell(worksheet, "F2"),
+                "The first anomaly time must be the earliest timestamp, independent of severity order.");
+            TestSupport.Equal(
+                "2026-07-12 23:00",
+                ReadWorksheetCell(worksheet, "G2"),
+                "The last anomaly time must be the latest timestamp, independent of severity order.");
+        }
+        finally
+        {
+            TestSupport.DeleteFixtureDirectory(root);
+        }
+    }
+
+    private static async Task ReportPublicationFailureIsCleanAsync()
+    {
+        var root = TestSupport.CreateFixtureDirectory("ReportPublicationFailure");
+        var output = Path.Combine(root, "reports");
+        Directory.CreateDirectory(output);
+        try
+        {
+            var csvPath = Path.Combine(root, "20260712_1TM.csv");
+            await using (var writer = new StreamWriter(csvPath, append: false, Encoding.UTF8))
+            {
+                await writer.WriteLineAsync("time,Uab,Ubc,Uca");
+                for (var index = 0; index < 10_000; index++)
+                {
+                    await writer.WriteLineAsync($"{index},340,380,380");
+                }
+            }
+
+            using var finalPathBlocked = new ManualResetEventSlim();
+            using var watcher = new FileSystemWatcher(output, "*.tmp")
+            {
+                NotifyFilter = NotifyFilters.FileName,
+                EnableRaisingEvents = true,
+            };
+            watcher.Created += (_, args) =>
+            {
+                var temporaryName = Path.GetFileName(args.FullPath);
+                if (!temporaryName.StartsWith(".", StringComparison.Ordinal)
+                    || !temporaryName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                var withoutWrapper = temporaryName[1..^4];
+                var uniqueSuffix = withoutWrapper.LastIndexOf('.');
+                if (uniqueSuffix <= 0)
+                {
+                    return;
+                }
+
+                Directory.CreateDirectory(Path.Combine(output, withoutWrapper[..uniqueSuffix]));
+                finalPathBlocked.Set();
+            };
+
+            var (exitCode, _) = await RunBackendAsync(
+                root,
+                outputDirectory: output,
+                writeReport: true);
+            TestSupport.Equal(1, exitCode, "A blocked final report path must fail publication.");
+            TestSupport.True(finalPathBlocked.IsSet, "The fixture must inject a final publication failure.");
+            TestSupport.Equal(
+                0,
+                Directory.EnumerateFiles(output, "*.xlsx", SearchOption.TopDirectoryOnly).Count(),
+                "A publication failure must not leave a final-name workbook.");
+            TestSupport.Equal(
+                0,
+                Directory.EnumerateFiles(output, "*.tmp", SearchOption.TopDirectoryOnly).Count(),
+                "A publication failure must remove temporary workbooks.");
+        }
+        finally
+        {
+            TestSupport.DeleteFixtureDirectory(root);
+        }
+    }
+
     private static async Task NonFiniteKeyValuesAsync()
     {
         var root = TestSupport.CreateFixtureDirectory("NonFiniteKeyValues");
@@ -226,6 +332,8 @@ internal static partial class RegressionSuite
     private static async Task<(int ExitCode, List<DetectionBackendEvent> Events)> RunBackendAsync(
         string inputDirectory,
         string? configPath = null,
+        string? outputDirectory = null,
+        bool writeReport = false,
         CancellationToken cancellationToken = default)
     {
         var events = new List<DetectionBackendEvent>();
@@ -234,11 +342,26 @@ internal static partial class RegressionSuite
             {
                 InputDirectory = inputDirectory,
                 ConfigPath = configPath,
-                WriteReport = false,
+                OutputDirectory = outputDirectory,
+                WriteReport = writeReport,
             },
             new CollectingProgress<DetectionBackendEvent>(events),
             cancellationToken);
         return (exitCode, events);
+    }
+
+    private static string ReadWorksheetCell(XDocument worksheet, string reference)
+    {
+        XNamespace spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        var cell = worksheet
+            .Descendants(spreadsheet + "c")
+            .Single(element => string.Equals(
+                (string?)element.Attribute("r"),
+                reference,
+                StringComparison.Ordinal));
+        return cell.Descendants(spreadsheet + "t").SingleOrDefault()?.Value
+            ?? cell.Descendants(spreadsheet + "v").SingleOrDefault()?.Value
+            ?? "";
     }
 
     private sealed class RecordingBackend : IDetectionBackendService

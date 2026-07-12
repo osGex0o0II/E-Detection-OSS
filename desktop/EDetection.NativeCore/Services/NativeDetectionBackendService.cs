@@ -248,6 +248,7 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
             }
             catch (Exception ex) when (ex is IOException
                                        or UnauthorizedAccessException
+                                       or InvalidDataException
                                        or NotSupportedException
                                        or ArgumentException)
             {
@@ -436,12 +437,17 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(outputRoot);
         var reportPath = GetUniqueReportPath(outputRoot);
-        using var archive = ZipFile.Open(reportPath, ZipArchiveMode.Create);
-
-        AddZipEntry(
-            archive,
-            "[Content_Types].xml",
-            """
+        var temporaryPath = Path.Combine(
+            outputRoot,
+            $".{Path.GetFileName(reportPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using (var archive = ZipFile.Open(temporaryPath, ZipArchiveMode.Create))
+            {
+                AddZipEntry(
+                    archive,
+                    "[Content_Types].xml",
+                    """
             <?xml version="1.0" encoding="UTF-8"?>
             <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
               <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -456,29 +462,79 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
               <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
             </Types>
             """);
-        AddZipEntry(
-            archive,
-            "_rels/.rels",
-            """
+                AddZipEntry(
+                    archive,
+                    "_rels/.rels",
+                    """
             <?xml version="1.0" encoding="UTF-8"?>
             <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
               <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
             </Relationships>
             """);
-        AddZipEntry(archive, "xl/workbook.xml", BuildWorkbookXml());
-        AddZipEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelationshipsXml());
-        AddZipEntry(archive, "xl/styles.xml", BuildStylesXml());
+                AddZipEntry(archive, "xl/workbook.xml", BuildWorkbookXml());
+                AddZipEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelationshipsXml());
+                AddZipEntry(archive, "xl/styles.xml", BuildStylesXml());
 
-        var details = reportDetails;
-        cancellationToken.ThrowIfCancellationRequested();
-        AddZipEntry(archive, "xl/worksheets/sheet1.xml", BuildWorksheetXml(BuildOverviewRows(summary, generatedAt), cancellationToken));
-        AddZipEntry(archive, "xl/worksheets/sheet2.xml", BuildDetailWorksheetXml(details, cancellationToken));
-        AddZipEntry(archive, "xl/worksheets/sheet3.xml", BuildWorksheetXml(BuildDeviceRows(details, cancellationToken), cancellationToken));
-        AddZipEntry(archive, "xl/worksheets/sheet4.xml", BuildWorksheetXml(BuildIssueRows(details, cancellationToken), cancellationToken));
-        AddZipEntry(archive, "xl/worksheets/sheet5.xml", BuildWorksheetXml(BuildSensorRows(sensorRows, cancellationToken), cancellationToken));
-        AddZipEntry(archive, "xl/worksheets/sheet6.xml", BuildWorksheetXml(BuildConfigRows(config, summary, generatedAt), cancellationToken));
-        cancellationToken.ThrowIfCancellationRequested();
-        return reportPath;
+                var details = reportDetails;
+                cancellationToken.ThrowIfCancellationRequested();
+                AddZipEntry(archive, "xl/worksheets/sheet1.xml", BuildWorksheetXml(BuildOverviewRows(summary, generatedAt), cancellationToken));
+                AddZipEntry(archive, "xl/worksheets/sheet2.xml", BuildDetailWorksheetXml(details, cancellationToken));
+                AddZipEntry(archive, "xl/worksheets/sheet3.xml", BuildWorksheetXml(BuildDeviceRows(details, cancellationToken), cancellationToken));
+                AddZipEntry(archive, "xl/worksheets/sheet4.xml", BuildWorksheetXml(BuildIssueRows(details, cancellationToken), cancellationToken));
+                AddZipEntry(archive, "xl/worksheets/sheet5.xml", BuildWorksheetXml(BuildSensorRows(sensorRows, cancellationToken), cancellationToken));
+                AddZipEntry(archive, "xl/worksheets/sheet6.xml", BuildWorksheetXml(BuildConfigRows(config, summary, generatedAt), cancellationToken));
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            ValidateWorkbookArchive(temporaryPath);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, reportPath);
+            return reportPath;
+        }
+        catch
+        {
+            TryDeleteFile(temporaryPath);
+            throw;
+        }
+    }
+
+    private static void ValidateWorkbookArchive(string path)
+    {
+        string[] requiredEntries =
+        [
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "xl/workbook.xml",
+            "xl/_rels/workbook.xml.rels",
+            "xl/styles.xml",
+            "xl/worksheets/sheet1.xml",
+            "xl/worksheets/sheet2.xml",
+            "xl/worksheets/sheet3.xml",
+            "xl/worksheets/sheet4.xml",
+            "xl/worksheets/sheet5.xml",
+            "xl/worksheets/sheet6.xml",
+        ];
+        using var archive = ZipFile.OpenRead(path);
+        foreach (var entryName in requiredEntries)
+        {
+            if (archive.GetEntry(entryName) is null)
+            {
+                throw new InvalidDataException($"报告工作簿缺少条目: {entryName}");
+            }
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or NotSupportedException)
+        {
+        }
     }
 
     private static string GetUniqueReportPath(string outputRoot)
@@ -3137,20 +3193,63 @@ public sealed partial class NativeDetectionBackendService : IDetectionBackendSer
         string building,
         string devicePath,
         string transformer) =>
-        details
-            .Where(detail => DetailMatchesDevice(detail, building, devicePath, transformer))
-            .Select(static detail => detail.TimeText)
-            .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? "";
+        ChronologicalDetailTime(details, building, devicePath, transformer, earliest: true);
 
     private static string LastDetailTime(
         IReadOnlyList<ReportDetailPreview> details,
         string building,
         string devicePath,
         string transformer) =>
-        details
+        ChronologicalDetailTime(details, building, devicePath, transformer, earliest: false);
+
+    private static string ChronologicalDetailTime(
+        IReadOnlyList<ReportDetailPreview> details,
+        string building,
+        string devicePath,
+        string transformer,
+        bool earliest)
+    {
+        var matching = details
             .Where(detail => DetailMatchesDevice(detail, building, devicePath, transformer))
+            .ToList();
+        var parsed = matching
+            .Select((detail, index) => TryParseDetailTimestamp(detail, out var timestamp)
+                ? (Detail: detail, Timestamp: (DateTime?)timestamp, Index: index)
+                : (Detail: detail, Timestamp: (DateTime?)null, Index: index))
+            .Where(static item => item.Timestamp.HasValue)
+            .ToList();
+        if (parsed.Count > 0)
+        {
+            var selected = earliest
+                ? parsed.MinBy(static item => (item.Timestamp!.Value, item.Index))
+                : parsed.MaxBy(static item => (item.Timestamp!.Value, -item.Index));
+            return selected.Detail.TimeText;
+        }
+
+        var fallback = matching
             .Select(static detail => detail.TimeText)
-            .LastOrDefault(static value => !string.IsNullOrWhiteSpace(value)) ?? "";
+            .Where(static value => !string.IsNullOrWhiteSpace(value));
+        return (earliest ? fallback.FirstOrDefault() : fallback.LastOrDefault()) ?? "";
+    }
+
+    private static bool TryParseDetailTimestamp(
+        ReportDetailPreview detail,
+        out DateTime timestamp)
+    {
+        var text = string.Join(
+            " ",
+            new[] { detail.Date, detail.Time }.Where(static value => !string.IsNullOrWhiteSpace(value)));
+        return DateTime.TryParse(
+                   text,
+                   CultureInfo.InvariantCulture,
+                   DateTimeStyles.AllowWhiteSpaces,
+                   out timestamp)
+               || DateTime.TryParse(
+                   text,
+                   CultureInfo.CurrentCulture,
+                   DateTimeStyles.AllowWhiteSpaces,
+                   out timestamp);
+    }
 
     private static bool DetailMatchesDevice(
         ReportDetailPreview detail,
