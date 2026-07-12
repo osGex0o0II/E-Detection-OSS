@@ -33,6 +33,7 @@ $requiredFiles = @(
     "Views\RunSetupView.xbf",
     "Views\SettingsView.xbf",
     "config.json",
+    "DesktopPathSafety.ps1",
     "Install-Desktop.ps1",
     "Uninstall-Desktop.ps1",
     "Test-DesktopPackageHealth.ps1",
@@ -48,6 +49,7 @@ $requiredFiles = @(
     "Test-DesktopInstallSmoke.ps1",
     "Test-DesktopDiagnosticsRedactionSmoke.ps1",
     "Test-DesktopSignatureStatus.ps1",
+    "Test-DesktopScriptSafetySmoke.ps1",
     "release-info.txt",
     "install-files.txt",
     "INSTALL.txt"

@@ -19,6 +19,7 @@ function Get-RelativePathCompat([string]$Root, [string]$Path) {
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDir "DesktopPathSafety.ps1")
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 $projectPath = Join-Path $repoRoot "desktop\EDetection.Desktop\EDetection.Desktop.csproj"
 $solutionPath = Join-Path $repoRoot "desktop\EDetection.Desktop.slnx"
@@ -50,7 +51,7 @@ if ([string]::IsNullOrWhiteSpace($DotNetPath)) {
 
 $artifactRootFull = [System.IO.Path]::GetFullPath($artifactRoot)
 $publishDirFull = [System.IO.Path]::GetFullPath($publishDir)
-if (!$publishDirFull.StartsWith($artifactRootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+if (!(Test-PathInsideDirectory $publishDirFull $artifactRootFull)) {
     throw "Refusing to clean publish directory outside artifact root: $publishDirFull"
 }
 
@@ -92,6 +93,7 @@ if (!(Test-Path $runningIconPath)) {
 }
 
 $commonDeliveryScripts = @(
+    "DesktopPathSafety.ps1",
     "Install-Desktop.ps1",
     "Uninstall-Desktop.ps1",
     "Test-DesktopPackageHealth.ps1",
@@ -107,6 +109,7 @@ $commonDeliveryScripts = @(
     "Test-DesktopInstallSmoke.ps1",
     "Test-DesktopDiagnosticsRedactionSmoke.ps1",
     "Test-DesktopSignatureStatus.ps1"
+    "Test-DesktopScriptSafetySmoke.ps1"
 )
 
 $deliveryScripts = $commonDeliveryScripts

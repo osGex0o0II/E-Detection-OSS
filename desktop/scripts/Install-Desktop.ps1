@@ -14,6 +14,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDir "DesktopPathSafety.ps1")
 
 function Get-RelativePathCompat([string]$Root, [string]$Path) {
     $rootUri = New-Object System.Uri(([System.IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'))
@@ -28,15 +30,6 @@ $installManifestName = "install-manifest.json"
 
 function Resolve-FullPath([string]$Path) {
     return [System.IO.Path]::GetFullPath($Path)
-}
-
-function Test-PathInsideDirectory([string]$CandidatePath, [string]$RootPath) {
-    $candidateFull = Resolve-FullPath $CandidatePath
-    $rootFull = Resolve-FullPath $RootPath
-    $rootTrimmed = $rootFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    $rootWithSeparator = $rootTrimmed + [System.IO.Path]::DirectorySeparatorChar
-    return [string]::Equals($candidateFull, $rootTrimmed, [System.StringComparison]::OrdinalIgnoreCase) `
-        -or $candidateFull.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function New-AppShortcut(

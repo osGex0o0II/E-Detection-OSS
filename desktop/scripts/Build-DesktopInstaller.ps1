@@ -14,6 +14,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDir "DesktopPathSafety.ps1")
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 $projectPath = Join-Path $repoRoot "desktop\EDetection.Desktop\EDetection.Desktop.csproj"
 $installerScript = Join-Path $repoRoot "desktop\installer\E-Detection.Desktop.iss"
@@ -61,7 +62,7 @@ $sourceFull = [System.IO.Path]::GetFullPath((Resolve-Path $SourcePath).Path)
 $outputFull = [System.IO.Path]::GetFullPath($OutputDirectory)
 $artifactRootFull = [System.IO.Path]::GetFullPath($artifactRoot)
 
-if (!$outputFull.StartsWith($artifactRootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+if (!(Test-PathInsideDirectory $outputFull $artifactRootFull)) {
     throw "Refusing to clean installer output outside artifact root: $outputFull"
 }
 
@@ -111,7 +112,18 @@ $compilerArguments = @(
 
 if (![string]::IsNullOrWhiteSpace($UnsafeInstallRootOverride)) {
     $unsafeInstallRootFull = [System.IO.Path]::GetFullPath($UnsafeInstallRootOverride)
-    if ($unsafeInstallRootFull.IndexOf("E-Detection-Desktop-InstallerSmoke", [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+    $unsafeInstallRootSegments = $unsafeInstallRootFull.Split(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringSplitOptions]::RemoveEmptyEntries)
+    $hasInstallerSmokeSegment = $null -ne ($unsafeInstallRootSegments |
+        Where-Object {
+            [string]::Equals(
+                $_,
+                "E-Detection-Desktop-InstallerSmoke",
+                [System.StringComparison]::OrdinalIgnoreCase)
+        } |
+        Select-Object -First 1)
+    if (-not $hasInstallerSmokeSegment) {
         throw "Refusing to compile installer with unsafe root override outside installer smoke: $unsafeInstallRootFull"
     }
 

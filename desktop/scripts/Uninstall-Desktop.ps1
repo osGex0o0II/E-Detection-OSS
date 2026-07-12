@@ -10,6 +10,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $scriptDir "DesktopPathSafety.ps1")
 
 $productName = "EDetection"
 $entryPoint = "EDetection.exe"
@@ -18,15 +20,6 @@ $installManifestName = "install-manifest.json"
 
 function Resolve-FullPath([string]$Path) {
     return [System.IO.Path]::GetFullPath($Path)
-}
-
-function Test-PathInsideDirectory([string]$CandidatePath, [string]$RootPath) {
-    $candidateFull = Resolve-FullPath $CandidatePath
-    $rootFull = Resolve-FullPath $RootPath
-    $rootTrimmed = $rootFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    $rootWithSeparator = $rootTrimmed + [System.IO.Path]::DirectorySeparatorChar
-    return [string]::Equals($candidateFull, $rootTrimmed, [System.StringComparison]::OrdinalIgnoreCase) `
-        -or $candidateFull.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Assert-SafeInstallDirectory([string]$Path) {
@@ -137,8 +130,19 @@ function Get-StartupTaskXml {
 
 function Test-StartupTaskTargetsInstall {
     $xml = Get-StartupTaskXml
-    return ![string]::IsNullOrWhiteSpace($xml) `
-        -and $xml.IndexOf($installFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    if ([string]::IsNullOrWhiteSpace($xml)) {
+        return $false
+    }
+
+    try {
+        [xml]$task = $xml
+        $commandNode = $task.SelectSingleNode("//*[local-name()='Exec']/*[local-name()='Command']")
+        return $null -ne $commandNode `
+            -and (Test-RegisteredCommandTargetsInstall $commandNode.InnerText $installFull $entryPoint)
+    }
+    catch {
+        return $false
+    }
 }
 
 function Test-AppPathsTargetsInstall {
@@ -247,7 +251,7 @@ else {
     $null
 }
 $startupEntryTargetsInstall = $startupValue -is [string] `
-    -and $startupValue.IndexOf($installFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    -and (Test-RegisteredCommandTargetsInstall $startupValue $installFull $entryPoint)
 if ($startupEntryTargetsInstall) {
     if ($PSCmdlet.ShouldProcess($runKey, "Remove startup entry")) {
         Remove-ItemProperty -Path $runKey -Name $startupEntryName -Force
@@ -305,7 +309,7 @@ if (!$WhatIfPreference) {
         $null
     }
     $startupEntryTargetsInstall = $startupValue -is [string] `
-        -and $startupValue.IndexOf($installFull, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        -and (Test-RegisteredCommandTargetsInstall $startupValue $installFull $entryPoint)
     if ($startupEntryTargetsInstall) {
         $remaining += "$runKey\$startupEntryName"
     }

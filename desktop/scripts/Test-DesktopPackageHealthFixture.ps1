@@ -60,6 +60,7 @@ function New-NativePackageFixture([string]$Root) {
         "Views\RunSetupView.xbf",
         "Views\SettingsView.xbf",
         "config.json",
+        "DesktopPathSafety.ps1",
         "Install-Desktop.ps1",
         "Uninstall-Desktop.ps1",
         "Test-DesktopPackageHealth.ps1",
@@ -75,6 +76,7 @@ function New-NativePackageFixture([string]$Root) {
         "Test-DesktopInstallSmoke.ps1",
         "Test-DesktopDiagnosticsRedactionSmoke.ps1",
         "Test-DesktopSignatureStatus.ps1",
+        "Test-DesktopScriptSafetySmoke.ps1",
         "INSTALL.txt"
     )
 

@@ -5,7 +5,11 @@ param(
     [string]$BuildInstallerScriptPath = "",
     [string]$InstallerSmokeScriptPath = "",
     [string]$NativeBackendSmokeScriptPath = "",
-    [string]$PackageHealthFixtureScriptPath = ""
+    [string]$PackageHealthFixtureScriptPath = "",
+    [string]$PathSafetyScriptPath = "",
+    [string]$ScriptSafetySmokeScriptPath = "",
+    [string]$InstallScriptPath = "",
+    [string]$UninstallScriptPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +22,10 @@ if ([string]::IsNullOrWhiteSpace($BuildInstallerScriptPath)) { $BuildInstallerSc
 if ([string]::IsNullOrWhiteSpace($InstallerSmokeScriptPath)) { $InstallerSmokeScriptPath = Join-Path $scriptDir "Test-DesktopInstallerSmoke.ps1" }
 if ([string]::IsNullOrWhiteSpace($NativeBackendSmokeScriptPath)) { $NativeBackendSmokeScriptPath = Join-Path $scriptDir "Test-DesktopNativeBackendSmoke.ps1" }
 if ([string]::IsNullOrWhiteSpace($PackageHealthFixtureScriptPath)) { $PackageHealthFixtureScriptPath = Join-Path $scriptDir "Test-DesktopPackageHealthFixture.ps1" }
+if ([string]::IsNullOrWhiteSpace($PathSafetyScriptPath)) { $PathSafetyScriptPath = Join-Path $scriptDir "DesktopPathSafety.ps1" }
+if ([string]::IsNullOrWhiteSpace($ScriptSafetySmokeScriptPath)) { $ScriptSafetySmokeScriptPath = Join-Path $scriptDir "Test-DesktopScriptSafetySmoke.ps1" }
+if ([string]::IsNullOrWhiteSpace($InstallScriptPath)) { $InstallScriptPath = Join-Path $scriptDir "Install-Desktop.ps1" }
+if ([string]::IsNullOrWhiteSpace($UninstallScriptPath)) { $UninstallScriptPath = Join-Path $scriptDir "Uninstall-Desktop.ps1" }
 
 function Get-Text([string]$Path) {
     return Get-Content -LiteralPath ([System.IO.Path]::GetFullPath((Resolve-Path $Path).Path)) -Raw
@@ -41,6 +49,10 @@ $buildInstaller = Get-Text $BuildInstallerScriptPath
 $installerSmoke = Get-Text $InstallerSmokeScriptPath
 $nativeBackendSmoke = Get-Text $NativeBackendSmokeScriptPath
 $packageHealthFixture = Get-Text $PackageHealthFixtureScriptPath
+$pathSafety = Get-Text $PathSafetyScriptPath
+$scriptSafetySmoke = Get-Text $ScriptSafetySmokeScriptPath
+$install = Get-Text $InstallScriptPath
+$uninstall = Get-Text $UninstallScriptPath
 
 Assert-Contains $workflow "run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64" "workflow must publish the native package."
 Assert-Contains $workflow "run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish" "workflow must validate the published package."
@@ -59,6 +71,8 @@ Assert-Contains $publish '"DetectionBackend=native"' "release-info must identify
 Assert-Contains $publish '"PackageContents=Native C# + .NET runtime only"' "release-info must describe native-only contents."
 Assert-Contains $publish '$zipPath = Join-Path $artifactRoot "EDetection-$RuntimeIdentifier.zip"' "publish must use the stable native archive name."
 Assert-Contains $publish '$installerName = "EDetection-Setup-$RuntimeIdentifier.exe"' "publish must use the stable native installer name."
+Assert-Contains $publish '"DesktopPathSafety.ps1"' "publish must include the shared path-safety helper."
+Assert-Contains $publish '"Test-DesktopScriptSafetySmoke.ps1"' "publish must include the script-safety smoke."
 foreach ($removedPublishToken in @("PackageProfile", "python-runtime", "python-wheelhouse", "BundledPython", "PythonPath", "SkipPythonWheelhouse")) {
     Assert-NotContains $publish $removedPublishToken "publish must not retain '$removedPublishToken'."
 }
@@ -71,6 +85,19 @@ Assert-Contains $installerSmoke '"python-runtime\python.exe"' "installer smoke m
 Assert-Contains $nativeBackendSmoke 'desktop\EDetection.Desktop.Tests\EDetection.Desktop.Tests.csproj' "native backend smoke must run the native test project."
 Assert-NotContains $nativeBackendSmoke 'Get-Command python' "native backend smoke must not require Python."
 Assert-Contains $packageHealthFixture 'DetectionBackend=native' "package-health fixture must cover native release metadata."
+Assert-Contains $pathSafety 'function Test-PathInsideDirectory' "shared path safety must enforce canonical containment."
+Assert-Contains $pathSafety 'function Get-RegisteredExecutablePath' "shared path safety must parse registered commands."
+Assert-Contains $pathSafety 'function Test-RegisteredCommandTargetsInstall' "shared path safety must compare startup executables exactly."
+Assert-Contains $scriptSafetySmoke 'win-x64-backup' "script safety smoke must cover sibling-prefix output paths."
+Assert-Contains $scriptSafetySmoke 'App With Space' "script safety smoke must cover quoted and unquoted commands."
+Assert-NotContains $buildInstaller '$outputFull.StartsWith($artifactRootFull' "installer output safety must not use a raw prefix check."
+Assert-NotContains $publish '$publishDirFull.StartsWith($artifactRootFull' "publish cleanup safety must not use a raw prefix check."
+Assert-Contains $install '. (Join-Path $scriptDir "DesktopPathSafety.ps1")' "portable install must load shared path safety."
+Assert-Contains $uninstall '. (Join-Path $scriptDir "DesktopPathSafety.ps1")' "portable uninstall must load shared path safety."
+Assert-Contains $uninstall 'Test-RegisteredCommandTargetsInstall $startupValue $installFull $entryPoint' "startup registry cleanup must compare the executable exactly."
+Assert-Contains $uninstall "SelectSingleNode(`"//*[local-name()='Exec']/*[local-name()='Command']`")" "scheduled-task cleanup must parse the executable command from XML."
+Assert-NotContains $uninstall '$startupValue.IndexOf($installFull' "startup cleanup must not use substring path matching."
+Assert-NotContains $uninstall '$xml.IndexOf($installFull' "scheduled-task cleanup must not search raw XML for the install path."
 
 [pscustomobject]@{
     WorkflowPath = [System.IO.Path]::GetFullPath((Resolve-Path $WorkflowPath).Path)
