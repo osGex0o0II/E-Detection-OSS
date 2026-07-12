@@ -1192,7 +1192,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSelectedUpdateChannelIndexChanged(int value)
     {
-            var normalized = Math.Clamp(value, 0, 1);
+        var normalized = Math.Clamp(value, 0, 1);
         if (normalized != value)
         {
             SelectedUpdateChannelIndex = normalized;

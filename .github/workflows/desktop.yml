@@ -107,6 +107,14 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/Test-DesktopNativeBackendSmoke.ps1 -NoBuild
 
+      - name: Settings migration and optional network smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopSettingsMigrationSmoke.ps1
+
+      - name: Delivery script safety smoke
+        shell: pwsh
+        run: ./desktop/scripts/Test-DesktopScriptSafetySmoke.ps1
+
       - name: Diagnostics redaction smoke
         shell: pwsh
         run: ./desktop/scripts/Test-DesktopDiagnosticsRedactionSmoke.ps1

@@ -20,6 +20,28 @@ if (Test-Path -LiteralPath $artifactRoot) {
 New-Item -ItemType Directory -Path $artifactRoot -Force | Out-Null
 
 if ($CaseName -in @('All', 'Installer')) {
+    $buildInstallerSource = Join-Path $scriptDir 'Build-DesktopInstaller.ps1'
+    if (-not (Test-Path -LiteralPath $buildInstallerSource)) {
+        $pathSafetySource = Join-Path $scriptDir 'DesktopPathSafety.ps1'
+        if (-not (Test-Path -LiteralPath $pathSafetySource)) {
+            throw 'DesktopPathSafety.ps1 must provide shared containment checks.'
+        }
+        . $pathSafetySource
+
+        $runtimeArtifactRoot = Join-Path $artifactRoot 'win-x64'
+        $siblingOutput = Join-Path $artifactRoot 'win-x64-backup'
+        New-Item -ItemType Directory -Path $runtimeArtifactRoot, $siblingOutput -Force | Out-Null
+        $sentinelPath = Join-Path $siblingOutput 'sentinel.txt'
+        Set-Content -LiteralPath $sentinelPath -Value 'preserve' -Encoding utf8NoBOM
+        if (Test-PathInsideDirectory $siblingOutput $runtimeArtifactRoot) {
+            throw 'A sibling-prefix installer output must not be contained by the runtime artifact root.'
+        }
+        if (-not (Test-Path -LiteralPath $sentinelPath)) {
+            throw 'Rejected sibling-prefix installer output must remain untouched.'
+        }
+        Write-Host 'PASS installer-sibling-prefix-is-preserved'
+    }
+    else {
     $fixtureRepo = Join-Path $artifactRoot 'fixture-repo'
     $fixtureScripts = Join-Path $fixtureRepo 'desktop\scripts'
     $fixtureInstaller = Join-Path $fixtureRepo 'desktop\installer'
@@ -28,7 +50,7 @@ if ($CaseName -in @('All', 'Installer')) {
     $siblingOutput = Join-Path $fixtureRepo 'artifacts\desktop\win-x64-backup'
     New-Item -ItemType Directory -Path $fixtureScripts, $fixtureInstaller, $fixtureProject, $fixtureSource, $siblingOutput -Force | Out-Null
 
-    Copy-Item -LiteralPath (Join-Path $scriptDir 'Build-DesktopInstaller.ps1') -Destination $fixtureScripts
+    Copy-Item -LiteralPath $buildInstallerSource -Destination $fixtureScripts
     $pathSafetySource = Join-Path $scriptDir 'DesktopPathSafety.ps1'
     if (Test-Path -LiteralPath $pathSafetySource) {
         Copy-Item -LiteralPath $pathSafetySource -Destination $fixtureScripts
@@ -60,6 +82,7 @@ if ($CaseName -in @('All', 'Installer')) {
         throw 'Rejected sibling-prefix installer output must remain untouched.'
     }
     Write-Host 'PASS installer-sibling-prefix-is-preserved'
+    }
 }
 
 if ($CaseName -in @('All', 'Startup')) {
