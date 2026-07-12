@@ -9,7 +9,12 @@ param(
     [string]$PathSafetyScriptPath = "",
     [string]$ScriptSafetySmokeScriptPath = "",
     [string]$InstallScriptPath = "",
-    [string]$UninstallScriptPath = ""
+    [string]$UninstallScriptPath = "",
+    [string]$DesktopProjectPath = "",
+    [string]$RootReadmePath = "",
+    [string]$DesktopReadmePath = "",
+    [string]$MigrationDocumentPath = "",
+    [string]$MainViewModelPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +31,11 @@ if ([string]::IsNullOrWhiteSpace($PathSafetyScriptPath)) { $PathSafetyScriptPath
 if ([string]::IsNullOrWhiteSpace($ScriptSafetySmokeScriptPath)) { $ScriptSafetySmokeScriptPath = Join-Path $scriptDir "Test-DesktopScriptSafetySmoke.ps1" }
 if ([string]::IsNullOrWhiteSpace($InstallScriptPath)) { $InstallScriptPath = Join-Path $scriptDir "Install-Desktop.ps1" }
 if ([string]::IsNullOrWhiteSpace($UninstallScriptPath)) { $UninstallScriptPath = Join-Path $scriptDir "Uninstall-Desktop.ps1" }
+if ([string]::IsNullOrWhiteSpace($DesktopProjectPath)) { $DesktopProjectPath = Join-Path $repoRoot "desktop\EDetection.Desktop\EDetection.Desktop.csproj" }
+if ([string]::IsNullOrWhiteSpace($RootReadmePath)) { $RootReadmePath = Join-Path $repoRoot "README.md" }
+if ([string]::IsNullOrWhiteSpace($DesktopReadmePath)) { $DesktopReadmePath = Join-Path $repoRoot "desktop\README.md" }
+if ([string]::IsNullOrWhiteSpace($MigrationDocumentPath)) { $MigrationDocumentPath = Join-Path $repoRoot "desktop\NATIVE_BACKEND_MIGRATION.md" }
+if ([string]::IsNullOrWhiteSpace($MainViewModelPath)) { $MainViewModelPath = Join-Path $repoRoot "desktop\EDetection.Desktop\ViewModels\MainViewModel.cs" }
 
 function Get-Text([string]$Path) {
     return Get-Content -LiteralPath ([System.IO.Path]::GetFullPath((Resolve-Path $Path).Path)) -Raw
@@ -53,6 +63,11 @@ $pathSafety = Get-Text $PathSafetyScriptPath
 $scriptSafetySmoke = Get-Text $ScriptSafetySmokeScriptPath
 $install = Get-Text $InstallScriptPath
 $uninstall = Get-Text $UninstallScriptPath
+$desktopProject = Get-Text $DesktopProjectPath
+$rootReadme = Get-Text $RootReadmePath
+$desktopReadme = Get-Text $DesktopReadmePath
+$migrationDocument = Get-Text $MigrationDocumentPath
+$mainViewModel = Get-Text $MainViewModelPath
 
 Assert-Contains $workflow "run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64" "workflow must publish the native package."
 Assert-Contains $workflow "run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish" "workflow must validate the published package."
@@ -98,6 +113,24 @@ Assert-Contains $uninstall 'Test-RegisteredCommandTargetsInstall $startupValue $
 Assert-Contains $uninstall "SelectSingleNode(`"//*[local-name()='Exec']/*[local-name()='Command']`")" "scheduled-task cleanup must parse the executable command from XML."
 Assert-NotContains $uninstall '$startupValue.IndexOf($installFull' "startup cleanup must not use substring path matching."
 Assert-NotContains $uninstall '$xml.IndexOf($installFull' "scheduled-task cleanup must not search raw XML for the install path."
+
+Assert-Contains $desktopProject '<Version>2.0.2</Version>' "desktop package version must be 2.0.2."
+Assert-Contains $desktopProject '<AssemblyVersion>2.0.2.0</AssemblyVersion>' "assembly version must be 2.0.2.0."
+Assert-Contains $desktopProject '<FileVersion>2.0.2.0</FileVersion>' "file version must be 2.0.2.0."
+foreach ($releaseText in @($workflow, $publish)) {
+    Assert-Contains $releaseText 'intentionally unsigned' "release workflow and package text must explicitly identify unsigned assets."
+    Assert-Contains $releaseText 'SHA-256 verifies file integrity, not publisher identity' "release workflow and package text must distinguish integrity from publisher identity."
+}
+foreach ($documentation in @($rootReadme, $desktopReadme, $migrationDocument)) {
+    Assert-Contains $documentation '未签名' "release documentation must say that 2.0.2 is unsigned."
+    Assert-Contains $documentation 'SHA-256 仅验证文件完整性，不能验证发布者身份' "release documentation must explain the checksum trust boundary."
+}
+Assert-NotContains $rootReadme '正式 GitHub Release 必须通过 Authenticode 签名门禁' "root README must not claim that this release requires signing."
+Assert-NotContains $desktopReadme '正式发布必须满足 GitHub 工作流的签名' "desktop README must not claim that this release requires signing."
+Assert-NotContains $migrationDocument '正式 GitHub Release 仍须通过 Authenticode 签名' "migration notes must not claim that this release requires signing."
+Assert-Contains $mainViewModel 'SHA-256 仅验证文件完整性，不能验证发布者身份' "updater success copy must state the checksum trust boundary."
+Assert-Contains $mainViewModel '2.0.2 安装向导未签名' "updater success copy must identify the unsigned installer."
+Assert-Contains $workflow '$forceUnsigned = $tag -eq "v2.0.2"' "the v2.0.2 workflow must force unsigned release assets even if signing secrets exist."
 
 [pscustomobject]@{
     WorkflowPath = [System.IO.Path]::GetFullPath((Resolve-Path $WorkflowPath).Path)

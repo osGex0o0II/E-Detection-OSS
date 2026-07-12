@@ -3100,7 +3100,9 @@ public partial class MainViewModel : ObservableObject
             UpdateStatusText = $"安装向导已下载 {result.LatestVersion}";
             AddLog("更新", $"已下载更新安装向导: {installerPath}");
             OpenContainingFolder(installerPath);
-            ShowSettingsFeedback("安装向导已下载，文件完整性校验通过。请在打开的文件夹中手动运行安装向导完成更新。", InfoBarSeverity.Success);
+            ShowSettingsFeedback(
+                "安装向导已下载。SHA-256 仅验证文件完整性，不能验证发布者身份；2.0.2 安装向导未签名，Windows 可能显示“未知发布者”。请在打开的文件夹中手动运行安装向导完成更新。",
+                InfoBarSeverity.Success);
         }
         catch (Exception ex) when (ex is HttpRequestException
                                    or IOException

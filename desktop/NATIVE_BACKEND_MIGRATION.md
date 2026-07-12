@@ -18,7 +18,7 @@ E-Detection 已完成从 Python JSON Lines 进程桥接到进程内 **C# + .NET 
 
 - 所有发布和安装命令均固定使用唯一的原生发布配置。
 - 包健康检查拒绝任何旧 Python bundle 目录或来源树文件。
-- 正式 GitHub Release 仍须通过 Authenticode 签名、安装器烟测及发布姿态门禁。
+- `v2.0.2` GitHub Release 有意保持未签名，并须通过安装器烟测及发布姿态门禁；SHA-256 仅验证文件完整性，不能验证发布者身份。
 - 真实数据目录只读审计是发布验证的一部分；审计工件不得含输入路径、设备名或遥测明文。
 - 原生核心冒烟测试会在启动时断言未加载 `Microsoft.WindowsAppRuntime`、`Microsoft.UI.Xaml` 或 `WinUIEx`；CI 中不得以延长超时替代该隔离验证。
 

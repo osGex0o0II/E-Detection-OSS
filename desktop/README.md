@@ -31,4 +31,4 @@ dotnet build .\desktop\EDetection.Desktop.slnx -c Debug
 
 `native-default` 是唯一支持的包形态。健康检查会拒绝 `python-runtime`、`python-wheelhouse`、`core` 和 `e_detection` 等旧资产，防止它们重新进入发布物。
 
-本地构建安装器需要 Inno Setup 6。正式发布必须满足 GitHub 工作流的签名和发布姿态门禁。
+本地构建安装器需要 Inno Setup 6。`v2.0.2` 发布物有意保持未签名，并由 GitHub 工作流验证这一状态；SHA-256 仅验证文件完整性，不能验证发布者身份。

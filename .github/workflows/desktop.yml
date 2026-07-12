@@ -125,16 +125,27 @@ jobs:
         env:
           WINDOWS_CODE_SIGNING_PFX_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_BASE64 }}
           WINDOWS_CODE_SIGNING_PFX_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PFX_PASSWORD }}
+          RELEASE_TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || '' }}
         run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq "tag") {
+              $env:GITHUB_REF_NAME
+          }
+          else {
+              $env:RELEASE_TAG_INPUT
+          }
+          $forceUnsigned = $tag -eq "v2.0.2"
           $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_BASE64)
           $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_PASSWORD)
-          if ($hasCertificate -xor $hasPassword) {
+          if (!$forceUnsigned -and ($hasCertificate -xor $hasPassword)) {
               throw "Code-signing configuration is incomplete. Configure both WINDOWS_CODE_SIGNING_PFX_BASE64 and WINDOWS_CODE_SIGNING_PFX_PASSWORD, or configure neither to publish an unsigned release."
           }
 
-          $signReleaseArtifacts = if ($hasCertificate) { "true" } else { "false" }
+          $signReleaseArtifacts = if (!$forceUnsigned -and $hasCertificate) { "true" } else { "false" }
           "SIGN_RELEASE_ARTIFACTS=$signReleaseArtifacts" | Add-Content -Path $env:GITHUB_ENV
-          if ($hasCertificate) {
+          if ($forceUnsigned) {
+              "## Unsigned v2.0.2 release`n`nThe v2.0.2 release assets are intentionally unsigned. SHA-256 verifies file integrity, not publisher identity. Windows may show an Unknown Publisher or SmartScreen warning." | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          }
+          elseif ($hasCertificate) {
               "## Release signing`n`nAuthenticode signing is enabled for this release." | Add-Content -Path $env:GITHUB_STEP_SUMMARY
           }
           else {
@@ -296,6 +307,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($tag)) {
               throw "Release tag is required for publishing a GitHub Release."
           }
+          $forceUnsigned = $tag -eq "v2.0.2"
 
           if ($tag -notmatch '^v\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
               throw "Release tag '$tag' must look like v1.2.3."
@@ -388,7 +400,11 @@ jobs:
 
           $hasCertificate = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_BASE64)
           $hasPassword = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_PFX_PASSWORD)
-          if ($hasCertificate -xor $hasPassword) {
+          if ($forceUnsigned) {
+              $hasCertificate = $false
+              $hasPassword = $false
+          }
+          elseif ($hasCertificate -xor $hasPassword) {
               throw "Code-signing configuration is incomplete. Configure both signing secrets, or neither for an unsigned release."
           }
           $releaseSignaturePaths = @($setupPath.FullName, $portableAppPath.FullName)
@@ -413,7 +429,10 @@ jobs:
           if (!$hasCertificate -and $signatureStatus -ne "NotSigned") {
               throw "Unsigned release setup installer must not carry an unexpected signature state. Status=$signatureStatus."
           }
-          $signatureLine = if ($hasCertificate) {
+          $signatureLine = if ($forceUnsigned) {
+              "The v2.0.2 setup installer and portable app are intentionally unsigned. Windows may show an Unknown Publisher or SmartScreen warning."
+          }
+          elseif ($hasCertificate) {
               "The setup installer is Authenticode signed by $($setupSignature.SignerCertificate.Subject)."
           }
           else {
@@ -438,6 +457,7 @@ jobs:
               "- setup installer smoke"
               ""
               "SHA-256 checksums are attached as EDetection-win-x64.sha256.txt."
+              "SHA-256 verifies file integrity, not publisher identity."
               "Windows checksum command: Get-FileHash .\EDetection-Setup-win-x64.exe -Algorithm SHA256"
           ) | Set-Content -Path $notesPath -Encoding UTF8
 

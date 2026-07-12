@@ -15,9 +15,9 @@
     <WindowsPackageType>None</WindowsPackageType>
     <DefaultLanguage>zh-CN</DefaultLanguage>
     <ApplicationIcon>Assets\Icons\app.ico</ApplicationIcon>
-    <Version>2.0.1-fix</Version>
-    <AssemblyVersion>2.0.1.0</AssemblyVersion>
-    <FileVersion>2.0.1.0</FileVersion>
+    <Version>2.0.2</Version>
+    <AssemblyVersion>2.0.2.0</AssemblyVersion>
+    <FileVersion>2.0.2.0</FileVersion>
     <Product>E-Detection</Product>
     <Description>Windows native workbench for E-Detection electrical anomaly analysis.</Description>
     <Authors>E-Detection OSS</Authors>

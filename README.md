@@ -56,7 +56,7 @@ dotnet build .\desktop\EDetection.Desktop.slnx -c Debug
 .\desktop\scripts\Test-DesktopInstallerSmoke.ps1 -RuntimeIdentifier win-x64
 ```
 
-正式 GitHub Release 必须通过 Authenticode 签名门禁。真实运行数据只读审计，项目脚本不会改写输入遥测。
+`v2.0.2` 发布物有意保持未签名；Windows 可能显示“未知发布者”或 SmartScreen 提示。SHA-256 仅验证文件完整性，不能验证发布者身份。真实运行数据只读审计，项目脚本不会改写输入遥测。
 
 ## 项目结构
 
