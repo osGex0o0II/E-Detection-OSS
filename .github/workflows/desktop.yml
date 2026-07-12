@@ -103,6 +103,9 @@ jobs:
       - name: Build
         run: dotnet build desktop/EDetection.Desktop.slnx -c Debug --no-restore
 
+      - name: Verify formatting
+        run: dotnet format desktop/EDetection.Desktop.slnx --verify-no-changes --no-restore
+
       - name: Native backend console smoke
         shell: pwsh
         run: ./desktop/scripts/Test-DesktopNativeBackendSmoke.ps1 -NoBuild

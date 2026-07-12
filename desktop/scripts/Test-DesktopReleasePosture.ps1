@@ -72,6 +72,7 @@ $mainViewModel = Get-Text $MainViewModelPath
 Assert-Contains $workflow "run: ./desktop/scripts/Publish-Desktop.ps1 -RuntimeIdentifier win-x64" "workflow must publish the native package."
 Assert-Contains $workflow "run: ./desktop/scripts/Test-DesktopSettingsMigrationSmoke.ps1" "workflow must run settings migration and optional-network regressions."
 Assert-Contains $workflow "run: ./desktop/scripts/Test-DesktopScriptSafetySmoke.ps1" "workflow must run destructive path and startup ownership regressions."
+Assert-Contains $workflow "run: dotnet format desktop/EDetection.Desktop.slnx --verify-no-changes --no-restore" "workflow must enforce repository formatting."
 Assert-Contains $workflow "run: ./artifacts/desktop/win-x64/publish/Test-DesktopPackageHealth.ps1 -PackagePath ./artifacts/desktop/win-x64/publish" "workflow must validate the published package."
 Assert-Contains $workflow "run: ./artifacts/desktop/win-x64/publish/Test-DesktopInstallSmoke.ps1 -PackagePath ./artifacts/desktop/win-x64/publish" "workflow must validate portable installation."
 Assert-Contains $workflow "run: ./desktop/scripts/Build-DesktopInstaller.ps1 -RuntimeIdentifier win-x64" "workflow must build the native installer."
